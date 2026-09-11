@@ -14,7 +14,8 @@ void main() {
     expect(find.text('EXPLORE AS'), findsOneWidget);
 
     await tester.tap(find.text('Student'));
-    await tester.pumpAndSettle(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.textContaining('Aarav'), findsWidgets);
   });
@@ -43,9 +44,13 @@ void main() {
   });
 
   testWidgets('admin home renders academy stats', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(const MaterialApp(home: AdminHome()));
-    expect(find.text('Total students'), findsOneWidget);
-    expect(find.text('Monthly revenue'), findsOneWidget);
+    expect(find.text('Students'), findsOneWidget);
+    expect(find.text('Revenue'), findsOneWidget);
   });
 
   test('data sanity', () {

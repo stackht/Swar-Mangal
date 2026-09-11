@@ -449,8 +449,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return _Scaffold(
       title: 'Notifications',
-      trailing: TextButton(onPressed: () => setState(() => _items.forEach((n) => n.read = true)),
-          child: const Text('Mark all read', style: TextStyle(color: Palette.violet, fontSize: 12))),
+      trailing: TextButton(onPressed: () => setState(() {
+        for (final n in _items) { n.read = true; }
+      }), child: const Text('Mark all read', style: TextStyle(color: Palette.violet, fontSize: 12))),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [for (final n in _items)
@@ -543,7 +544,7 @@ class _Scaffold extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
           child: Row(children: [
             Expanded(child: Text(title, style: const TextStyle(color: Palette.text, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.4))),
-            if (trailing != null) trailing!,
+            ?trailing,
           ]),
         ),
         Expanded(child: child),

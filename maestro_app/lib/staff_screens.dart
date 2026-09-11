@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'theme.dart';
-import 'main.dart' show Role;
 
 // =========== SHARED ===========
 
@@ -247,7 +246,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   late final List<Invoice> _invoices = [...invoices];
   @override
   Widget build(BuildContext context) {
-    final pendingCount = _invoices.where((i) => i.status == 'pending').length;
     return _Page(children: [
       Row(children: [
         Expanded(child: StatTile(label: 'Collected', value: '\$240', accent: Palette.mint)),

@@ -256,6 +256,29 @@ class ApiService {
         'reason': reason,
       });
 
+  /// Founder-only teacher payout preview (server-computed payable). Never compute on client.
+  Future<List<PayoutRow>> founderPayoutPreview(String month, {String? entityId}) async {
+    final b = await _api.call('api_teacherPayoutPreview', {
+      if (month.isNotEmpty) 'month': month,
+      if (entityId != null && entityId.isNotEmpty) 'entityId': entityId,
+    });
+    return ((b as Map)['results'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(PayoutRow.fromApi)
+            .toList() ??
+        [];
+  }
+
+  /// Staff — persisted drafts awaiting (or resolved by) founder approval.
+  Future<List<ApprovalRequestRow>> staffMyRequests({String branch = ''}) async {
+    final b = await _api.call('api_staff_listMyApprovals', {'branch': branch});
+    return ((b as Map)['rows'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(ApprovalRequestRow.fromApi)
+            .toList() ??
+        [];
+  }
+
   /// Founder-only teacher status change (ACTIVE / INACTIVE / HOLD).
   Future<dynamic> founderUpdateTeacherStatus(String teacherId, String newStatus, String reason) =>
       _api.call('api_updateTeacherStatus', {

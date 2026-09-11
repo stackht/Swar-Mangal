@@ -9,6 +9,7 @@ import '../shared/fee_collection_screen.dart';
 import '../shared/receipts_screen.dart';
 import '../shared/students_screen.dart';
 import '../shared/teachers_screen.dart';
+import '../shared/payout_preview_screen.dart';
 
 /// Founder surface. Same data centre as the web founder app: receipts are
 /// entered directly against STUDENT_RECEIPTS (server-authoritative).
@@ -36,6 +37,8 @@ class FounderShell extends StatelessWidget {
             return const TeachersScreen(staff: false);
           case 'expenses':
             return const ExpensesScreen(staff: false);
+          case 'payouts':
+            return const PayoutPreviewScreen();
           case 'about':
             return const AboutScreen(staff: false);
           case 'home':

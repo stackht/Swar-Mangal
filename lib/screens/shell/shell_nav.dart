@@ -168,6 +168,7 @@ const founderItems = <({String key, String label, IconData icon})>[
   (key: 'receipts', label: 'Receipts', icon: Icons.receipt_long_outlined),
   (key: 'teachers', label: 'Teachers', icon: Icons.group_outlined),
   (key: 'expenses', label: 'Expenses & Cashbook', icon: Icons.account_balance_wallet_outlined),
+  (key: 'payouts', label: 'Teacher Payouts', icon: Icons.payments_outlined),
   (key: 'about', label: 'About', icon: Icons.info_outline),
 ];
 
@@ -181,6 +182,7 @@ const staffItems = <({String key, String label, IconData icon})>[
   (key: 'receipts', label: 'Receipts', icon: Icons.receipt_long_outlined),
   (key: 'expenses', label: 'Expenses', icon: Icons.account_balance_wallet_outlined),
   (key: 'inquiries', label: 'Inquiries', icon: Icons.chat_outlined),
+  (key: 'requests', label: 'My Requests', icon: Icons.outbox_outlined),
   (key: 'about', label: 'About', icon: Icons.info_outline),
 ];
 

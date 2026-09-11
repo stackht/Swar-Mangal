@@ -13,6 +13,7 @@ import '../shared/inquiries_screen.dart';
 import '../shared/receipts_screen.dart';
 import '../shared/students_screen.dart';
 import '../shared/todays_classes_screen.dart';
+import '../shared/my_requests_screen.dart';
 
 /// Staff surface. Branch-gated: every read/write is isolated to the branch
 /// picked by the operator at the door (server-enforced, same rule as web).
@@ -45,6 +46,8 @@ class StaffShell extends StatelessWidget {
             return const ExpensesScreen(staff: true);
           case 'inquiries':
             return const InquiriesScreen();
+          case 'requests':
+            return const MyRequestsScreen();
           case 'about':
             return const AboutScreen(staff: true);
           case 'today':

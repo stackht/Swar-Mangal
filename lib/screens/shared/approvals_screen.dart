@@ -250,6 +250,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
 
   Widget _draftCard(PaymentDraftRow row) {
     final busy = _acting.contains(row.draftId);
+    final authLabel = row.authorityLabel;
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpace.s3),
       child: Padding(
@@ -274,6 +275,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
             if (row.paymentMode.isNotEmpty) TagChip(row.paymentMode, color: AppColors.focus),
             if (row.projectNextDueDate.isNotEmpty)
               TagChip('→ due ${row.projectNextDueDate}', color: AppColors.muted),
+            if (authLabel.isNotEmpty)
+              TagChip(authLabel, color: AppColors.muted),
           ]),
           const SizedBox(height: AppSpace.s3),
           Row(children: [

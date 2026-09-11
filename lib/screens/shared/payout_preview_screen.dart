@@ -1,0 +1,194 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/api.dart';
+import '../../core/theme.dart';
+import '../../models/models.dart';
+import '../../state/auth_provider.dart';
+import '../../widgets/atoms.dart';
+
+/// Founder payout preview — server-computed teacher earning / payable / balance.
+/// No client payout logic. Displays `api_teacherPayoutPreview` rows.
+/// Business rules: NEVER calculate payout on device; amount/rate from server.
+class PayoutPreviewScreen extends StatefulWidget {
+  const PayoutPreviewScreen({super.key});
+  @override
+  State<PayoutPreviewScreen> createState() => _PayoutPreviewScreenState();
+}
+
+class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
+  late String _month;
+  List<PayoutRow> _rows = [];
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _month = _currentMonth();
+    _load();
+  }
+
+  String _currentMonth() {
+    final n = DateTime.now();
+    return '${n.year}-${n.month.toString().padLeft(2, '0')}';
+  }
+
+  String _previousMonth() {
+    final d = DateTime(DateTime.now().year, DateTime.now().month - 1);
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _load() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final rows = await auth.service!.founderPayoutPreview(_month);
+      if (!mounted) return;
+      setState(() {
+        _rows = rows;
+        _busy = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _busy = false;
+      });
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _busy = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_busy && _rows.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (_error != null && _rows.isEmpty) return ErrorView(_error!, onRetry: _load);
+
+    final totalPayable = _rows.fold<num>(0, (s, r) => s + r.payable);
+    final totalPaid = _rows.fold<num>(0, (s, r) => s + r.alreadyPaid);
+    final totalBalance = _rows.fold<num>(0, (s, r) => s + r.balance);
+
+    return RefreshScaffold(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(AppSpace.s4),
+        children: [
+          Row(children: [
+            const Icon(Icons.payments_outlined, color: AppColors.primary),
+            const SizedBox(width: AppSpace.s2),
+            const Text('Teacher payouts', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          ]),
+          const SizedBox(height: AppSpace.s3),
+          Row(children: [
+            Expanded(
+              child: _monthInput('Service month (YYYY-MM)', _month, (v) {
+                setState(() => _month = v);
+                _load();
+              }),
+            ),
+            const SizedBox(width: AppSpace.s2),
+            TextButton(onPressed: () { setState(() => _month = _previousMonth()); _load(); },
+                child: const Text('Previous')),
+          ]),
+          const SizedBox(height: AppSpace.s2),
+          Card(
+            color: AppColors.infoBg,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.s3),
+              child: Text(
+                  'Figures below are server-computed from actual receipt shares. '
+                  'The app does not calculate payouts — it displays the backend\'s authoritative numbers only.',
+                  style: const TextStyle(fontSize: 12, color: AppColors.infoFg)),
+            ),
+          ),
+          const SizedBox(height: AppSpace.s4),
+          Row(children: [
+            _metric('Payable', inr(totalPayable), AppColors.primary),
+            const SizedBox(width: AppSpace.s2),
+            _metric('Paid', inr(totalPaid), AppColors.okFg),
+            const SizedBox(width: AppSpace.s2),
+            _metric('Balance', inr(totalBalance), totalBalance > 0 ? AppColors.warnFg : AppColors.muted),
+          ]),
+          const SizedBox(height: AppSpace.s4),
+          if (_rows.isEmpty)
+            const EmptyState('No payout rows for this month.'),
+          for (final r in _rows)
+            Card(
+              margin: const EdgeInsets.only(bottom: AppSpace.s3),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(r.teacherName.isNotEmpty ? r.teacherName : r.teacherId,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                        Text('${r.entityId} · ${r.month} · ${r.receiptCount} receipts',
+                            style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                      ]),
+                    ),
+                    StatusBadge(r.preCutover ? 'PRE-CUTOVER' : r.status.isEmpty ? 'NONE' : r.status),
+                  ]),
+                  if (r.preCutover && r.note.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpace.s2),
+                      child: Text(r.note, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                    ),
+                  const SizedBox(height: AppSpace.s2),
+                  Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
+                    _tag('collected', inr(r.totalCollection)),
+                    _tag('share', inr(r.totalTeacherShare)),
+                    _tag('paid', inr(r.alreadyPaid)),
+                    _tag('balance', inr(r.balance)),
+                  ]),
+                ]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monthInput(String label, String value, ValueChanged<String> onChanged) {
+    final c = TextEditingController(text: value);
+    return TextField(
+      controller: c,
+      decoration: InputDecoration(labelText: label, prefixIcon: const Icon(Icons.calendar_month_outlined)),
+      onSubmitted: onChanged,
+    );
+  }
+
+  Widget _metric(String label, String value, Color color) {
+    return Expanded(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.s3),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+            Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _tag(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.pageBg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text('$label $value', style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+    );
+  }
+}

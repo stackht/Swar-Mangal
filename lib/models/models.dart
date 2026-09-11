@@ -745,6 +745,8 @@ class PaymentDraftRow {
     required this.projectNextDueDate,
     required this.repairRequired,
     required this.submittedAt,
+    this.approvalAuthority = '',
+    this.approvedBy = '',
   });
   factory PaymentDraftRow.fromApi(Map<String, dynamic> b) {
     return PaymentDraftRow(
@@ -759,6 +761,8 @@ class PaymentDraftRow {
       projectNextDueDate: _s(b['projectedNextDueDate']),
       repairRequired: b['repairRequired'] == true,
       submittedAt: _s(b['submittedAt']),
+      approvalAuthority: _s(b['approvalAuthority']),
+      approvedBy: _s(b['approvedBy']),
     );
   }
   final String draftId;
@@ -772,9 +776,110 @@ class PaymentDraftRow {
   final String projectNextDueDate;
   final bool repairRequired;
   final String submittedAt;
+  final String approvalAuthority;
+  final String approvedBy;
 
   bool get approved => status.toUpperCase() == 'APPROVED';
   bool get waitingTerms => status.toUpperCase() == 'PENDING_TERMS_AND_APPROVAL';
+
+  /// Honest authority label — never invent a founder name for ROUTINE_LANE.
+  String get authorityLabel {
+    final a = approvalAuthority.toUpperCase();
+    if (a == 'ROUTINE_LANE') return 'Routine lane (system rules — no founder)';
+    if (a == 'FOUNDER' && approvedBy.isNotEmpty) return 'Approved by $approvedBy';
+    if (a == 'FOUNDER') return 'Approved by founder';
+    return '—';
+  }
+}
+
+/// A single founder teacher-payout preview row (server-computed payable).
+/// Never compute payouts on the device — display only.
+class PayoutRow {
+  PayoutRow({
+    required this.teacherId,
+    required this.teacherName,
+    required this.month,
+    required this.entityId,
+    required this.receiptCount,
+    required this.totalCollection,
+    required this.totalTeacherShare,
+    required this.payable,
+    required this.alreadyPaid,
+    required this.balance,
+    required this.status,
+    required this.preCutover,
+    required this.note,
+  });
+  factory PayoutRow.fromApi(Map<String, dynamic> b) {
+    num n(dynamic v) {
+      final s = v == null ? '' : v.toString().replaceAll(RegExp(r'[^\d.\-]'), '');
+      return double.tryParse(s) ?? 0;
+    }
+    return PayoutRow(
+      teacherId: _s(b['teacherId']),
+      teacherName: _s(b['teacherName']),
+      month: _s(b['month']),
+      entityId: _s(b['entityId']),
+      receiptCount: (b['receiptCount'] as num?)?.toInt() ?? 0,
+      totalCollection: n(b['totalCollection']),
+      totalTeacherShare: n(b['totalTeacherShare']),
+      payable: n(b['payable']),
+      alreadyPaid: n(b['alreadyPaid'] ?? b['paid']),
+      balance: n(b['balance']),
+      status: _s(b['status']),
+      preCutover: b['preCutover'] == true,
+      note: _s(b['note']),
+    );
+  }
+  final String teacherId;
+  final String teacherName;
+  final String month;
+  final String entityId;
+  final int receiptCount;
+  final num totalCollection;
+  final num totalTeacherShare;
+  final num payable;
+  final num alreadyPaid;
+  final num balance;
+  final String status;
+  final bool preCutover;
+  final String note;
+}
+
+/// Staff "My Requests" — persisted drafts awaiting (or resolved by) founder.
+class ApprovalRequestRow {
+  ApprovalRequestRow({
+    required this.type,
+    required this.id,
+    required this.status,
+    required this.student,
+    required this.category,
+    required this.amount,
+    required this.when,
+    required this.backdated,
+  });
+  factory ApprovalRequestRow.fromApi(Map<String, dynamic> b) => ApprovalRequestRow(
+        type: _s(b['type']),
+        id: _s(b['id']),
+        status: _s(b['status']),
+        student: _s(b['student']),
+        category: _s(b['category']),
+        amount: _s(b['amount']),
+        when: _s(b['when']),
+        backdated: b['backdated'] == true,
+      );
+  final String type;
+  final String id;
+  final String status;
+  final String student;
+  final String category;
+  final String amount;
+  final String when;
+  final bool backdated;
+
+  bool get waiting => status.toUpperCase() == 'SUBMITTED' ||
+      status.toUpperCase() == 'PENDING_TERMS_AND_APPROVAL' ||
+      status.toUpperCase() == 'BACKDATED_APPROVAL_REQUIRED';
 }
 
 class StaffHub {

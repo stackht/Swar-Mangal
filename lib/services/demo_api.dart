@@ -108,6 +108,10 @@ class DemoApiClient extends ApiClient {
         };
       case 'api_staff_studentHub':
         return _staffStudentHub(a);
+      case 'api_teacherPayoutPreview':
+        return _payoutPreview(a);
+      case 'api_staff_listMyApprovals':
+        return _staffMyRequests();
       case 'api_staff_commGenerate':
         return _commGenerate();
       case 'api_staff_attendanceRoster':
@@ -799,6 +803,8 @@ class DemoApiClient extends ApiClient {
             'paymentMode': 'Kotak UPI',
             'completeness': {'complete': true, 'missing': []},
             'repairRequired': false,
+            'approvalAuthority': 'FOUNDER',
+            'approvedBy': 'sharvil@demo',
             'submittedAt': '2026-09-10 18:00:00',
           },
           {
@@ -1029,4 +1035,100 @@ class DemoApiClient extends ApiClient {
 
   Map<String, dynamic> _todaysTasks() =>
       {'ok': true, 'cards': _taskCards(), 'mode': 'COPY_ONLY', 'today': '2026-09-11'};
+
+  Map<String, dynamic> _payoutPreview(Map<String, dynamic> a) => {
+        'ok': true,
+        'results': [
+          {
+            'teacherId': 'T-001',
+            'teacherName': 'Rahul Joshi',
+            'month': a['month'] ?? '2026-09',
+            'entityId': 'ENT-GOREGAON',
+            'receiptCount': 4,
+            'totalCollection': 22000,
+            'totalTeacherShare': 11000,
+            'payable': 11000,
+            'alreadyPaid': 5000,
+            'balance': 6000,
+            'status': 'PARTIAL',
+            'preCutover': false,
+            'note': '',
+          },
+          {
+            'teacherId': 'T-002',
+            'teacherName': 'Meera Nair',
+            'month': a['month'] ?? '2026-09',
+            'entityId': 'ENT-GOREGAON',
+            'receiptCount': 3,
+            'totalCollection': 15000,
+            'totalTeacherShare': 7500,
+            'payable': 7500,
+            'alreadyPaid': 0,
+            'balance': 7500,
+            'status': 'UNPAID',
+            'preCutover': false,
+            'note': '',
+          },
+          {
+            'teacherId': 'T-003',
+            'teacherName': 'Vikram Singh',
+            'month': '2026-08',
+            'entityId': 'ENT-KANDIVALI',
+            'receiptCount': 5,
+            'totalCollection': 32000,
+            'totalTeacherShare': 16000,
+            'payable': 16000,
+            'alreadyPaid': 16000,
+            'balance': 0,
+            'status': 'PAID',
+            'preCutover': true,
+            'note': 'Pre-cutover manual settlement — balance forced to zero.',
+          },
+        ],
+        'byEntity': {
+          'ENT-GOREGAON': {'payable': 18500, 'paid': 5000, 'balance': 13500},
+          'ENT-KANDIVALI': {'payable': 16000, 'paid': 16000, 'balance': 0},
+        },
+        'note': 'demo payout preview',
+      };
+
+  Map<String, dynamic> _staffMyRequests() => {
+        'ok': true,
+        'branch': 'GOREGAON',
+        'count': 3,
+        'rows': [
+          {
+            'type': 'PAYMENT_DRAFT',
+            'id': 'PDRAFT-101',
+            'status': 'SUBMITTED',
+            'student': 'STU-55DCD622',
+            'category': '',
+            'amount': '5000',
+            'when': '2026-09-11 10:00:00',
+            'backdated': false,
+          },
+          {
+            'type': 'EXPENSE_DRAFT',
+            'id': 'EDRAFT-201',
+            'status': 'SUBMITTED',
+            'student': '',
+            'category': 'Rent',
+            'amount': '15000',
+            'when': '2026-09-10 14:00:00',
+            'backdated': false,
+          },
+          {
+            'type': 'PAYMENT_DRAFT',
+            'id': 'PDRAFT-103',
+            'status': 'BACKDATED_APPROVAL_REQUIRED',
+            'student': 'STU-31B84E07',
+            'category': '',
+            'amount': '5500',
+            'when': '2026-09-09 09:30:00',
+            'backdated': true,
+          },
+        ],
+        'canApprove': false,
+        'note': 'demo my requests',
+      };
 }

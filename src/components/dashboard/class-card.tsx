@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Clock, MapPin, Video } from "lucide-react";
 
@@ -17,11 +18,13 @@ export function ClassCard({
   index = 0,
   onJoin,
   detail,
+  detailHref,
 }: {
   cls: ClassEvent;
   index?: number;
   onJoin?: () => void;
   detail?: string;
+  detailHref?: string;
 }) {
   const reduced = useReducedMotion();
   const Icon = instrumentIcon(cls.instrument);
@@ -71,6 +74,11 @@ export function ClassCard({
             </Button>
           )}
         </div>
+        {detailHref && (
+          <Link href={detailHref} className="block border-t border-border/60 pt-3 text-xs font-medium text-primary transition-colors hover:underline">
+            View class details →
+          </Link>
+        )}
       </div>
     </motion.div>
   );

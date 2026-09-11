@@ -29,7 +29,7 @@ export default function StudentClassesPage() {
             <SectionHeader title="Upcoming" subtitle="Your next lessons" />
             <div className="grid gap-4 md:grid-cols-2">
               {mine.map((c, i) => (
-                <ClassCard key={c.id} cls={c} index={i} />
+                <ClassCard key={c.id} cls={c} index={i} detailHref={`/student/classes/${c.id}`} />
               ))}
             </div>
           </section>

@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { BookOpen, FileMusic, Heart, Music, Play, Search } from "lucide-react";
+import { BookOpen, FileMusic, Heart, Music, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/dashboard/page-header";
-import { SectionHeader } from "@/components/dashboard/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { AudioPlayer } from "@/components/music/audio-player";
 import { cn } from "@/lib/utils/cn";
 
 import { resources } from "@/lib/data/demo";
@@ -44,6 +44,9 @@ export default function StudentLibraryPage() {
     return matchesType && matchesQuery;
   });
 
+  const audioResources = filtered.filter((r) => r.type === "audio" && r.audio_url);
+  const otherResources = filtered.filter((r) => !(r.type === "audio" && r.audio_url));
+
   const toggleFav = (id: string) => {
     setFavorites((prev) => {
       const next = new Set(prev);
@@ -53,11 +56,24 @@ export default function StudentLibraryPage() {
     });
   };
 
+  const FavHeart = ({ id }: { id: string }) => {
+    const fav = favorites.has(id);
+    return (
+      <button
+        onClick={() => { toggleFav(id); toast.success(fav ? "Removed from favorites" : "Added to favorites"); }}
+        className="rounded-xl p-1.5 text-muted-foreground transition-colors hover:bg-secondary"
+        aria-label="Toggle favorite"
+      >
+        <Heart className={cn("h-4 w-4", fav && "fill-peach-500 text-peach-500")} />
+      </button>
+    );
+  };
+
   return (
     <div>
       <PageHeader title="Learning Library" subtitle="Sheets, exercises, theory and more." />
 
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
+      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search resources..." className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -78,59 +94,62 @@ export default function StudentLibraryPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((r, i) => {
-          const fav = favorites.has(r.id);
-          return (
-            <motion.div
-              key={r.id}
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.04 }}
-              whileHover={{ y: -3 }}
-              className="group rounded-3xl border bg-card p-5 shadow-card transition-shadow hover:shadow-soft-lg"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lavender-100 text-lavender-700 dark:bg-lavender-500/15 dark:text-lavender-300">
-                  {typeIcon(r.type)}
+      {audioResources.length > 0 && (
+        <section className="mb-6">
+          <SectionLabel text="Audio" />
+          <div className="grid gap-4 lg:grid-cols-2">
+            {audioResources.map((r) => (
+              <div key={r.id} className="rounded-2xl border border-border/60 bg-card p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lavender-100/70 text-lavender-700 dark:bg-lavender-500/15 dark:text-lavender-300">
+                      <Music className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{r.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{r.author ?? r.instrument} · {r.level}</p>
+                    </div>
+                  </div>
+                  <FavHeart id={r.id} />
                 </div>
-                <button
-                  onClick={() => {
-                    toggleFav(r.id);
-                    toast.success(fav ? "Removed from favorites" : "Added to favorites");
-                  }}
-                  className="rounded-xl p-1.5 text-muted-foreground transition-colors hover:bg-secondary"
-                  aria-label="Toggle favorite"
-                >
-                  <Heart className={cn("h-4 w-4", fav && "fill-peach-500 text-peach-500")} />
-                </button>
+                <AudioPlayer src={r.audio_url!} className="mt-4" />
               </div>
-              <p className="mt-4 font-semibold leading-snug">{r.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {r.instrument} · {r.level}
-              </p>
-              <div className="mt-3 flex items-center justify-between">
-                <Badge variant="secondary">{typeLabels[r.type]}</Badge>
-                {r.type === "audio" ? (
-                  <button
-                    onClick={() => toast.success("Playing " + r.title)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:scale-105 active:scale-95"
-                    aria-label="Play"
-                  >
-                    <Play className="h-4 w-4 translate-x-0.5" />
-                  </button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">{r.duration_min ? `${r.duration_min} min` : r.author}</span>
-                )}
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {otherResources.map((r, i) => (
+          <motion.div
+            key={r.id}
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: i * 0.04 }}
+            whileHover={{ y: -3 }}
+            className="group rounded-2xl border border-border/60 bg-card p-5 transition-shadow hover:shadow-soft"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lavender-100/70 text-lavender-700 dark:bg-lavender-500/15 dark:text-lavender-300">
+                {typeIcon(r.type)}
               </div>
-            </motion.div>
-          );
-        })}
+              <FavHeart id={r.id} />
+            </div>
+            <p className="mt-4 font-semibold leading-snug">{r.title}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {r.instrument} · {r.level}
+            </p>
+            <div className="mt-3 flex items-center justify-between">
+              <Badge variant="secondary">{typeLabels[r.type]}</Badge>
+              <span className="text-xs text-muted-foreground">{r.duration_min ? `${r.duration_min} min` : r.author}</span>
+            </div>
+          </motion.div>
+        ))}
       </div>
 
       {filtered.length === 0 && (
-        <div className="flex flex-col items-center rounded-3xl border bg-card p-14 text-center shadow-card">
+        <div className="flex flex-col items-center rounded-2xl border border-dashed border-border/70 bg-secondary/30 p-14 text-center">
           <Music className="mb-3 h-8 w-8 text-muted-foreground" />
           <p className="font-medium">No resources found</p>
           <p className="text-sm text-muted-foreground">Try a different search or filter.</p>
@@ -138,12 +157,12 @@ export default function StudentLibraryPage() {
       )}
 
       {favorites.size > 0 && (
-        <div className="mt-10">
-          <SectionHeader title="Favorites" />
+        <section className="mt-8">
+          <SectionLabel text="Favorites" />
           <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
             {resources.filter((r) => favorites.has(r.id)).map((r) => (
-              <div key={r.id} className="flex w-56 shrink-0 items-center gap-3 rounded-2xl border bg-card p-4 shadow-card">
-                <Heart className="h-4 w-4 fill-peach-500 text-peach-500" />
+              <div key={r.id} className="flex w-56 shrink-0 items-center gap-3 rounded-2xl border border-border/60 bg-card p-4">
+                <Heart className="h-4 w-4 shrink-0 fill-peach-500 text-peach-500" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{r.title}</p>
                   <p className="text-xs text-muted-foreground">{r.instrument}</p>
@@ -151,8 +170,12 @@ export default function StudentLibraryPage() {
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
+}
+
+function SectionLabel({ text }: { text: string }) {
+  return <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">{text}</p>;
 }

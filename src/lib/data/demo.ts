@@ -143,7 +143,7 @@ export const resources: Resource[] = [
   { id: "r3", title: "Warm-up Exercise #1", instrument: "Piano", level: "Beginner", type: "exercise", duration_min: 10, author: "Sarah Mitchell" },
   { id: "r4", title: "Basic Chord Progressions", instrument: "Guitar", level: "Beginner", type: "chords", author: "David Chen" },
   { id: "r5", title: "Ear Training — Intervals", instrument: "All", level: "Intermediate", type: "theory", duration_min: 15, author: "Swar Mangal" },
-  { id: "r6", title: "Amazing Grace (Audio)", instrument: "Violin", level: "Grade 2", type: "audio", duration_min: 4, author: "Liam Nguyen", audio_url: "/audio/demo.mp3" },
+  { id: "r6", title: "Amazing Grace (Audio)", instrument: "Violin", level: "Grade 2", type: "audio", duration_min: 4, author: "Liam Nguyen", audio_url: "/audio/demo.wav" },
   { id: "r7", title: "Rhythm Counting Exercises", instrument: "All", level: "Grade 2", type: "exercise", author: "Sarah Mitchell" },
   { id: "r8", title: "Canon in D (Simplified)", instrument: "Piano", level: "Grade 4", type: "song", author: "Pachelbel" },
   { id: "r9", title: "Video Lesson — Posture", instrument: "Piano", level: "Beginner", type: "video", duration_min: 12, author: "Sarah Mitchell" },

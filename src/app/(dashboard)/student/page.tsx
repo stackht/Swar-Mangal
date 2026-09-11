@@ -25,6 +25,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { GradientCard } from "@/components/dashboard/gradient-card";
+import { TiltCard, MagneticButton } from "@/components/3d/tilt-card";
 import { SectionHeader } from "@/components/dashboard/section-header";
 import { ProgressRing } from "@/components/dashboard/progress-ring";
 import { MusicWave } from "@/components/music/music-wave";
@@ -124,32 +125,34 @@ export default function StudentDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.08, ease: EASE }}
         >
-          <GradientCard gradient="navy" className="p-6 sm:p-8" wave>
-            <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-3">
-                <Badge className="bg-white/10 text-white/90 ring-1 ring-white/15">
-                  <Clock className="h-3 w-3" /> Next class · in {countdown(nextClass.start_time)}
-                </Badge>
-                <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white ring-1 ring-white/15">
-                    <NextIcon className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h2 className="text-h1 text-white">{nextClass.title}</h2>
-                    <p className="text-body-sm text-white/70">
-                      Today · {formatTime(nextClass.start_time)} · {nextClass.duration_min} min
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75">
-                  <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> with {nextClass.teacher_name}</span>
-                  <span className="hidden text-white/25 sm:inline">·</span>
-                  <span className="flex items-center gap-1.5 capitalize">
-                    {nextClass.mode === "online" ? <Video className="h-3.5 w-3.5" /> : <Music className="h-3.5 w-3.5" />} {nextClass.room ?? nextClass.mode}
-                  </span>
+          <TiltCard className="rounded-3xl" maxTilt={4}>
+        <GradientCard gradient="navy" className="p-6 sm:p-8" wave>
+          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <Badge className="bg-white/10 text-white/90 ring-1 ring-white/15">
+                <Clock className="h-3 w-3" /> Next class · in {countdown(nextClass.start_time)}
+              </Badge>
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white ring-1 ring-white/15">
+                  <NextIcon className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-h1 text-white">{nextClass.title}</h2>
+                  <p className="text-body-sm text-white/70">
+                    Today · {formatTime(nextClass.start_time)} · {nextClass.duration_min} min
+                  </p>
                 </div>
               </div>
-              <div className="lg:text-right">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75">
+                <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> with {nextClass.teacher_name}</span>
+                <span className="hidden text-white/25 sm:inline">·</span>
+                <span className="flex items-center gap-1.5 capitalize">
+                  {nextClass.mode === "online" ? <Video className="h-3.5 w-3.5" /> : <Music className="h-3.5 w-3.5" />} {nextClass.room ?? nextClass.mode}
+                </span>
+              </div>
+            </div>
+            <div className="lg:text-right">
+              <MagneticButton strength={8}>
                 <Button
                   size="lg"
                   className="bg-white text-navy-950 shadow-lift hover:bg-white/92"
@@ -157,9 +160,11 @@ export default function StudentDashboard() {
                 >
                   Join class <ArrowRight className="h-4 w-4" />
                 </Button>
-              </div>
+              </MagneticButton>
             </div>
-          </GradientCard>
+          </div>
+        </GradientCard>
+      </TiltCard>
         </motion.section>
       )}
 

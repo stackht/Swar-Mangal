@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { AppShell } from "@/components/dashboard/app-shell";
+import { CommandShell } from "@/components/command/command-shell";
 
 export const metadata: Metadata = {
   title: {
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <AppShell>{children}</AppShell>
+      <CommandShell>
+        <AppShell>{children}</AppShell>
+      </CommandShell>
     </AuthProvider>
   );
 }

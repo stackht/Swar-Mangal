@@ -301,6 +301,7 @@ class Teacher {
     required this.status,
     required this.phone,
     required this.email,
+    this.academyShare = '',
   });
   factory Teacher.fromApi(Map<String, dynamic> b) => Teacher(
         teacherId: _s(b['teacherId']),
@@ -312,6 +313,7 @@ class Teacher {
         status: _s(b['status']),
         phone: _s(b['phone']),
         email: _s(b['email']),
+        academyShare: _s(b['academyShare']),
       );
   final String teacherId;
   final String teacherName;
@@ -322,6 +324,9 @@ class Teacher {
   final String status;
   final String phone;
   final String email;
+  final String academyShare;
+
+  String get shareLabel => academyShare.isEmpty ? '' : (academyShare.endsWith('%') ? academyShare : '$academyShare%');
 }
 
 class ExpenseEntry {
@@ -920,4 +925,110 @@ class StaffHub {
   final String feeStatus;
   final String dueDate;
   final String canonicalFee;
+}
+
+/// Authoritative teacher profile (+ assigned students) from the profile
+/// endpoint contract. Display-only financial fields come from the server.
+class TeacherProfile {
+  TeacherProfile({
+    required this.teacher,
+    required this.students,
+    required this.receiptCountThisMonth,
+  });
+  factory TeacherProfile.fromApi(Map<String, dynamic> b) {
+    final t = b['teacher'] is Map<String, dynamic>
+        ? b['teacher'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return TeacherProfile(
+      teacher: Teacher.fromApi({
+        ...t,
+        'teacherId': _s(t['teacherId']),
+        'teacherName': _s(t['teacherName'] ?? t['name']),
+        'primaryRole': _s(t['primaryRole'] ?? t['instrument'] ?? t['role']),
+        'status': _s(t['status']),
+        'academyShare': _s(t['compensationPercent'] ?? t['feeSharePercent'] ?? t['academyShare']),
+        'payoutStreams': _s(t['payoutStreams']),
+        'payoutModel': _s(t['payoutModel']),
+      }),
+      students: ((b['students'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(Student.fromApi)
+          .toList(),
+      receiptCountThisMonth: (b['receiptCountThisMonth'] as num?)?.toInt() ?? 0,
+    );
+  }
+  final Teacher teacher;
+  final List<Student> students;
+  final int receiptCountThisMonth;
+
+  /// Server-provided compensation percentage, if any ('' = unset).
+  String get sharePercent => _share(teacher.academyShare);
+
+  static String _share(String v) => v.isEmpty ? '' : (v.endsWith('%') ? v : '$v%');
+
+  bool get hasStudents => students.isNotEmpty;
+}
+
+/// Rich, role-appropriate student profile detail.
+class StudentProfileDetail {
+  StudentProfileDetail({
+    required this.student,
+    required this.teacher,
+    required this.teacherId,
+    required this.branch,
+  });
+  factory StudentProfileDetail.fromApi(Map<String, dynamic> b) {
+    final s = b['student'] is Map<String, dynamic>
+        ? b['student'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final t = b['teacher'] is Map<String, dynamic>
+        ? b['teacher'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return StudentProfileDetail(
+      student: Student.fromApi({
+        ...s,
+        'teacher': _s(s['teacherName'] ?? t['teacherName'] ?? s['teacher']),
+      }),
+      teacher: t['teacherName'] != null || t['teacherId'] != null
+          ? t
+          : null,
+      teacherId: _s(s['teacherId'] ?? t['teacherId']),
+      branch: _s(s['branch'] ?? s['location']),
+    );
+  }
+  final Student student;
+
+  /// Raw teacher map when the backend returned one (kept untyped-avoidable).
+  final Map<String, dynamic>? teacher;
+  final String teacherId;
+  final String branch;
+
+  bool get hasTeacherId => teacherId.isNotEmpty && teacherId != '0' && teacherId != 'null';
+  bool get hasTeacherName => student.teacher.isNotEmpty;
+  bool get hasAssignedTeacher => hasTeacherId || hasTeacherName;
+
+  /// True when the profile carries no teacher link at all.
+  bool get noTeacherAssigned => !hasAssignedTeacher;
+
+  String get teacherName => student.teacher;
+}
+
+/// Founder's compensation edit contract validation — percentages bounded 0..100.
+class TeacherCompensationValidator {
+  TeacherCompensationValidator._();
+
+  static ({bool ok, String? error, num? value}) validate(String raw) {
+    final v = num.tryParse(raw.trim());
+    if (v == null) return (ok: false, error: 'Enter a whole number between 0 and 100.', value: null);
+    if (v < 0 || v > 100) return (ok: false, error: 'Percentage must be between 0 and 100.', value: v);
+    return (ok: true, error: null, value: v);
+  }
+}
+
+/// UI access policy — compensation editing is founder-only. This is a
+/// convenience layer: the BACKEND remains the authoritative gate.
+class ProfilePolicy {
+  ProfilePolicy._();
+
+  static bool canEditCompensation({required bool staff}) => !staff;
 }

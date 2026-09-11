@@ -127,6 +127,35 @@ class ApiService {
   Future<dynamic> addTeacher(Map<String, dynamic> form) =>
       _api.call('api_addTeacher', form);
 
+  /// Authoritative teacher profile incl. assigned students (profile contract).
+  Future<TeacherProfile> teacherProfile(String teacherId, {String branch = 'ALL'}) async {
+    final b = await _api.call('api_teacherProfile', {'teacherId': teacherId, 'branch': branch});
+    return TeacherProfile.fromApi(b as Map<String, dynamic>);
+  }
+
+  /// Rich student profile incl. teacher link + receipts (profile contract).
+  Future<StudentProfileDetail> studentProfile(String studentId, {String branch = 'ALL'}) async {
+    final b = await _api.call('api_studentProfile', {'studentId': studentId, 'branch': branch});
+    return StudentProfileDetail.fromApi(b as Map<String, dynamic>);
+  }
+
+  /// Founder-only compensation write. Percentage + effective date + reason are
+  /// required; intent key stays stable per form so retries cannot duplicate.
+  Future<dynamic> updateTeacherCompensation({
+    required String teacherId,
+    required num percentage,
+    required String effectiveFrom,
+    required String reason,
+    required String intentKey,
+  }) =>
+      _api.call('api_updateTeacherCompensation', {
+        'teacherId': teacherId,
+        'percentage': percentage,
+        'effectiveFrom': effectiveFrom,
+        'reason': reason,
+        'clientIntentKey': intentKey,
+      });
+
   // -------------------------------------------------------------- expenses
   Future<dynamic> addExpenseEntry(Map<String, dynamic> form) =>
       _api.call('api_addExpenseEntry', form);

@@ -8,6 +8,7 @@ import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
 import 'fee_collection_screen.dart';
 import 'message_compose_screen.dart';
+import 'teacher_profile_screen.dart';
 
 /// Student profile — the shared one-screen view of a student for both apps.
 class StudentProfileScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class StudentProfileScreen extends StatefulWidget {
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
   List<ReceiptRow> _receipts = [];
   StaffHub? _hub;
+  StudentProfileDetail? _detail;
   String? _error;
   bool _busy = false;
 
@@ -28,7 +30,27 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   void initState() {
     super.initState();
     _loadReceipts();
+    _loadDetail();
     if (widget.staff) _loadHub();
+  }
+
+  /// Best-effort richer detail (backend profile endpoint). Live deployments
+  /// without the endpoint keep the simpler profile — never faked.
+  Future<void> _loadDetail() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    try {
+      final d = await auth.service!.studentProfile(
+        widget.student.studentId,
+        branch: auth.branch ?? 'ALL',
+      );
+      if (!mounted) return;
+      setState(() => _detail = d);
+    } on ApiException {
+      // profile endpoint unavailable — fall back to passed-in Student
+    } on ApiUnreachable {
+      // same
+    }
   }
 
   Future<void> _loadHub() async {
@@ -245,11 +267,38 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   InfoRow('Phone', s.phone.isNotEmpty ? s.phone : '—'),
                   InfoRow('Email', s.email.isNotEmpty ? s.email : '—'),
                   InfoRow('Batch / Class', s.batch.isNotEmpty ? s.batch : '—'),
-                  InfoRow('Teacher', s.teacher.isNotEmpty ? s.teacher : '—'),
                   InfoRow('Fee plan', s.feeCycleType.isNotEmpty ? s.feeCycleType : '—'),
                   InfoRow('Next due', s.nextDueDate.isNotEmpty ? s.nextDueDate : '—'),
                   InfoRow('Last receipt', s.lastReceiptNo.isNotEmpty ? '${s.lastReceiptNo} · ₹${s.lastReceiptAmount}' : '—'),
                 ]),
+              ),
+            ),
+            const SizedBox(height: AppSpace.s3),
+            // Teacher relationship — clickable when a stable teacherId exists.
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: 6),
+                leading: const Icon(Icons.person_pin_circle_outlined, color: AppColors.primary),
+                title: Text(
+                  _detail?.hasAssignedTeacher == true
+                      ? (_detail!.hasTeacherName ? _detail!.teacherName : 'Teacher')
+                      : 'No teacher assigned',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                ),
+                subtitle: _detail?.hasTeacherId == true
+                    ? Text(_detail!.teacherId, style: const TextStyle(fontSize: 12, color: AppColors.muted))
+                    : null,
+                trailing: _detail?.hasTeacherId == true
+                    ? const Icon(Icons.chevron_right, color: AppColors.muted)
+                    : null,
+                onTap: _detail?.hasTeacherId == true
+                    ? () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => TeacherProfileScreen(
+                          teacherId: _detail!.teacherId,
+                          staff: widget.staff,
+                        ),
+                      ))
+                    : null,
               ),
             ),
             const SizedBox(height: AppSpace.s3),

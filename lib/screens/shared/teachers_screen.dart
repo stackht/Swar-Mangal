@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
+import 'teacher_profile_screen.dart';
 
 /// Teacher master. Founder: full list + add + status. Staff: read-only list
 /// via the branch-validated endpoint.
@@ -92,38 +93,53 @@ class _TeachersScreenState extends State<TeachersScreen> {
   }
 
   Widget _row(Teacher t) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: AppSpace.s3),
-      child: Row(children: [
-        CircleAvatar(
-          radius: 20,
-          backgroundColor: AppColors.primary.withValues(alpha: .08),
-          child: Text(t.teacherName.isNotEmpty ? t.teacherName[0].toUpperCase() : '?',
-              style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary)),
-        ),
-        const SizedBox(width: AppSpace.s3),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(t.teacherName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-            if (t.primaryRole.isNotEmpty)
-              Text(t.primaryRole, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-            Text(
-                [t.branchClassCode, t.phone].where((e) => e.isNotEmpty).join(' · '),
-                style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-          ]),
-        ),
-        StatusBadge(t.status.isEmpty ? 'UNKNOWN' : t.status),
-        if (!widget.staff)
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
-            onSelected: (v) => _setStatus(t, v),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'ACTIVE', child: Text('Set ACTIVE')),
-              PopupMenuItem(value: 'INACTIVE', child: Text('Set INACTIVE')),
-              PopupMenuItem(value: 'HOLD', child: Text('Set HOLD')),
-            ],
+    return InkWell(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => TeacherProfileScreen(teacherId: t.teacherId, staff: widget.staff),
+      )),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: AppSpace.s3),
+        child: Row(children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: AppColors.primary.withValues(alpha: .08),
+            child: Text(t.teacherName.isNotEmpty ? t.teacherName[0].toUpperCase() : '?',
+                style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary)),
           ),
-      ]),
+          const SizedBox(width: AppSpace.s3),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(
+                  child: Text(t.teacherName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                ),
+                if (t.shareLabel.isNotEmpty) ...[
+                  const SizedBox(width: AppSpace.s2),
+                  TagChip(t.shareLabel, color: AppColors.focus),
+                ],
+              ]),
+              if (t.primaryRole.isNotEmpty)
+                Text(t.primaryRole, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+              Text(
+                  [t.branchClassCode, t.phone].where((e) => e.isNotEmpty).join(' · '),
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+            ]),
+          ),
+          StatusBadge(t.status.isEmpty ? 'UNKNOWN' : t.status),
+          if (!widget.staff)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
+              onSelected: (v) => _setStatus(t, v),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'ACTIVE', child: Text('Set ACTIVE')),
+                PopupMenuItem(value: 'INACTIVE', child: Text('Set INACTIVE')),
+                PopupMenuItem(value: 'HOLD', child: Text('Set HOLD')),
+              ],
+            ),
+        ]),
+      ),
     );
   }
 

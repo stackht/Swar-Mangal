@@ -35,6 +35,7 @@ class DemoApiClient extends ApiClient {
     'api_founder_finalisePaymentDraft',
     'api_staff_finalisePaymentDraft',
     'api_founder_mergeStudentDraft',
+    'api_updateTeacherCompensation',
   };
 
   @override
@@ -135,6 +136,22 @@ class DemoApiClient extends ApiClient {
         };
       case 'api_staff_studentHub':
         return _staffStudentHub(a);
+      case 'api_teacherProfile':
+        return _teacherProfile(a);
+      case 'api_studentProfile':
+        return _studentProfileDetail(a);
+      case 'api_updateTeacherCompensation':
+        return {
+          'ok': true,
+          'changed': true,
+          'teacherId': a['teacherId'],
+          'oldPercentage': '40',
+          'newPercentage': '${a['percentage']}',
+          'effectiveFrom': a['effectiveFrom'],
+          'reason': a['reason'],
+          'auditWritten': true,
+          'note': 'demo compensation updated',
+        };
       case 'api_teacherPayoutPreview':
         return _payoutPreview(a);
       case 'api_staff_listMyApprovals':
@@ -491,6 +508,8 @@ class DemoApiClient extends ApiClient {
           {
             'teacherId': 'T-001',
             'teacherName': 'Rahul Joshi',
+            'academyShare': '40',
+
             'primaryRole': 'Guitar / Keyboard',
             'payoutStreams': 'ACADEMY|SCHOOL',
             'payoutModel': 'SHARE',
@@ -502,6 +521,8 @@ class DemoApiClient extends ApiClient {
           {
             'teacherId': 'T-002',
             'teacherName': 'Meera Nair',
+            'academyShare': '45',
+
             'primaryRole': 'Violin',
             'payoutStreams': 'ACADEMY',
             'payoutModel': 'SHARE',
@@ -513,6 +534,8 @@ class DemoApiClient extends ApiClient {
           {
             'teacherId': 'T-003',
             'teacherName': 'Vikram Singh',
+            'academyShare': '50',
+
             'primaryRole': 'Tabla',
             'payoutStreams': 'ACADEMY',
             'payoutModel': 'SHARE',
@@ -1060,6 +1083,63 @@ class DemoApiClient extends ApiClient {
 
   String _s(dynamic v) => v == null ? '' : v.toString();
 
+  Map<String, dynamic> _teacherProfile(Map<String, dynamic> a) {
+    final tid = _s(a['teacherId'] ?? 'T-001');
+    final allT = (_teachers()['teachers'] as List).cast<Map<String, dynamic>>();
+    Map<String, dynamic> t = allT.first;
+    for (final x in allT) {
+      if (x['teacherId'] == tid) {
+        t = x;
+        break;
+      }
+    }
+    final students = _studentRows()
+        .where((s) => s['teacher'] == t['teacherName'])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    if (students.isEmpty) {
+      students
+        ..add(Map<String, dynamic>.from(_studentRows()[0]))
+        ..add(Map<String, dynamic>.from(_studentRows()[1]));
+    }
+    return {
+      'ok': true,
+      'teacher': {
+        ...t,
+        'teacherId': t['teacherId'],
+        'teacherName': t['teacherName'],
+        'primaryRole': t['primaryRole'],
+        'academyShare': t['academyShare'] ?? '40',
+        'compensationPercent': t['academyShare'] ?? '40',
+        'compensationEffectiveFrom': '2026-07-01',
+      },
+      'students': students,
+      'receiptCountThisMonth': 4,
+    };
+  }
+
+  Map<String, dynamic> _studentProfileDetail(Map<String, dynamic> a) {
+    final sid = _s(a['studentId'] ?? '');
+    final rows = _studentRows();
+    final s = sid.isEmpty
+        ? rows.first
+        : rows.where((r) => r['studentId'] == sid).isNotEmpty
+            ? rows.firstWhere((r) => r['studentId'] == sid)
+            : rows.first;
+    return {
+      'ok': true,
+      'student': {
+        ...s,
+        'teacherId': 'T-001',
+        'teacherName': s['teacher'],
+        'branch': s['location'],
+      },
+      'teacher': {'teacherId': 'T-001', 'teacherName': s['teacher']},
+      'receipts': _receiptRows().take(3).toList(),
+      'attendance': [],
+    };
+  }
+
   Map<String, dynamic> _todaysTasks() =>
       {'ok': true, 'cards': _taskCards(), 'mode': 'COPY_ONLY', 'today': '2026-09-11'};
 
@@ -1069,6 +1149,8 @@ class DemoApiClient extends ApiClient {
           {
             'teacherId': 'T-001',
             'teacherName': 'Rahul Joshi',
+            'academyShare': '40',
+
             'month': a['month'] ?? '2026-09',
             'entityId': 'ENT-GOREGAON',
             'receiptCount': 4,
@@ -1084,6 +1166,8 @@ class DemoApiClient extends ApiClient {
           {
             'teacherId': 'T-002',
             'teacherName': 'Meera Nair',
+            'academyShare': '45',
+
             'month': a['month'] ?? '2026-09',
             'entityId': 'ENT-GOREGAON',
             'receiptCount': 3,
@@ -1099,6 +1183,8 @@ class DemoApiClient extends ApiClient {
           {
             'teacherId': 'T-003',
             'teacherName': 'Vikram Singh',
+            'academyShare': '50',
+
             'month': '2026-08',
             'entityId': 'ENT-KANDIVALI',
             'receiptCount': 5,

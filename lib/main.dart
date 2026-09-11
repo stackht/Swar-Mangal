@@ -7,23 +7,32 @@ import 'screens/founder/founder_shell.dart';
 import 'screens/staff/staff_shell.dart';
 import 'state/auth_provider.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const AcademyApp());
+  final mode = await ThemeController.restore();
+  runApp(AcademyApp(initialTheme: mode));
 }
 
 class AcademyApp extends StatelessWidget {
-  const AcademyApp({super.key});
+  const AcademyApp({super.key, this.initialTheme = ThemeMode.light});
+  final ThemeMode initialTheme;
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
-      child: MaterialApp(
-        title: 'SwarMangal AcademyOS',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        home: const Gate(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeController(initialTheme)),
+      ],
+      child: Consumer<ThemeController>(
+        builder: (context, theme, _) => MaterialApp(
+          title: 'SwarMangal AcademyOS',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: theme.mode,
+          home: const Gate(),
+        ),
       ),
     );
   }

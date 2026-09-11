@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme.dart';
 import '../../state/auth_provider.dart';
+import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
 
 /// Inherited handle letting a body screen switch the shell's current view.
@@ -83,6 +84,13 @@ class _DrawerShellState extends State<DrawerShell> {
         ]),
         actions: [
           if (widget.headerTrailing != null) widget.headerTrailing!,
+          Consumer<ThemeController>(
+            builder: (context, theme, _) => IconButton(
+              tooltip: theme.isDark ? 'Light mode' : 'Dark mode',
+              icon: Icon(theme.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+              onPressed: theme.toggle,
+            ),
+          ),
           IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
@@ -91,9 +99,14 @@ class _DrawerShellState extends State<DrawerShell> {
         ],
       ),
       drawer: _drawer(context, auth),
-      body: ShellNavigator(
-        go: _go,
-        child: widget.buildBody(context, _current),
+      body: ViewSwitch(
+        child: ShellNavigator(
+          go: _go,
+          child: KeyedSubtree(
+            key: ValueKey<String>(_current),
+            child: widget.buildBody(context, _current),
+          ),
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import '../../core/api.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../state/auth_provider.dart';
+import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
 import 'receipt_detail_screen.dart';
 
@@ -84,7 +85,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       ),
       Expanded(
         child: _busy
-            ? const Center(child: CircularProgressIndicator())
+            ? const SkeletonList(rows: 6)
             : _error != null && _rows.isEmpty
                 ? ErrorView(_error!, onRetry: () => _search(_q.text))
                 : _rows.isEmpty

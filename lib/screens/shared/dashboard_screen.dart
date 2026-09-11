@@ -5,6 +5,7 @@ import '../../../core/api.dart';
 import '../../../core/theme.dart';
 import '../../../models/models.dart';
 import '../../../state/auth_provider.dart';
+import '../../../widgets/anim.dart';
 import '../../../widgets/atoms.dart';
 
 /// Founder home: today's money + recent receipts + fee buckets.
@@ -83,7 +84,7 @@ class _BodyState extends State<_Body> {
   @override
   Widget build(BuildContext context) {
     if (_busy && _metrics == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(rows: 8);
     }
     if (_error != null && _metrics == null && _dues == null) {
       return ErrorView(_error!, onRetry: _fetch);
@@ -141,7 +142,12 @@ class _BodyState extends State<_Body> {
       child: Padding(
         padding: const EdgeInsets.all(AppSpace.s4),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('COLLECTED TODAY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
+          Text('COLLECTED TODAY',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .5,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: AppSpace.s2),
           Text(inr(m.todayCollection), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.primary)),
           const SizedBox(height: AppSpace.s2),
@@ -209,7 +215,7 @@ class _BodyState extends State<_Body> {
         contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: 0),
         leading: const Icon(Icons.receipt_outlined, color: AppColors.muted),
         title: Text('${r.receiptNo} · ${r.student}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-        subtitle: Text('${r.date} · ${r.mode}', style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+        subtitle: Text('${r.date} · ${r.mode}', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         trailing: AmountText(r.amount),
       ),
     );

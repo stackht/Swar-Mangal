@@ -5,6 +5,7 @@ import '../../core/api.dart';
 import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../state/auth_provider.dart';
+import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
 import 'student_profile_screen.dart';
 import 'add_student_screen.dart';
@@ -113,7 +114,7 @@ class _StudentsScreenState extends State<StudentsScreen> {
           ]),
         ),
         if (_busy)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
+          const Expanded(child: SkeletonList(rows: 7))
         else if (!widget.staff && _classFilter != 'ALL' && _rows.isEmpty && !_busy && _error == null)
           Expanded(
             child: Center(

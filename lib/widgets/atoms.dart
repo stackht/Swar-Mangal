@@ -9,12 +9,17 @@ class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {super.key});
   final String text;
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: AppSpace.s4, bottom: AppSpace.s3),
-        child: Text(text,
-            style: const TextStyle(
-                fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.ink)),
-      );
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.s4, bottom: AppSpace.s3),
+      child: Text(text,
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurface)),
+    );
+  }
 }
 
 class StatTile extends StatelessWidget {
@@ -62,26 +67,29 @@ class InfoRow extends StatelessWidget {
   final String value;
   final bool money;
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpace.s2),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 130,
-              child: Text(label,
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-            ),
-            Expanded(
-              child: Text(value,
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: money ? FontWeight.w700 : FontWeight.w500,
-                      color: AppColors.ink)),
-            ),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.s2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(label,
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: money ? FontWeight.w700 : FontWeight.w500,
+                    color: scheme.onSurface)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class StatusBadge extends StatelessWidget {
@@ -120,12 +128,33 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paint(text);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fg = dark ? _darkFg(p.fg) : p.fg;
+    final bg = dark ? _darkBg(p.bg) : p.bg;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpace.s2, vertical: 3),
-      decoration: BoxDecoration(color: p.bg, borderRadius: BorderRadius.circular(4)),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
       child: Text(p.label,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: p.fg)),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
     );
+  }
+
+  static Color _darkFg(Color light) {
+    if (light == AppColors.okFg) return AppColors.dOkFg;
+    if (light == AppColors.warnFg) return AppColors.dWarnFg;
+    if (light == AppColors.blockFg) return AppColors.dBlockFg;
+    if (light == AppColors.infoFg) return AppColors.dInfoFg;
+    if (light == AppColors.muted) return AppColors.dMuted;
+    return light;
+  }
+
+  static Color _darkBg(Color light) {
+    if (light == AppColors.okBg) return AppColors.dOkBg;
+    if (light == AppColors.warnBg) return AppColors.dWarnBg;
+    if (light == AppColors.blockBg) return AppColors.dBlockBg;
+    if (light == AppColors.infoBg) return AppColors.dInfoBg;
+    if (light == AppColors.pageBg) return AppColors.dPageBg;
+    return light;
   }
 }
 
@@ -146,18 +175,21 @@ class EmptyState extends StatelessWidget {
   final String message;
   final IconData icon;
   @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpace.s6),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, size: 42, color: AppColors.muted.withValues(alpha: .5)),
-            const SizedBox(height: AppSpace.s3),
-            Text(message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.muted)),
-          ]),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s6),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 42, color: scheme.onSurfaceVariant.withValues(alpha: .5)),
+          const SizedBox(height: AppSpace.s3),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant)),
+        ]),
+      ),
+    );
+  }
 }
 
 class ErrorView extends StatelessWidget {
@@ -204,9 +236,11 @@ class LoadingButton extends StatelessWidget {
     final bg = destructive
         ? AppColors.blockFg
         : secondary
-            ? AppColors.surface
+            ? Theme.of(context).colorScheme.surface
             : AppColors.primary;
-    final fg = secondary ? AppColors.ink.withValues(alpha: .8) : Colors.white;
+    final fg = secondary
+        ? Theme.of(context).colorScheme.onSurface.withValues(alpha: .85)
+        : Colors.white;
     final border = secondary ? BorderSide(color: AppColors.line) : BorderSide.none;
     return SizedBox(
       width: double.infinity,

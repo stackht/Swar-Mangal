@@ -1,0 +1,185 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/api.dart';
+import '../../core/theme.dart';
+import '../../models/models.dart';
+import '../../state/auth_provider.dart';
+import '../../widgets/atoms.dart';
+
+/// Teacher master. Founder: full list + add + status. Staff: read-only list
+/// via the branch-validated endpoint.
+class TeachersScreen extends StatefulWidget {
+  const TeachersScreen({super.key, required this.staff});
+  final bool staff;
+  @override
+  State<TeachersScreen> createState() => _TeachersScreenState();
+}
+
+class _TeachersScreenState extends State<TeachersScreen> {
+  List<Teacher> _rows = [];
+  bool _busy = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final rows = await auth.service!.listTeachers();
+      if (!mounted) return;
+      setState(() {
+        _rows = rows;
+        _busy = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _busy = false;
+      });
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _busy = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_busy && _rows.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (_error != null && _rows.isEmpty) return ErrorView(_error!, onRetry: _load);
+    return RefreshScaffold(
+      onRefresh: _load,
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(AppSpace.s4),
+          child: Row(children: [
+            Text('${_rows.length} teachers',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
+            const Spacer(),
+            if (!widget.staff)
+              TextButton.icon(
+                onPressed: () => _addTeacher(context),
+                icon: const Icon(Icons.person_add, size: 18),
+                label: const Text('Add'),
+              ),
+          ]),
+        ),
+        Expanded(
+          child: _rows.isEmpty
+              ? const EmptyState('No teachers in the master yet.', icon: Icons.group_outlined)
+              : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: AppSpace.s6),
+                  itemCount: _rows.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (c, i) => _row(_rows[i]),
+                ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _row(Teacher t) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: AppSpace.s3),
+      child: Row(children: [
+        CircleAvatar(
+          radius: 20,
+          backgroundColor: AppColors.primary.withValues(alpha: .08),
+          child: Text(t.teacherName.isNotEmpty ? t.teacherName[0].toUpperCase() : '?',
+              style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary)),
+        ),
+        const SizedBox(width: AppSpace.s3),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t.teacherName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            if (t.primaryRole.isNotEmpty)
+              Text(t.primaryRole, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+            Text(
+                [t.branchClassCode, t.phone].where((e) => e.isNotEmpty).join(' · '),
+                style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+          ]),
+        ),
+        StatusBadge(t.status.isEmpty ? 'UNKNOWN' : t.status),
+      ]),
+    );
+  }
+
+  void _addTeacher(BuildContext context) {
+    final name = TextEditingController();
+    final phone = TextEditingController();
+    final role = TextEditingController();
+    final err = ValueNotifier<String?>(null);
+    final busy = ValueNotifier(false);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add teacher'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: name, decoration: const InputDecoration(labelText: 'Teacher name *')),
+          const SizedBox(height: AppSpace.s3),
+          TextField(controller: phone, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
+          const SizedBox(height: AppSpace.s3),
+          TextField(controller: role, decoration: const InputDecoration(labelText: 'Primary instrument / role')),
+          const SizedBox(height: AppSpace.s3),
+          ValueListenableBuilder<String?>(
+            valueListenable: err,
+            builder: (_, e, _) => e == null
+                ? const SizedBox.shrink()
+                : Text(e, style: const TextStyle(color: AppColors.blockFg, fontSize: 13)),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ValueListenableBuilder<bool>(
+            valueListenable: busy,
+            builder: (_, b, _) => FilledButton(
+              onPressed: b
+                  ? null
+                  : () async {
+                      if (name.text.trim().isEmpty) {
+                        err.value = 'Teacher name is required';
+                        return;
+                      }
+                      busy.value = true;
+                      final auth = context.read<AuthProvider>();
+                      try {
+                        final r = await auth.service!.addTeacher({
+                          'teacherName': name.text.trim(),
+                          'phone': phone.text.trim(),
+                          'primaryRole': role.text.trim(),
+                        });
+                        final m = r as Map<String, dynamic>;
+                        if (m['ok'] != true && m.containsKey('teacherId') == false) {
+                          err.value = (m['error'] ?? 'Could not add.').toString();
+                        } else {
+                          if (!ctx.mounted) return;
+                          Navigator.pop(ctx);
+                          _load();
+                        }
+                      } on ApiException catch (e) {
+                        err.value = e.message;
+                      } finally {
+                        busy.value = false;
+                      }
+                    },
+              child: const Text('Add teacher'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

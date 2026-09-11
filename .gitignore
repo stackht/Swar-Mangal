@@ -1,56 +1,53 @@
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.iml
+.idea/
+.pub/
+.pub-cache/
+.metadata
 
-# testing
-/coverage
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+android/gradle/
+android/keystore.properties
 
-# next.js
-/.next/
-/out/
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner.xcworkspace/xcshareddata/
+ios/Flutter/.last_build_id
 
-# production
-/build
+# Web
+web/favicon.png
 
-# misc
+# Linux / Windows / macOS
+linux/
+windows/
+macos/
+.fvm/
+
+# Testing
+coverage/
+
+# Old prior-project directories
+.next/
+maestro_app/
+maestro-android/
+
+# Misc
 .DS_Store
 *.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# env files
+*.log
+node_modules/
+.pnp.*
+env/
 .env
 .env*.local
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# flutter app (maestro_app)
-/maestro_app/build/
-/maestro_app/.dart_tool/
-/maestro_app/android/.gradle/
-/maestro_app/android/local.properties
-/maestro_app/.metadata
-maestro_app/.flutter-plugins*
-maestro_app/analyze.txt
-maestro_app/build.txt
-maestro_app/test.txt
-
-# android TWA (maestro-android)
-/maestro-android/.gradle/
-/maestro-android/build/
-/maestro-android/app/build/
-/maestro-android/local.properties
-
-# local logs
-*.log
-dev-*.txt
-srv-*.txt

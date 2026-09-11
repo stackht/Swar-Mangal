@@ -1,0 +1,257 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/api.dart';
+import '../../core/theme.dart';
+import '../../state/auth_provider.dart';
+import '../../widgets/atoms.dart';
+
+/// Add Student.
+/// founder: writes via the checked founder add path (draft + merge in one call).
+/// staff:   writes a STAFF_STUDENT_DRAFTS row for the founder to merge.
+class AddStudentScreen extends StatefulWidget {
+  const AddStudentScreen({super.key, required this.staff});
+  final bool staff;
+  @override
+  State<AddStudentScreen> createState() => _AddStudentScreenState();
+}
+
+class _AddStudentScreenState extends State<AddStudentScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _phone = TextEditingController();
+  final _email = TextEditingController();
+  final _parent = TextEditingController();
+  final _instrument = TextEditingController();
+  final _fee = TextEditingController();
+  final _months = TextEditingController();
+  final _batch = TextEditingController();
+  final _notes = TextEditingController();
+  String _classCode = 'GMC';
+  String _feeCycle = 'Monthly';
+  int _feeDueDay = 5;
+  bool _busy = false;
+  String? _result; // server message after a save
+  bool _success = false;
+
+  @override
+  void dispose() {
+    for (final c in [_name, _phone, _email, _parent, _instrument, _fee, _months, _batch, _notes]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    setState(() {
+      _busy = true;
+      _success = false;
+      _result = null;
+    });
+    try {
+      final payload = widget.staff
+          ? {
+              'name': _name.text.trim(),
+              'phone': _phone.text.trim(),
+              'email': _email.text.trim(),
+              'parentName': _parent.text.trim(),
+              'course': _instrument.text.trim(),
+              'branch': auth.branch ?? '',
+              'joiningDate': '',
+              'monthlyFee': _fee.text.trim(),
+              'monthsPaid': _months.text.trim(),
+              'batch': _batch.text.trim(),
+              'notes': _notes.text.trim(),
+              'lenient': true,
+            }
+          : {
+              'studentName': _name.text.trim(),
+              'phone': _phone.text.trim(),
+              'email': _email.text.trim(),
+              'guardianName': _parent.text.trim(),
+              'classCode': _classCode,
+              'feeCycleType': _feeCycle,
+              'feeDueDay': _feeDueDay,
+              'instrument': _instrument.text.trim(),
+            };
+      final r = widget.staff
+          ? await auth.service!.saveStudentDraft(payload)
+          : await auth.service!.addStudent(payload);
+      final m = r as Map<String, dynamic>;
+      final dup = (m['duplicateWarning'] is Map<String, dynamic> && m['duplicateWarning']['hasDuplicates'] == true) ||
+          m['duplicate'] == true;
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _success = m['ok'] == true || m.containsKey('studentId');
+        _result = _success
+            ? dup
+                ? 'Saved. Possible duplicate flagged — founder will review the merge.'
+                : 'Saved. ${widget.staff ? 'Founder will merge it into the master.' : ''}'
+            : (m['error'] ?? 'Could not save.').toString();
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _result = e.message;
+        _success = false;
+      });
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _result = e.message;
+        _success = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    return ListView(
+      padding: const EdgeInsets.all(AppSpace.s4),
+      children: [
+        Form(
+          key: _formKey,
+          child: Column(children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s4),
+                child: Column(children: [
+                  TextFormField(
+                    controller: _name,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Student name *', prefixIcon: Icon(Icons.person_outline)),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Student name is required' : null,
+                  ),
+                  const SizedBox(height: AppSpace.s3),
+                  TextFormField(
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'Phone', prefixIcon: Icon(Icons.phone_outlined)),
+                  ),
+                  const SizedBox(height: AppSpace.s3),
+                  TextFormField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
+                  ),
+                  const SizedBox(height: AppSpace.s3),
+                  TextFormField(
+                    controller: _parent,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Parent / guardian name', prefixIcon: Icon(Icons.people_outline)),
+                  ),
+                  const SizedBox(height: AppSpace.s3),
+                  TextFormField(
+                    controller: _instrument,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Instrument / course', prefixIcon: Icon(Icons.music_note_outlined)),
+                  ),
+                ]),
+              ),
+            ),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (!widget.staff) ...[
+                    const Text('CLASS CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
+                    const SizedBox(height: AppSpace.s2),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'GMC', label: Text('GMC')),
+                        ButtonSegment(value: 'KMC', label: Text('KMC')),
+                      ],
+                      selected: {_classCode},
+                      onSelectionChanged: (s) => setState(() => _classCode = s.first),
+                    ),
+                    const SizedBox(height: AppSpace.s3),
+                    DropdownButtonFormField<String>(
+                      initialValue: _feeCycle,
+                      decoration: const InputDecoration(labelText: 'Fee cycle'),
+                      items: const [
+                        DropdownMenuItem(value: 'Monthly', child: Text('Monthly')),
+                        DropdownMenuItem(value: '3 Months', child: Text('3 Months')),
+                        DropdownMenuItem(value: '6 Months', child: Text('6 Months')),
+                        DropdownMenuItem(value: 'Yearly', child: Text('Yearly')),
+                      ],
+                      onChanged: (v) => setState(() => _feeCycle = v ?? 'Monthly'),
+                    ),
+                    const SizedBox(height: AppSpace.s3),
+                    TextFormField(
+                      initialValue: '$_feeDueDay',
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Fee due day (1-31)'),
+                      onChanged: (v) => _feeDueDay = int.tryParse(v) ?? 5,
+                      validator: (v) {
+                        final n = int.tryParse(v ?? '');
+                        return (n == null || n < 1 || n > 31) ? 'Day must be 1-31' : null;
+                      },
+                    ),
+                  ] else ...[
+                    const Text('BRANCH', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
+                    const SizedBox(height: AppSpace.s2),
+                    Text(auth.branch ?? '—', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    const SizedBox(height: AppSpace.s3),
+                    TextFormField(
+                      controller: _fee,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Monthly fee (₹)', prefixIcon: Icon(Icons.currency_rupee)),
+                    ),
+                    const SizedBox(height: AppSpace.s3),
+                    TextFormField(
+                      controller: _months,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Months paid', prefixIcon: Icon(Icons.calendar_month_outlined)),
+                    ),
+                    const SizedBox(height: AppSpace.s3),
+                    TextFormField(
+                      controller: _batch,
+                      decoration: const InputDecoration(labelText: 'Batch'),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpace.s3),
+                  TextFormField(
+                    controller: _notes,
+                    maxLines: 2,
+                    decoration: const InputDecoration(labelText: 'Notes'),
+                  ),
+                ]),
+              ),
+            ),
+            if (_result != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpace.s3),
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpace.s3),
+                  decoration: BoxDecoration(
+                    color: _success ? AppColors.okBg : AppColors.blockBg,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(_success ? Icons.check_circle_outline : Icons.error_outline, size: 18,
+                        color: _success ? AppColors.okFg : AppColors.blockFg),
+                    const SizedBox(width: AppSpace.s2),
+                    Expanded(child: Text(_result!, style: TextStyle(color: _success ? AppColors.okFg : AppColors.blockFg, fontSize: 13))),
+                  ]),
+                ),
+              ),
+            const SizedBox(height: AppSpace.s4),
+            LoadingButton(
+              label: widget.staff ? 'Save as draft for Sharvil' : 'Add student',
+              icon: Icons.person_add_alt,
+              busy: _busy,
+              onPressed: _save,
+            ),
+          ]),
+        ),
+      ],
+    );
+  }
+}

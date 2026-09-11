@@ -11,5 +11,5 @@ class AppConfig {
 
   static const String appVersion = '1.0.0';
   static const String appBuild = 'RC201'; // 2 apps, 0 external, 1 gateway
-  static const String appName = 'SwarMangal AcademyOS';
+  static const String appName = 'Swar Mangal';
 }

@@ -73,7 +73,7 @@ class AuthProvider extends ChangeNotifier {
       } on ApiException catch (e) {
         if (e.code == 'BAD_BODY' || e.code == 'HTTP_404') {
           throw ApiException(
-            'Backend did not answer as an AcademyOS app. $execUrl looks like '
+            'Backend did not answer as a Swar Mangal app. $execUrl looks like '
             'the wrong deployment URL.',
             code: 'WRONG_BACKEND',
           );

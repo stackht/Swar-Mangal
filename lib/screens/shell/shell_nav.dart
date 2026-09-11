@@ -306,7 +306,7 @@ class AboutScreen extends StatelessWidget {
               SizedBox(width: AppSpace.s3),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('SwarMangal AcademyOS', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  Text('Swar Mangal', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                   Text('Music Academy ERP · v1.0.0', style: TextStyle(fontSize: 13, color: AppColors.muted)),
                 ]),
               ),

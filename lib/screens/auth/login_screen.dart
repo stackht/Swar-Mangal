@@ -96,11 +96,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: WaveformMark(active: true, height: 24, color: scheme.primary),
               ),
               const SizedBox(height: AppSpace.s3),
-              Text('Swar Mangal',
+              Text('Welcome',
                   textAlign: TextAlign.center,
                   style: AppType.eyebrow.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: AppSpace.s2),
-              Text('AcademyOS',
+              Text('Swar Mangal',
                   textAlign: TextAlign.center,
                   style: AppType.display.copyWith(
                     fontSize: 30,
@@ -269,7 +269,7 @@ class _ServerSheetState extends State<_ServerSheet> {
           ),
           const SizedBox(height: AppSpace.s3),
           const Text(
-            'Point the app at a deployed AcademyOS backend, then enter the '
+            'Point the app at a deployed Swar Mangal backend, then enter the '
             'device token that backend issues.',
             style: TextStyle(fontSize: 12, color: AppColors.muted),
           ),

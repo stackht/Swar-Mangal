@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:academyos/models/models.dart';
-import 'package:academyos/widgets/atoms.dart';
+import 'package:swar_mangal/models/models.dart';
+import 'package:swar_mangal/widgets/atoms.dart';
 
 void main() {
   test('INR formatting', () {

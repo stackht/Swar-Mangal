@@ -26,7 +26,7 @@ class AcademyApp extends StatelessWidget {
       ],
       child: Consumer<ThemeController>(
         builder: (context, theme, _) => MaterialApp(
-          title: 'SwarMangal AcademyOS',
+          title: 'Swar Mangal',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),

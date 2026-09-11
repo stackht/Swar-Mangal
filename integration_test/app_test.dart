@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:academyos/main.dart';
+import 'package:swar_mangal/main.dart';
 
 /// Stable on-device smoke test: proves the real APK builds, installs,
 /// launches, login screen renders, and demo login reaches the shell.

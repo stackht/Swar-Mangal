@@ -1,6 +1,6 @@
-# SwarMangal AcademyOS — Flutter APK → Backend Setup
+# Swar Mangal — Flutter APK → Backend Setup
 
-The native app (`academyos`) talks to the **existing** Google Apps Script
+The native app (`swar_mangal`) talks to the **existing** Google Apps Script
 backend over HTTPS. No database was rewritten, no rule duplicated: money
 computation, counters, locks, idempotency guards and audits stay server-side.
 

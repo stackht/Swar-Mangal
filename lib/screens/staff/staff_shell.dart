@@ -63,15 +63,23 @@ class _BranchChip extends StatelessWidget {
   const _BranchChip(this.branch);
   final String branch;
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white24,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(branch,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
-      );
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppRadius.s, vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(branch,
+          style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF261A08)
+                  : Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 11)),
+    );
+  }
 }
 
 /// Door every staff session must pass before any data loads — matches the
@@ -84,14 +92,14 @@ class BranchGate extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final branches = auth.branches.isEmpty ? const ['GOREGAON', 'KANDIVALI'] : auth.branches;
     return Scaffold(
-      backgroundColor: AppColors.primaryDark,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         actions: [
           TextButton(
             onPressed: () => auth.logout(),
-            child: const Text('Sign out', style: TextStyle(color: Colors.white)),
+            child: Text('Sign out',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
         ],
       ),
@@ -105,18 +113,24 @@ class BranchGate extends StatelessWidget {
               children: [
                 Text('Choose your branch',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+                    style: AppType.display.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    )),
                 const SizedBox(height: AppSpace.s2),
-                const Text('All data is isolated to this branch. You can switch later from the drawer.',
+                Text('All data is isolated to this branch. You can switch later from the drawer.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 13)),
                 const SizedBox(height: AppSpace.s6),
                 for (final b in branches) ...[
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primaryDark,
-                      minimumSize: const Size.fromHeight(52),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF261A08)
+                          : Colors.white,
+                      minimumSize: const Size.fromHeight(54),
                     ),
                     onPressed: () => auth.setBranch(b),
                     child: Text(b.toUpperCase(),

@@ -6,6 +6,7 @@ import '../../../core/theme.dart';
 import '../../../models/models.dart';
 import '../../../state/auth_provider.dart';
 import '../../../widgets/atoms.dart';
+import '../../../widgets/music_mark.dart';
 import '../../shell/shell_nav.dart';
 
 /// Staff Today: the ordered task cards the backend computes for this branch.
@@ -74,12 +75,24 @@ class _BodyState extends State<_Body> {
     if (_error != null && _cards == null) {
       return ErrorView(_error!, onRetry: _fetch);
     }
+    final scheme = Theme.of(context).colorScheme;
     final list = ListView(
       padding: const EdgeInsets.all(AppSpace.s4),
       children: [
-        Text('TODAY · ${widget.auth.branch}',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
-        const SizedBox(height: AppSpace.s3),
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Eyebrow('${widget.auth.branch} · today'),
+              Text('Your day, at a glance.',
+                  style: AppType.display.copyWith(
+                    fontSize: 22,
+                    color: scheme.onSurface,
+                  )),
+            ]),
+          ),
+          WaveformMark(active: true, height: 24, color: scheme.primary),
+        ]),
+        const SizedBox(height: AppSpace.s4),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -94,10 +107,10 @@ class _BodyState extends State<_Body> {
         const SizedBox(height: AppSpace.s4),
         if (_cards == null || _cards!.isEmpty)
           const EmptyState('No tasks for today'),
-        const Text(
+        Text(
           'Task counts are computed server-side from live data. Nothing on this '
           'screen changes money or sends messages.',
-          style: TextStyle(fontSize: 11, color: AppColors.muted),
+          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
         ),
       ],
     );

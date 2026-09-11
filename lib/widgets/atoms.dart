@@ -13,11 +13,8 @@ class SectionTitle extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(top: AppSpace.s4, bottom: AppSpace.s3),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: scheme.onSurface)),
+      child: Text(text.toUpperCase(),
+          style: AppType.eyebrow.copyWith(color: scheme.onSurfaceVariant)),
     );
   }
 }
@@ -45,9 +42,8 @@ class StatTile extends StatelessWidget {
               ],
               Expanded(
                 child: Text(label.toUpperCase(),
-                    style: const TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5,
-                        color: AppColors.muted)),
+                    style: AppType.eyebrow.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
             ]),
             const SizedBox(height: AppSpace.s2),
@@ -132,10 +128,17 @@ class StatusBadge extends StatelessWidget {
     final fg = dark ? _darkFg(p.fg) : p.fg;
     final bg = dark ? _darkBg(p.bg) : p.bg;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpace.s2, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
       child: Text(p.label,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: .3,
+              color: fg)),
     );
   }
 
@@ -305,15 +308,15 @@ class TagChip extends StatelessWidget {
   final Color? color;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: AppRadius.s, vertical: 5),
         decoration: BoxDecoration(
           color: (color ?? AppColors.focus),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text(text,
             style: const TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
                 color: Colors.white)),
       );
 }

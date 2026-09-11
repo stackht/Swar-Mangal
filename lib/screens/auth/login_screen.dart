@@ -5,6 +5,7 @@ import '../../config.dart';
 import '../../core/theme.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
+import '../../widgets/music_mark.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -62,8 +63,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.primaryDark,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpace.s5),
@@ -71,19 +72,44 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppSpace.s6),
-              const Icon(Icons.music_note, size: 56, color: Colors.white),
+              Center(
+                child: Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: scheme.outlineVariant),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x1A000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Icon(Icons.music_note, size: 34, color: AppColors.primary),
+                ),
+              ),
+              const SizedBox(height: AppSpace.s4),
+              Center(
+                child: WaveformMark(active: true, height: 24, color: scheme.primary),
+              ),
               const SizedBox(height: AppSpace.s3),
-              Text('SwarMangal\nAcademyOS',
+              Text('Swar Mangal',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      height: 1.1)),
+                  style: AppType.eyebrow.copyWith(color: scheme.onSurfaceVariant)),
+              const SizedBox(height: AppSpace.s2),
+              Text('AcademyOS',
+                  textAlign: TextAlign.center,
+                  style: AppType.display.copyWith(
+                    fontSize: 30,
+                    color: scheme.onSurface,
+                  )),
               const SizedBox(height: AppSpace.s2),
               Text('Goregaon  ·  Kandivali',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: 13)),
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               const SizedBox(height: AppSpace.s6),
               Card(
                 child: Padding(

@@ -7,6 +7,7 @@ import '../../../models/models.dart';
 import '../../../state/auth_provider.dart';
 import '../../../widgets/anim.dart';
 import '../../../widgets/atoms.dart';
+import '../../../widgets/music_mark.dart';
 
 /// Founder home: today's money + recent receipts + fee buckets.
 class FounderDashboard extends StatelessWidget {
@@ -91,6 +92,7 @@ class _BodyState extends State<_Body> {
     }
     final m = _metrics;
     final d = _dues;
+    final scheme = Theme.of(context).colorScheme;
     final refresh = Column(
       children: [
         if (_error != null)
@@ -102,6 +104,20 @@ class _BodyState extends State<_Body> {
           child: ListView(
             padding: const EdgeInsets.all(AppSpace.s4),
             children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Eyebrow('Today'),
+                    Text('Good ${_greeting()}.',
+                        style: AppType.display.copyWith(
+                          fontSize: 26,
+                          color: scheme.onSurface,
+                        )),
+                  ]),
+                ),
+                WaveformMark(active: true, height: 28, color: scheme.primary),
+              ]),
+              const SizedBox(height: AppSpace.s4),
               if (m != null) ...[
                 _moneyRow(m),
                 const SizedBox(height: AppSpace.s3),
@@ -135,6 +151,13 @@ class _BodyState extends State<_Body> {
       ],
     );
     return RefreshScaffold(onRefresh: _fetch, child: refresh);
+  }
+
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'morning';
+    if (h < 17) return 'afternoon';
+    return 'evening';
   }
 
   Widget _moneyRow(DashboardMetrics m) {

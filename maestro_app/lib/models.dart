@@ -67,8 +67,9 @@ class Assignment {
   final String detail;
   final String teacher;
   final DateTime due;
+  final String difficulty;
   String status;
-  Assignment({required this.id, required this.title, required this.detail, required this.teacher, required this.due, this.status = 'pending'});
+  Assignment({required this.id, required this.title, required this.detail, required this.teacher, required this.due, this.difficulty = 'Intermediate', this.status = 'pending'});
 }
 
 class PracticeSession {

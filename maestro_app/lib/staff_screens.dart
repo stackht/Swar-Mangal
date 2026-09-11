@@ -2,29 +2,17 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'theme.dart';
+import 'main.dart' show Role;
 
-// ---------- Shared page scaffold for staff ----------
+// =========== SHARED ===========
 
 class _Page extends StatelessWidget {
   const _Page({required this.children});
   final List<Widget> children;
-
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        children: children,
-      ),
-    );
+    return SafeArea(child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), children: children));
   }
-}
-
-String _greeting() {
-  final h = DateTime.now().hour;
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
 }
 
 // ================= TEACHER =================
@@ -32,159 +20,109 @@ String _greeting() {
 class TeacherHome extends StatelessWidget {
   const TeacherHome({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    final today = allLessons
-        .where((l) =>
-            l.start.year == DateTime.now().year &&
-            l.start.month == DateTime.now().month &&
-            l.start.day == DateTime.now().day)
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-
-    return _Page(
-      children: [
-        Row(children: [
-          const IconChip(icon: Icons.music_note_rounded, color: Palette.mint),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('$_greeting(), Sarah.',
-                  style: const TextStyle(
-                      color: Palette.text, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
-              Text('${today.length} classes today',
-                  style: const TextStyle(color: Palette.muted, fontSize: 13)),
-            ]),
-          ),
-        ]),
-        const SizedBox(height: 16),
-        Row(children: [
-          Expanded(child: StatTile(label: 'Classes today', value: '${today.length}', accent: Palette.lavender)),
-          const SizedBox(width: 10),
-          Expanded(child: StatTile(label: 'My students', value: '${teacherStudentNames.length}', accent: Palette.mint)),
-        ]),
-        const SectionTitle("Today's classes"),
-        if (today.isEmpty)
-          const _EmptyInline('No classes today — enjoy the break.')
-        else
-          for (final l in today) _TeacherLessonRow(l),
-        const SectionTitle('Students · weekly practice'),
-        for (final name in teacherStudentNames)
-          _StudentPracticeRow(name, teacherPractice[name] ?? 0),
-        const SectionTitle('To review'),
-        AppCard(
-          child: Row(children: [
-            const IconChip(icon: Icons.task_alt_rounded, color: Palette.peach),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('2 assignments awaiting review',
-                    style: TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
-                const Text('C Major Scales · Fur Elise', style: TextStyle(color: Palette.muted, fontSize: 11)),
-              ]),
-            ),
-          ]),
-        ),
-        const SizedBox(height: 12),
-      ],
-    );
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
   }
-}
-
-class TeacherStudentsScreen extends StatelessWidget {
-  const TeacherStudentsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return _Page(
-      children: [
-        const Text('My Students',
-            style: TextStyle(color: Palette.text, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.4)),
-        const SizedBox(height: 16),
-        for (final name in teacherStudentNames)
-          _StudentPracticeRow(name, teacherPractice[name] ?? 0),
-        const SizedBox(height: 12),
-      ],
-    );
+    final today = allLessons.where((l) =>
+      l.start.year == DateTime.now().year && l.start.month == DateTime.now().month && l.start.day == DateTime.now().day
+    ).toList()..sort((a, b) => a.start.compareTo(b.start));
+
+    return _Page(children: [
+      Row(children: [
+        IconChip(icon: Icons.music_note_rounded, color: Palette.mint),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${_greeting()}, Sarah.', style: const TextStyle(color: Palette.text, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
+          Text('${today.length} classes today', style: const TextStyle(color: Palette.muted, fontSize: 13)),
+        ])),
+      ]),
+      const SizedBox(height: 16),
+      Row(children: [
+        Expanded(child: StatTile(label: 'Classes today', value: '${today.length}', accent: Palette.violet)),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile(label: 'Students', value: '${teacherStudentNames.length}', accent: Palette.mint)),
+      ]),
+      const SectionTitle("Today's teaching"),
+      if (today.isEmpty)
+        AppCard(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+          Icon(Icons.music_note_rounded, color: Palette.muted, size: 20),
+          SizedBox(width: 8),
+          Text('No classes today', style: TextStyle(color: Palette.muted)),
+        ]))
+      else
+        for (final l in today)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: AppCard(child: Row(children: [
+              Container(
+                width: 48, padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(color: Palette.violet.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(13)),
+                child: Column(children: [
+                  Text(fmtTime(l.start).split(' ')[0], style: const TextStyle(color: Palette.violet, fontSize: 13, fontWeight: FontWeight.w700)),
+                  Text(fmtTime(l.start).split(' ')[1], style: const TextStyle(color: Palette.violet, fontSize: 9)),
+                ]),
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(l.title, style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                Text('${(lessonStudents[l.id] ?? []).length} students · ${l.room}', style: const TextStyle(color: Palette.muted, fontSize: 11)),
+              ])),
+              Opacity(opacity: 0.5, child: SizedBox(width: 48, child: WaveDecor(bars: 10, color: Palette.violet, height: 16))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: l.mode == 'online' ? Palette.mint.withValues(alpha: 0.15) : Palette.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
+                child: Text(l.mode, style: TextStyle(color: l.mode == 'online' ? Palette.mint : Palette.violet, fontSize: 10, fontWeight: FontWeight.w600)),
+              ),
+            ]),  // closes Row
+          ),     // closes AppCard
+        ),       // closes Padding
+      const SectionTitle('Students needing attention'),
+      for (final name in teacherStudentNames)
+        _StudentAttention(name, teacherPractice[name] ?? 0),
+      const SectionTitle('To review'),
+      AppCard(child: Row(children: [
+        const IconChip(icon: Icons.task_alt_rounded, color: Palette.peach),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+          Text('2 assignments awaiting review', style: TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text('C Major Scales · Fur Elise', style: TextStyle(color: Palette.muted, fontSize: 11)),
+        ])),
+      ])),
+    ]);
   }
 }
 
-class _TeacherLessonRow extends StatelessWidget {
-  const _TeacherLessonRow(this.lesson);
-  final Lesson lesson;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: AppCard(
-        child: Row(children: [
-          Container(
-            width: 46,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: Palette.lavender.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(children: [
-              Text(fmtTime(lesson.start).split(' ')[0],
-                  style: const TextStyle(color: Palette.lavender, fontSize: 13, fontWeight: FontWeight.w700)),
-              Text(fmtTime(lesson.start).split(' ')[1],
-                  style: const TextStyle(color: Palette.lavender, fontSize: 9)),
-            ]),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(lesson.title,
-                  style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
-              Text('${lessonStudents[lesson.id]?.length ?? 0} students · ${lesson.room}',
-                  style: const TextStyle(color: Palette.muted, fontSize: 11)),
-            ]),
-          ),
-          TagChip(lesson.mode == 'online' ? 'Online' : 'Offline',
-              color: lesson.mode == 'online' ? Palette.mint : Palette.lavender),
-        ]),
-      ),
-    );
-  }
-}
-
-class _StudentPracticeRow extends StatelessWidget {
-  const _StudentPracticeRow(this.name, this.minutes);
+class _StudentAttention extends StatelessWidget {
+  const _StudentAttention(this.name, this.minutes);
   final String name;
   final int minutes;
-
   @override
   Widget build(BuildContext context) {
     final onTrack = minutes >= 60;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: AppCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(
-              child: Text(name,
-                  style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
-            ),
-            Text('$minutes / 120 min',
-                style: const TextStyle(color: Palette.muted, fontSize: 11)),
-            const SizedBox(width: 6),
-            TagChip(onTrack ? 'On track' : 'Needs practice',
-                color: onTrack ? Palette.mint : Palette.peach),
-          ]),
-          const SizedBox(height: 8),
-          ClipRRect(
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(children: [
+        CircleAvatar(radius: 18, backgroundColor: Palette.cardHi, child: Text(name[0], style: const TextStyle(color: Palette.muted, fontSize: 13))),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(name, style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text('$minutes / 120 min this week', style: const TextStyle(color: Palette.muted, fontSize: 11)),
+        ])),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: onTrack ? Palette.mint.withValues(alpha: 0.15) : Palette.peach.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: (minutes / 120).clamp(0, 1).toDouble(),
-              minHeight: 6,
-              backgroundColor: Palette.cardHi,
-              valueColor: AlwaysStoppedAnimation(onTrack ? Palette.mint : Palette.peach),
-            ),
           ),
-        ]),
-      ),
+          child: Text(onTrack ? 'On track' : 'Needs practice', style: TextStyle(color: onTrack ? Palette.mint : Palette.peach, fontSize: 11, fontWeight: FontWeight.w600)),
+        ),
+      ]),
     );
   }
 }
@@ -196,120 +134,149 @@ class AdminHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = allLessons
-        .where((l) =>
-            l.start.year == DateTime.now().year &&
-            l.start.month == DateTime.now().month &&
-            l.start.day == DateTime.now().day)
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-
-    return _Page(
-      children: [
-        Row(children: [
-          const IconChip(icon: Icons.dashboard_rounded, color: Palette.peach),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Good morning, Marcus.',
-                  style: TextStyle(color: Palette.text, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
-              Text("This is what's happening at the academy today.",
-                  style: const TextStyle(color: Palette.muted, fontSize: 13)),
-            ]),
-          ),
-        ]),
-        const SizedBox(height: 16),
-        Row(children: [
-          Expanded(child: StatTile(label: 'Total students', value: '78', accent: Palette.lavender)),
-          const SizedBox(width: 10),
-          Expanded(child: StatTile(label: 'Teachers', value: '4', accent: Palette.mint)),
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: StatTile(label: 'Classes today', value: '${today.length}', accent: Palette.sky)),
-          const SizedBox(width: 10),
-          Expanded(child: StatTile(label: 'Monthly revenue', value: r'$6,900', accent: Palette.peach)),
-        ]),
-        const SectionTitle("Today's schedule"),
-        for (final l in today) _TeacherLessonRow(l),
-        const SectionTitle('Pending fees'),
+    final today = allLessons.where((l) =>
+      l.start.year == DateTime.now().year && l.start.month == DateTime.now().month && l.start.day == DateTime.now().day
+    ).toList();
+    return _Page(children: [
+      Row(children: [
+        IconChip(icon: Icons.dashboard_rounded, color: Palette.peach),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+          Text('Good morning, Marcus.', style: TextStyle(color: Palette.text, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
+          Text('Academy overview', style: TextStyle(color: Palette.muted, fontSize: 13)),
+        ])),
+      ]),
+      const SizedBox(height: 16),
+      Row(children: [
+        Expanded(child: StatTile(label: 'Students', value: '${students.length}', accent: Palette.violet)),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile(label: 'Teachers', value: '${teacherStudentNames.length}', accent: Palette.mint)),
+      ]),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: StatTile(label: 'Classes today', value: '${today.length}', accent: Palette.sky)),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile(label: 'Revenue', value: '\$6,900', accent: Palette.peach)),
+      ]),
+      const SectionTitle('Today\'s schedule'),
+      for (final l in today)
         AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(children: [
-            const IconChip(icon: Icons.receipt_rounded, color: Palette.peach),
+            Text(fmtTime(l.start).split(' ')[0], style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()])),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text(r'$240 in outstanding fees',
-                    style: TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w700)),
-                const Text('2 invoices awaiting payment', style: TextStyle(color: Palette.muted, fontSize: 11)),
-              ]),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(l.title, style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text('${l.teacher} · ${(lessonStudents[l.id] ?? []).length} students', style: const TextStyle(color: Palette.muted, fontSize: 11)),
+            ])),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: Palette.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
+              child: Text(l.mode, style: TextStyle(color: Palette.violet, fontSize: 10, fontWeight: FontWeight.w600)),
             ),
-            TagChip('Action', color: Palette.peach, filled: true),
           ]),
         ),
-        const SizedBox(height: 12),
-      ],
+      if (today.isEmpty) const Center(child: Text('No classes today', style: TextStyle(color: Palette.muted))),
+      const SectionTitle('Quick actions'),
+      Row(children: [
+        _action(Icons.person_add_rounded, 'Add Student', Palette.violet),
+        const SizedBox(width: 10),
+        _action(Icons.group_add_rounded, 'Add Teacher', Palette.mint),
+        const SizedBox(width: 10),
+        _action(Icons.music_note_rounded, 'New Course', Palette.peach),
+        const SizedBox(width: 10),
+        _action(Icons.receipt_rounded, 'Manage Fees', Palette.sky),
+      ]),
+    ]);
+  }
+
+  Widget _action(IconData icon, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Palette.card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Palette.border.withValues(alpha: 0.5)),
+        ),
+        child: Column(children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(color: Palette.text, fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
+      ),
     );
   }
 }
 
+class TeacherStudentsScreen extends StatelessWidget {
+  const TeacherStudentsScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return _Page(children: [
+      const Text('My Students', style: TextStyle(color: Palette.text, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.4)),
+      const SizedBox(height: 16),
+      for (final name in teacherStudentNames)
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(children: [
+            CircleAvatar(radius: 18, backgroundColor: Palette.cardHi, child: Text(name[0], style: const TextStyle(color: Palette.muted, fontSize: 13))),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(name, style: const TextStyle(color: Palette.text, fontSize: 14, fontWeight: FontWeight.w600)),
+              Text('${teacherPractice[name] ?? 0} min / 120 min this week', style: const TextStyle(color: Palette.muted, fontSize: 12)),
+            ])),
+            Text('${teacherPractice[name] ?? 0} min', style: const TextStyle(color: Palette.violet, fontSize: 13, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+    ]);
+  }
+}
+
+// ProgressScreen lives in student_screens.dart; parent reuses it.
+
+// ================= ADMIN FEES =================
+
 class AdminFeesScreen extends StatefulWidget {
   const AdminFeesScreen({super.key});
-
   @override
   State<AdminFeesScreen> createState() => _AdminFeesScreenState();
 }
 
 class _AdminFeesScreenState extends State<AdminFeesScreen> {
   late final List<Invoice> _invoices = [...invoices];
-
   @override
   Widget build(BuildContext context) {
     final pendingCount = _invoices.where((i) => i.status == 'pending').length;
-    return _Page(
-      children: [
-        Row(children: [
-          Expanded(child: StatTile(label: 'Collected', value: r'$240', accent: Palette.mint)),
-          const SizedBox(width: 10),
-          Expanded(child: StatTile(label: 'Outstanding', value: r'$120', accent: Palette.peach)),
-        ]),
-        const SizedBox(height: 14),
-        Row(children: [
-          Expanded(child: StatTile(label: 'Open invoices', value: '$pendingCount', accent: Palette.lavender)),
-        ]),
-        const SectionTitle('Invoices'),
-        for (final inv in _invoices)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: AppCard(
-              child: Row(children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(inv.description,
-                        style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
-                    Text('Due ${fmtDate(inv.due)}',
-                        style: const TextStyle(color: Palette.muted, fontSize: 11)),
-                  ]),
-                ),
-                Text('\$${inv.amount.toStringAsFixed(0)}',
-                    style: const TextStyle(color: Palette.text, fontSize: 14, fontWeight: FontWeight.w700)),
-                const SizedBox(width: 8),
-                if (inv.status == 'pending')
-                  GestureDetector(
-                    onTap: () {
-                      setState(() => inv.status = 'paid');
-                      showToast(context, 'Payment recorded');
-                    },
-                    child: TagChip('Mark paid', color: Palette.mint, filled: true),
-                  )
-                else
-                  TagChip('Paid', color: Palette.mint),
-              ]),
-            ),
-          ),
-        const SizedBox(height: 12),
-      ],
-    );
+    return _Page(children: [
+      Row(children: [
+        Expanded(child: StatTile(label: 'Collected', value: '\$240', accent: Palette.mint)),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile(label: 'Outstanding', value: '\$120', accent: Palette.peach)),
+      ]),
+      const SectionTitle('Invoices'),
+      for (final inv in _invoices)
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(inv.description, style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text('Due ${fmtDate(inv.due)}', style: const TextStyle(color: Palette.muted, fontSize: 11)),
+            ])),
+            Text('\$${inv.amount.toStringAsFixed(0)}', style: const TextStyle(color: Palette.text, fontSize: 14, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 8),
+            if (inv.status == 'pending')
+              GestureDetector(
+                onTap: () { setState(() => inv.status = 'paid'); showToast(context, 'Payment recorded'); },
+                child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: Palette.mint, borderRadius: BorderRadius.circular(999)),
+                    child: const Text('Mark paid', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600))),
+              )
+            else
+              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: Palette.mint.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
+                  child: Text('Paid', style: TextStyle(color: Palette.mint, fontSize: 11, fontWeight: FontWeight.w600))),
+          ]),
+        ),
+    ]);
   }
 }
 
@@ -317,126 +284,59 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
 class ParentHome extends StatelessWidget {
   const ParentHome({super.key});
-
   @override
   Widget build(BuildContext context) {
-    final week = weeklyMinutes.fold(0, (a, b) => a + b);
-    final pct = ((week / 150 * 100).clamp(0, 100)).toDouble();
-    return _Page(
-      children: [
-        Row(children: [
-          const IconChip(icon: Icons.family_restroom_rounded, color: Palette.sky),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Hello, Rohan.',
-                  style: TextStyle(color: Palette.text, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
-              const Text("Here's Aarav's progress.",
-                  style: TextStyle(color: Palette.muted, fontSize: 13)),
+    final weekMins = weeklyMinutes.fold(0, (a, b) => a + b);
+    final pct = ((weekMins / 150 * 100).clamp(0, 100)).toDouble();
+    return _Page(children: [
+      Row(children: [
+        IconChip(icon: Icons.family_restroom_rounded, color: Palette.sky),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+          Text('Hello, Rohan.', style: TextStyle(color: Palette.text, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
+          Text('Monitoring Aarav\'s musical journey', style: TextStyle(color: Palette.muted, fontSize: 13)),
+        ])),
+      ]),
+      const SizedBox(height: 16),
+      Row(children: [
+        Expanded(child: StatTile(label: 'Practice this week', value: '$weekMins min', accent: Palette.violet)),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile(label: 'Skill score', value: '$overallSkill%', accent: Palette.mint)),
+      ]),
+      const SectionTitle('Instrument progress'),
+      AppCard(
+        child: Row(children: [
+          SizedBox(
+            width: 68, height: 68,
+            child: Stack(alignment: Alignment.center, children: [
+              CircularProgressIndicator(value: pct / 100, strokeWidth: 6, backgroundColor: Palette.cardHi, valueColor: const AlwaysStoppedAnimation(Palette.violet)),
+              Text('${pct.round()}%', style: const TextStyle(color: Palette.violet, fontSize: 11, fontWeight: FontWeight.w700)),
             ]),
           ),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Piano · Grade 3', style: TextStyle(color: Palette.text, fontSize: 15, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            const Text('Attendance 94% · 3-day streak', style: TextStyle(color: Palette.muted, fontSize: 12)),
+            const SizedBox(height: 8),
+            Text('Next: Piano Fundamentals · ${fmtTime(allLessons.first.start)}', style: const TextStyle(color: Palette.violet, fontSize: 12)),
+          ])),
         ]),
-        const SizedBox(height: 16),
-        Row(children: [
-          Expanded(child: StatTile(label: 'Practice this week', value: '$week min', accent: Palette.lavender)),
-          const SizedBox(width: 10),
-          Expanded(child: StatTile(label: 'Skill score', value: '$overallSkill%', accent: Palette.mint)),
-        ]),
-        const SectionTitle('Child · Aarav Sharma'),
+      ),
+      const SectionTitle('Upcoming'),
+      for (final l in allLessons.where((l) => (lessonStudents[l.id] ?? []).contains('s1')).take(2))
         AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(children: [
-            _Ring(progress: pct, label: '$pct%', sub: 'goal'),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Piano · Grade 3',
-                    style: TextStyle(color: Palette.text, fontSize: 15, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                const Text('Attendance 94% · 3-day streak',
-                    style: TextStyle(color: Palette.muted, fontSize: 12)),
-                const SizedBox(height: 8),
-                const Text('Next class: Piano Fundamentals · Today 5:30 PM',
-                    style: TextStyle(color: Palette.lavender, fontSize: 12)),
-              ]),
-            ),
-          ]),
-        ),
-        const SectionTitle('Recent lessons'),
-        AppCard(
-          child: Column(children: [
-            _attendanceRow('Today · Piano Fundamentals', 'Present'),
-            const Divider(color: Palette.border, height: 1),
-            _attendanceRow('Tue · Piano Fundamentals', 'Late'),
-            const Divider(color: Palette.border, height: 1),
-            _attendanceRow('Last Mon · Piano Fundamentals', 'Present'),
-          ]),
-        ),
-        const SectionTitle('Assignments due'),
-        AppCard(
-          child: Row(children: [
-            const IconChip(icon: Icons.task_alt_rounded, color: Palette.peach),
+            Text(fmtTime(l.start).split(' ')[0], style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('2 assignments in progress',
-                    style: TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
-                const Text('1 due this week — Fur Elise Section A',
-                    style: TextStyle(color: Palette.muted, fontSize: 11)),
-              ]),
-            ),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(l.title, style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(l.teacher, style: const TextStyle(color: Palette.muted, fontSize: 11)),
+            ])),
+            Text('${l.minutes}m', style: const TextStyle(color: Palette.muted, fontSize: 12)),
           ]),
         ),
-        const SizedBox(height: 12),
-      ],
-    );
+    ]);
   }
-
-  Widget _attendanceRow(String label, String status) {
-    final mint = status == 'Present';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(children: [
-        Expanded(child: Text(label, style: const TextStyle(color: Palette.text, fontSize: 13))),
-        TagChip(status, color: mint ? Palette.mint : Palette.peach),
-      ]),
-    );
-  }
-}
-
-class _Ring extends StatelessWidget {
-  const _Ring({required this.progress, required this.label, required this.sub});
-  final double progress;
-  final String label;
-  final String sub;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 72, height: 72,
-      child: Stack(alignment: Alignment.center, children: [
-        SizedBox(
-          width: 72, height: 72,
-          child: CircularProgressIndicator(
-            value: progress / 100,
-            strokeWidth: 7,
-            backgroundColor: Palette.cardHi,
-            valueColor: const AlwaysStoppedAnimation(Palette.lavender),
-          ),
-        ),
-        Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text(label,
-              style: const TextStyle(color: Palette.text, fontSize: 13, fontWeight: FontWeight.w700)),
-          Text(sub, style: const TextStyle(color: Palette.muted, fontSize: 7)),
-        ]),
-      ]),
-    );
-  }
-}
-
-class _EmptyInline extends StatelessWidget {
-  const _EmptyInline(this.message);
-  final String message;
-  @override
-  Widget build(BuildContext context) =>
-      Text(message, style: const TextStyle(color: Palette.muted, fontSize: 13));
 }

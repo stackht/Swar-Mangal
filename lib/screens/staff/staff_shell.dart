@@ -24,44 +24,90 @@ class StaffShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     if (auth.branch == null) return const BranchGate();
-    return DrawerShell(
-      title: 'Staff',
-      navItems: staffItems,
-      branchChip: _BranchChip(auth.branch!),
-      sections: const [
-        (label: 'Today', keys: ['today', 'todayClasses']),
-        (label: 'Students', keys: ['students', 'addStudent', 'attendance']),
-        (label: 'Money', keys: ['addFee', 'receipts', 'expenses']),
-        (label: 'Connect', keys: ['inquiries', 'requests']),
-        (label: '', keys: ['about']),
+    return KeyedSubtree(
+      // Remounts every screen when the branch changes so no stale data from a
+      // previous branch can remain visible (cross-branch isolation).
+      key: ValueKey<String>(auth.branch!),
+      child: DrawerShell(
+        title: 'Staff',
+        navItems: staffItems,
+        branchChip: _BranchChip(auth.branch!),
+        headerTrailing: _BranchSwitcher(
+          current: auth.branch!,
+          branches: auth.branches.isEmpty
+              ? const ['GOREGAON', 'KANDIVALI']
+              : auth.branches,
+          onSelect: auth.setBranch,
+        ),
+        sections: const [
+          (label: 'Today', keys: ['today', 'todayClasses']),
+          (label: 'Students', keys: ['students', 'addStudent', 'attendance']),
+          (label: 'Money', keys: ['addFee', 'receipts', 'expenses']),
+          (label: 'Connect', keys: ['inquiries', 'requests']),
+          (label: '', keys: ['about']),
+        ],
+        buildBody: (context, key) {
+          switch (key) {
+            case 'todayClasses':
+              return const TodaysClassesScreen();
+            case 'students':
+              return const StudentsScreen(staff: true);
+            case 'addStudent':
+              return const AddStudentScreen(staff: true);
+            case 'attendance':
+              return const AttendanceScreen();
+            case 'addFee':
+              return const FeeCollectionScreen(staff: true);
+            case 'receipts':
+              return const ReceiptsScreen(staff: true);
+            case 'expenses':
+              return const ExpensesScreen(staff: true);
+            case 'inquiries':
+              return const InquiriesScreen();
+            case 'requests':
+              return const MyRequestsScreen();
+            case 'about':
+              return const AboutScreen(staff: true);
+            case 'today':
+            default:
+              return const StaffDashboard();
+          }
+        },
+      ),
+    );
+  }
+}
+
+/// In-header branch switcher — switching remounts the whole staff shell.
+class _BranchSwitcher extends StatelessWidget {
+  const _BranchSwitcher({
+    required this.current,
+    required this.branches,
+    required this.onSelect,
+  });
+  final String current;
+  final List<String> branches;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Switch branch',
+      icon: const Icon(Icons.swap_horiz, size: 20),
+      onSelected: onSelect,
+      itemBuilder: (_) => [
+        for (final b in branches)
+          PopupMenuItem<String>(
+            value: b,
+            enabled: b != current,
+            child: Row(children: [
+              if (b == current)
+                const Icon(Icons.check, size: 16),
+              const SizedBox(width: 8),
+              Text(b),
+            ]),
+          ),
       ],
-      buildBody: (context, key) {
-        switch (key) {
-          case 'todayClasses':
-            return const TodaysClassesScreen();
-          case 'students':
-            return const StudentsScreen(staff: true);
-          case 'addStudent':
-            return const AddStudentScreen(staff: true);
-          case 'attendance':
-            return const AttendanceScreen();
-          case 'addFee':
-            return const FeeCollectionScreen(staff: true);
-          case 'receipts':
-            return const ReceiptsScreen(staff: true);
-          case 'expenses':
-            return const ExpensesScreen(staff: true);
-          case 'inquiries':
-            return const InquiriesScreen();
-          case 'requests':
-            return const MyRequestsScreen();
-          case 'about':
-            return const AboutScreen(staff: true);
-          case 'today':
-          default:
-            return const StaffDashboard();
-        }
-      },
     );
   }
 }

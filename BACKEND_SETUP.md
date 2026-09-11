@@ -94,6 +94,24 @@ flutter build apk --release
 # output: build/app/outputs/flutter-apk/app-release.apk
 ```
 
+### Android release signing
+
+Development builds sign with the debug key so `flutter build apk --release`
+works out of the box. For a distributable release supply a real keystore:
+
+1. Generate one (never commit it):
+   `keytool -genkey -v -keystore keystore/release.jks -alias swar-mangal -keyalg RSA -keysize 2048 -validity 10000`
+2. Create `android/key.properties` (git-ignored):
+   ```
+   storePassword=<...>
+   keyPassword=<...>
+   keyAlias=swar-mangal
+   storeFile=../keystore/release.jks
+   ```
+3. `flutter build apk --release` then signs with the real keystore.
+
+`android/key.properties` and `keystore/` are git-ignored — secrets never ship.
+
 ## 5. Security notes (read before issuing tokens)
 
 - A `STAFF_OPS` token cannot ship money: the gateway routes its calls only to

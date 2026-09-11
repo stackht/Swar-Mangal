@@ -62,11 +62,20 @@ class _ExpenseFormState extends State<_ExpenseForm> {
   final _account = TextEditingController();
   final _notes = TextEditingController();
   final _ref = TextEditingController();
+  late final String _idemKey;
   bool _busy = false;
   String? _result;
   bool _ok = false;
 
   static const _categories = ['Rent', 'Salary', 'Utilities', 'Maintenance', 'Instruments', 'Marketing', 'Travel', 'Other'];
+
+  @override
+  void initState() {
+    super.initState();
+    // ONE idempotency key per form instance — reused across network retries so
+    // a retry can never create a duplicate expense on the server.
+    _idemKey = 'EXP-${DateTime.now().microsecondsSinceEpoch}';
+  }
 
   @override
   void dispose() {
@@ -87,6 +96,11 @@ class _ExpenseFormState extends State<_ExpenseForm> {
     try {
       final amount = num.tryParse(_amount.text.trim()) ?? 0;
       final today = _today();
+      // Backend EXPENSE_ENTRY_TYPES are specific (DAILY_EXPENSE/RENT/...).
+      // Map the category to a valid server type — never the invalid 'EXPENSE'.
+      final entryType = _category.text.trim().toUpperCase() == 'RENT'
+          ? 'RENT'
+          : 'DAILY_EXPENSE';
       final payload = widget.staff
           ? {
               'amountPaise': (amount * 100).round(),
@@ -102,7 +116,7 @@ class _ExpenseFormState extends State<_ExpenseForm> {
             }
           : {
               'entryDate': today,
-              'entryType': 'EXPENSE',
+              'entryType': entryType,
               'category': _category.text.trim(),
               'paidTo': _paidTo.text.trim(),
               'description': _paidTo.text.trim(),
@@ -110,13 +124,14 @@ class _ExpenseFormState extends State<_ExpenseForm> {
               'paymentMode': 'UPI',
               'account': _account.text.trim(),
               'entityId': _entityFor(auth.branch ?? ''),
-              'requestId': 'EXP-${DateTime.now().millisecondsSinceEpoch}',
+              'requestId': _idemKey,
               'notes': _notes.text.trim(),
             };
       final r = widget.staff
           ? await auth.service!.raw('api_staff_submitExpenseDraft', payload)
           : await auth.service!.addExpenseEntry(payload);
       final m = r as Map<String, dynamic>;
+      final demo = auth.isDemo || m['demo'] == true;
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -124,8 +139,9 @@ class _ExpenseFormState extends State<_ExpenseForm> {
         _result = m['ok'] == true
             ? (widget.staff
                 ? 'Expense draft saved for founder approval.'
-                : 'Expense recorded (${m['entryId']}).')
+                : 'Expense recorded (${m['entryId'] ?? '—'}).')
             : (m['error'] ?? 'Could not save.').toString();
+        if (demo && _ok) _result = '$_result (DEMO — not persisted)';
       });
     } on ApiException catch (e) {
       if (!mounted) return;

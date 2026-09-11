@@ -14,11 +14,38 @@ class DemoApiClient extends ApiClient {
 
   final String branch;
 
+  /// Write endpoints that must carry DEMO provenance (no real write happens).
+  static const _writes = <String>{
+    'api_addStudent',
+    'api_staff_saveStudentDraft',
+    'api_addFeePayment',
+    'api_staff_prepareReceiptDraft',
+    'api_addTeacher',
+    'api_addExpenseEntry',
+    'api_staff_submitExpenseDraft',
+    'api_staff_inquiryQuickAdd',
+    'api_staff_inquiryTransition',
+    'api_staff_markAttendance',
+    'api_staff_scheduleSession',
+    'api_staff_resolveTodaysClass',
+    'api_founder_setStudentStatus',
+    'api_updateTeacherStatus',
+    'api_founder_paymentDraftApprove',
+    'api_founder_paymentDraftReject',
+    'api_founder_finalisePaymentDraft',
+    'api_staff_finalisePaymentDraft',
+    'api_founder_mergeStudentDraft',
+  };
+
   @override
   Future<dynamic> call(String api, [Object? arg]) async {
     final a = (arg is Map) ? Map<String, dynamic>.from(arg) : <String, dynamic>{};
     final data = _route(api, a);
     await Future<void>.delayed(const Duration(milliseconds: 350)); // feel real
+    if (_writes.contains(api) && data is Map<String, dynamic>) {
+      data['demo'] = true;
+      data['demoNote'] = 'DEMO — no real backend write. Not persisted.';
+    }
     return data;
   }
 

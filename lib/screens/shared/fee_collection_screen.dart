@@ -33,10 +33,14 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
   String? _result;
   Map<String, dynamic>? _resData;
   List<String> _paymentModes = const ['Cash', 'Online'];
+  late final String _requestId;
 
   @override
   void initState() {
     super.initState();
+    // ONE idempotency key per receipt form instance — reused on retry so a
+    // network retry can never mint a second receipt server-side.
+    _requestId = 'RCP-${DateTime.now().microsecondsSinceEpoch}';
     final boot = context.read<AuthProvider>().boot;
     if (boot?.paymentModes.isNotEmpty == true) _paymentModes = boot!.paymentModes;
     _student = widget.prefill;
@@ -92,7 +96,7 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
               'dueDate': _dueDate.text.trim(),
               'feeFrom': _feeFrom.text.trim(),
               'feeTo': _feeTo.text.trim(),
-              'requestId': '${DateTime.now().millisecondsSinceEpoch}-${_student?.studentId ?? ''}',
+              'requestId': _requestId,
             };
       final r = widget.staff
           ? await auth.service!.raw('api_staff_prepareReceiptDraft', m)
@@ -123,13 +127,17 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
     if (d['ok'] == true) {
       final no = d['receiptNo'] ?? d['draftId'] ?? '';
       final routine = d['routine'] is Map && d['routine']['selfServe'] == true;
+      String msg;
       if (widget.staff) {
-        return routine
+        msg = routine
             ? 'Receipt ${d['receiptNo']} created (routine).'
             : 'Payment draft ${d['draftId']} saved — founder approval pending.'
                 '${d['paymentPrompt'] == true ? ' Record the payment now → receipt.' : ''}';
+      } else {
+        msg = 'Receipt ${no != '' ? no : ''} created and recorded.';
       }
-      return 'Receipt ${no != '' ? no : ''} created and recorded.';
+      if (d['demo'] == true) msg = '$msg (DEMO — not persisted)';
+      return msg;
     }
     return (d['error'] ?? 'Could not record fee.').toString();
   }

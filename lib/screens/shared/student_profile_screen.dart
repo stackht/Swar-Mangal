@@ -145,11 +145,14 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       final m = r as Map<String, dynamic>;
       if (!mounted) return;
       setState(() => _busy = false);
+      final demoTag = m['demo'] == true ? ' (DEMO — not persisted)' : '';
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
             content: Text(m['ok'] == true
-                ? (m['changed'] == true ? '${widget.student.studentId} → $status (audited)' : (m['note'] ?? 'No change'))
+                ? (m['changed'] == true
+                    ? '${widget.student.studentId} → $status (audited)$demoTag'
+                    : (m['note'] ?? 'No change'))
                 : (m['error'] ?? 'Could not change status'))));
     } on ApiException catch (e) {
       if (!mounted) return;

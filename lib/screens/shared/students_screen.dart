@@ -75,95 +75,88 @@ class _StudentsScreenState extends State<StudentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(AppSpace.s4),
-          child: Column(children: [
-            SearchField(
-              controller: _q,
-              hint: widget.staff ? 'Name, phone or student ID' : 'Search by name, phone, ID, instrument',
-              onChanged: (_) {
-                if (_q.text.isEmpty) setState(() => _rows = []);
-              },
-              trailingIcon: Icons.arrow_forward,
-            ),
-            if (!widget.staff) ...[
-              const SizedBox(height: AppSpace.s3),
-              Row(children: [
-                for (final c in _classCodes)
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpace.s2),
-                    child: ChoiceChip(
-                      label: Text(c),
-                      selected: _classFilter == c,
-                      onSelected: (_) {
-                        setState(() => _classFilter = c);
-                        _search();
-                      },
-                    ),
-                  ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _search,
-                  icon: const Icon(Icons.search, size: 16),
-                  label: const Text('Search'),
-                ),
-              ]),
-            ],
-          ]),
-        ),
-        if (_busy)
-          const Expanded(child: SkeletonList(rows: 7))
-        else if (!widget.staff && _classFilter != 'ALL' && _rows.isEmpty && !_busy && _error == null)
-          Expanded(
-            child: Center(
-              child: TextButton.icon(
-                onPressed: _search,
-                icon: const Icon(Icons.refresh),
-                label: Text('Search $_classFilter'),
-              ),
-            ),
-          )
-        else if (_error != null && _rows.isEmpty)
-          Expanded(child: ErrorView(_error!, onRetry: _search))
-        else
-          Expanded(
-            child: _rows.isEmpty
-                ? EmptyState(
-                    _q.text.trim().isEmpty
-                        ? 'Search for a student by name or phone.'
-                        : 'No students matched.',
-                    icon: Icons.person_search_outlined)
-                : ListView.separated(
-                    padding: const EdgeInsets.only(bottom: AppSpace.s6),
-                    itemCount: _rows.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (c, i) => _row(_rows[i]),
-                  ),
-          ),
-      ],
-    );
     return RefreshScaffold(
       onRefresh: _search,
-      child: _q.text.trim().isEmpty && !_busy
-          ? ListView(children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpace.s4),
-                child: Column(children: [
-                  const Text('Enter a search to list students.',
-                      style: TextStyle(color: AppColors.muted)),
-                  const SizedBox(height: AppSpace.s4),
-                  FilledButton.icon(
+      child: Column(
+        children: [
+          // Search + class chips are ALWAYS visible at the top.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpace.s4, AppSpace.s4, AppSpace.s4, 0),
+            child: Column(children: [
+              SearchField(
+                controller: _q,
+                hint: widget.staff
+                    ? 'Name, phone or student ID'
+                    : 'Search by name, phone, ID, instrument',
+                onChanged: (_) {
+                  if (_q.text.isEmpty) setState(() => _rows = []);
+                },
+                trailingIcon: Icons.arrow_forward,
+              ),
+              if (!widget.staff) ...[
+                const SizedBox(height: AppSpace.s3),
+                Row(children: [
+                  for (final c in _classCodes)
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpace.s2),
+                      child: ChoiceChip(
+                        label: Text(c),
+                        selected: _classFilter == c,
+                        onSelected: (_) {
+                          setState(() => _classFilter = c);
+                          _search();
+                        },
+                      ),
+                    ),
+                  const Spacer(),
+                  TextButton.icon(
                     onPressed: _search,
-                    icon: const Icon(Icons.list_alt),
-                    label: const Text('Show all students'),
+                    icon: const Icon(Icons.search, size: 16),
+                    label: const Text('Search'),
                   ),
                 ]),
-              ),
-            ])
-          : body,
+              ],
+            ]),
+          ),
+          Expanded(
+            child: _busy && _rows.isEmpty
+                ? const SkeletonList(rows: 7)
+                : _error != null && _rows.isEmpty
+                    ? ErrorView(_error!, onRetry: _search)
+                    : _rows.isEmpty
+                        ? _initialHint()
+                        : ListView.separated(
+                            padding: const EdgeInsets.only(bottom: AppSpace.s6, top: AppSpace.s2),
+                            itemCount: _rows.length,
+                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            itemBuilder: (c, i) => _row(_rows[i]),
+                          ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _initialHint() {
+    return ListView(children: [
+      Padding(
+        padding: const EdgeInsets.all(AppSpace.s4),
+        child: Column(children: [
+          const Icon(Icons.person_search_outlined,
+              size: 40, color: AppColors.muted),
+          const SizedBox(height: AppSpace.s3),
+          const Text('Search for a student by name or phone.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.muted)),
+          const SizedBox(height: AppSpace.s4),
+          FilledButton.icon(
+            onPressed: _search,
+            icon: const Icon(Icons.list_alt),
+            label: const Text('Show all students'),
+          ),
+        ]),
+      ),
+    ]);
   }
 
   Widget _row(Student s) {

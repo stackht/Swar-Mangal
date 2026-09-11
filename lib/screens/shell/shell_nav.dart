@@ -180,7 +180,7 @@ class _DrawerShellState extends State<DrawerShell> {
               if (group.label.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(AppSpace.s5, AppSpace.s3, AppSpace.s5, AppSpace.s2),
-                  child: Text(group.label,
+                  child: Text(group.label.toUpperCase(),
                       style: AppType.eyebrow.copyWith(
                         color: scheme.onSurfaceVariant.withValues(alpha: .75),
                         fontSize: 10,

@@ -81,11 +81,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       final m = r as Map<String, dynamic>;
       if (!mounted) return;
       final okRes = m['ok'] == true;
+      final demoTag = m['demo'] == true ? ' (DEMO — not persisted)' : '';
       if (okRes) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(
-              content: Text('Receipt ${m['receiptNo']} created — ${m['note']}')));
+              content: Text('Receipt ${m['receiptNo']} created$demoTag')));
       } else if (m['error'] == 'INCOMPLETE_STUDENT' || m['code'] == 'INCOMPLETE_STUDENT') {
         final missing = (m['missing'] as List?)?.join(', ') ?? 'unknown fields';
         final reason = await _ask(

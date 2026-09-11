@@ -51,16 +51,12 @@ class ApiService {
         [];
   }
 
-  Future<List<Student>> staffStudentHub(String studentId, {String branch = 'ALL'}) async {
-    final b = await _api.call('api_staff_getStudentProfile', {
+  Future<StaffHub> staffStudentHub(String studentId, {String branch = 'ALL'}) async {
+    final b = await _api.call('api_staff_studentHub', {
       'studentId': studentId,
       'branch': branch,
     });
-    // Staff API returns `profile` not `student`
-    final m = b as Map;
-    final p = m['profile'];
-    if (p is Map<String, dynamic>) return [Student.fromApi(p)];
-    return [];
+    return StaffHub.fromApi(b as Map<String, dynamic>);
   }
 
   Future<dynamic> addStudent(Map<String, dynamic> form) =>
@@ -215,11 +211,58 @@ class ApiService {
     return ApprovalsData.fromApi(b as Map<String, dynamic>);
   }
 
+  /// Full payment-draft queue incl. APPROVED rows (the ones needing finalise).
+  Future<List<PaymentDraftRow>> founderListPaymentDrafts({String branch = ''}) async {
+    final b = await _api.call('api_founder_listPaymentDrafts', {'branch': branch});
+    return ((b as Map)['rows'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(PaymentDraftRow.fromApi)
+            .toList() ??
+        [];
+  }
+
   Future<dynamic> founderPaymentDraftApprove(String draftId) =>
       _api.call('api_founder_paymentDraftApprove', {'draftId': draftId});
 
   Future<dynamic> founderPaymentDraftReject(String draftId, String comment) =>
       _api.call('api_founder_paymentDraftReject', {'draftId': draftId, 'comment': comment});
+
+  /// REAL MONEY — finalises an APPROVED payment draft on the founder side.
+  /// Reserves a receipt number, writes STUDENT_RECEIPTS + MONEY_LEDGER,
+  /// advances next_due_date, renders PDF. Founder only. Idempotent.
+  Future<dynamic> founderFinalisePaymentDraft(
+    String draftId, {
+    bool override = false,
+    String overrideReason = '',
+  }) =>
+      _api.call('api_founder_finalisePaymentDraft', {
+        'draftId': draftId,
+        if (override) 'override': true,
+        if (override && overrideReason.isNotEmpty) 'overrideReason': overrideReason,
+      });
+
+  /// REAL MONEY (gated) — staff executes a founder-APPROVED draft's receipt.
+  /// Server refuses unless STAFF_FINALISE_ENABLED + ops account + verified
+  /// authority + APPROVED status. Idempotent; never double-writes.
+  Future<dynamic> staffFinalisePaymentDraft(String draftId) =>
+      _api.call('api_staff_finalisePaymentDraft', {'draftId': draftId});
+
+  /// Founder-only lifecycle status change. Reason is MANDATORY and audited.
+  /// The student row is never deleted — archive is a status change.
+  Future<dynamic> founderSetStudentStatus(String studentId, String status, String reason) =>
+      _api.call('api_founder_setStudentStatus', {
+        'studentId': studentId,
+        'status': status,
+        'reason': reason,
+      });
+
+  /// Founder-only teacher status change (ACTIVE / INACTIVE / HOLD).
+  Future<dynamic> founderUpdateTeacherStatus(String teacherId, String newStatus, String reason) =>
+      _api.call('api_updateTeacherStatus', {
+        'teacherId': teacherId,
+        'newStatus': newStatus,
+        'reason': reason,
+      });
 
   Future<dynamic> founderMergeStudentDraft(String draftId) =>
       _api.call('api_founder_mergeStudentDraft', {'draftId': draftId});

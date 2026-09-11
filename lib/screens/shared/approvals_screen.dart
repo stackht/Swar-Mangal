@@ -18,6 +18,7 @@ class ApprovalsScreen extends StatefulWidget {
 
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
   ApprovalsData? _data;
+  List<PaymentDraftRow> _queue = [];
   String? _error;
   bool _busy = true;
   final Set<String> _acting = {};
@@ -36,10 +37,14 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       _error = null;
     });
     try {
-      final d = await auth.service!.founderApprovals();
+      final results = await Future.wait([
+        auth.service!.founderApprovals(),
+        auth.service!.founderListPaymentDrafts(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _data = d;
+        _data = results[0] as ApprovalsData;
+        _queue = results[1] as List<PaymentDraftRow>;
         _busy = false;
       });
     } on ApiException catch (e) {
@@ -54,6 +59,70 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         _error = e.message;
         _busy = false;
       });
+    }
+  }
+
+  /// FINALISE — the real-money step: reserves a receipt number, writes
+  /// STUDENT_RECEIPTS + MONEY_LEDGER, advances the due date, renders the PDF.
+  Future<void> _finalise(PaymentDraftRow row) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    if (_acting.contains(row.draftId)) return;
+    final confirm = await _confirm(
+      'Create receipt — REAL MONEY',
+      'Finalising ${row.draftId} (₹${row.amount}) allocates a receipt number, '
+      'writes STUDENT_RECEIPTS + MONEY_LEDGER, advances the due date and '
+      'generates the PDF. This is audited and NOT reversible from the app.',
+    );
+    if (!confirm) return;
+    setState(() => _acting.add(row.draftId));
+    try {
+      final r = await auth.service!.founderFinalisePaymentDraft(row.draftId);
+      final m = r as Map<String, dynamic>;
+      if (!mounted) return;
+      final okRes = m['ok'] == true;
+      if (okRes) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+              content: Text('Receipt ${m['receiptNo']} created — ${m['note']}')));
+      } else if (m['error'] == 'INCOMPLETE_STUDENT' || m['code'] == 'INCOMPLETE_STUDENT') {
+        final missing = (m['missing'] as List?)?.join(', ') ?? 'unknown fields';
+        final reason = await _ask(
+          'Override incomplete student?',
+          'Student is missing: $missing. Type a reason to force finalise (audited).',
+        );
+        if (reason != null) {
+          final r2 = await auth.service!.founderFinalisePaymentDraft(
+            row.draftId,
+            override: true,
+            overrideReason: reason,
+          );
+          final m2 = r2 as Map<String, dynamic>;
+          if (!mounted) return;
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(
+                content: Text(m2['ok'] == true
+                    ? 'Receipt ${m2['receiptNo']} created (override)'
+                    : (m2['error'] ?? m2['message'] ?? 'Finalise failed'))));
+        }
+      } else {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+              content: Text((m['message'] ?? m['error'] ?? 'Finalise failed'))));
+      }
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      await _load();
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _acting.remove(row.draftId));
     }
   }
 
@@ -156,7 +225,69 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
             SectionTitle(g.label),
             for (final item in g.items) _itemCard(item),
           ],
+          const SectionTitle('Receipts pending'),
+          const Text(
+            'Approved payments that have not been turned into a receipt yet. '
+            'Finalising writes real money records server-side.',
+            style: TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          const SizedBox(height: AppSpace.s3),
+          if (_queue.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpace.s4),
+                child: Text('No payment drafts in the queue.',
+                    style: TextStyle(color: AppColors.muted, fontSize: 13)),
+              ),
+            )
+          else
+            for (final row in _queue)
+              if (row.approved || row.repairRequired) _draftCard(row),
         ],
+      ),
+    );
+  }
+
+  Widget _draftCard(PaymentDraftRow row) {
+    final busy = _acting.contains(row.draftId);
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpace.s3),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s4),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(row.studentName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                Text('${row.draftId} · ${row.branch}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+              ]),
+            ),
+            if (row.amount.isNotEmpty)
+              Text('₹${row.amount}',
+                  style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+          ]),
+          const SizedBox(height: AppSpace.s2),
+          Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
+            StatusBadge(row.status),
+            if (row.repairRequired) const StatusBadge('REPAIR REQUIRED'),
+            if (row.paymentMode.isNotEmpty) TagChip(row.paymentMode, color: AppColors.focus),
+            if (row.projectNextDueDate.isNotEmpty)
+              TagChip('→ due ${row.projectNextDueDate}', color: AppColors.muted),
+          ]),
+          const SizedBox(height: AppSpace.s3),
+          Row(children: [
+            _actionBtn(
+              row.repairRequired ? 'Repair (founder web)' : 'Create receipt',
+              AppColors.primary,
+              busy,
+              row.repairRequired
+                  ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Repair is done on the founder web app — the block names the missing data.')))
+                  : () => _finalise(row),
+            ),
+          ]),
+        ]),
       ),
     );
   }

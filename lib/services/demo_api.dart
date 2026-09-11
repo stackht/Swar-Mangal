@@ -65,12 +65,49 @@ class DemoApiClient extends ApiClient {
         return _inquiryTransition(a);
       case 'api_founder_approvalsList':
         return _approvalsList();
+      case 'api_founder_listPaymentDrafts':
+        return _paymentDraftQueue();
       case 'api_founder_paymentDraftApprove':
         return {'ok': true, 'changed': true, 'draftId': a['draftId'], 'approved': true, 'note': 'demo approved'};
       case 'api_founder_paymentDraftReject':
         return {'ok': true, 'changed': true, 'draftId': a['draftId'], 'rejected': true, 'note': 'demo rejected'};
       case 'api_founder_mergeStudentDraft':
         return {'ok': true, 'created': true, 'draftId': a['draftId'], 'studentId': 'STU-DEMO-MERGED', 'note': 'demo merged'};
+      case 'api_founder_finalisePaymentDraft':
+      case 'api_staff_finalisePaymentDraft':
+        return {
+          'ok': true,
+          'changed': true,
+          'draftId': a['draftId'],
+          'status': 'FINALISED',
+          'receiptNo': 'RCP-DEMO-${9100 + (a['draftId']?.length ?? 0)}',
+          'pdfUrl': '',
+          'idempotent': false,
+          'financialWrites': false,
+          'finalisedBy': 'demo',
+          'note': 'demo finalise — real money path writes receipt + ledger + due-date advance server-side',
+        };
+      case 'api_founder_setStudentStatus':
+        return {
+          'ok': true,
+          'changed': true,
+          'studentId': a['studentId'],
+          'before': {'status': 'ACTIVE'},
+          'after': {'status': a['status']},
+          'reason': a['reason'],
+          'auditWritten': true,
+          'note': 'demo status changed',
+        };
+      case 'api_updateTeacherStatus':
+        return {
+          'ok': true,
+          'teacherId': a['teacherId'],
+          'oldStatus': 'ACTIVE',
+          'newStatus': a['newStatus'],
+          'message': 'demo teacher status updated',
+        };
+      case 'api_staff_studentHub':
+        return _staffStudentHub(a);
       case 'api_staff_commGenerate':
         return _commGenerate();
       case 'api_staff_attendanceRoster':
@@ -719,6 +756,75 @@ class DemoApiClient extends ApiClient {
         'note': 'demo inquiry moved',
       };
 
+  Map<String, dynamic> _paymentDraftQueue() => {
+        'ok': true,
+        'count': 3,
+        'waitingOnTermsCount': 1,
+        'rows': [
+          {
+            'draftId': 'PDRAFT-DEMO-101',
+            'status': 'SUBMITTED',
+            'termsStatus': 'TERMS PENDING',
+            'studentId': 'STU-55DCD622',
+            'studentName': 'Aarav Mehta',
+            'phoneMasked': '••••••1123',
+            'branch': 'GOREGAON',
+            'teacherName': 'Rahul Joshi',
+            'instrument': 'Keyboard',
+            'amount': '5000',
+            'months': 1,
+            'currentDueDate': '2026-09-05',
+            'projectedNextDueDate': '2026-10-05',
+            'paymentDate': '2026-09-11',
+            'paymentMode': 'UPI',
+            'completeness': {'complete': true, 'missing': []},
+            'repairRequired': false,
+            'submittedAt': '2026-09-11 10:00:00',
+          },
+          {
+            'draftId': 'PDRAFT-DEMO-FIN-1',
+            'status': 'APPROVED',
+            'termsStatus': 'TERMS ACCEPTED',
+            'studentId': 'STU-77FA91C0',
+            'studentName': 'Diya Shah',
+            'phoneMasked': '••••••2334',
+            'branch': 'GOREGAON',
+            'teacherName': 'Meera Nair',
+            'instrument': 'Violin',
+            'amount': '12000',
+            'months': 3,
+            'currentDueDate': '2026-09-14',
+            'projectedNextDueDate': '2026-12-14',
+            'paymentDate': '2026-09-10',
+            'paymentMode': 'Kotak UPI',
+            'completeness': {'complete': true, 'missing': []},
+            'repairRequired': false,
+            'submittedAt': '2026-09-10 18:00:00',
+          },
+          {
+            'draftId': 'PDRAFT-DEMO-103',
+            'status': 'FINALISE_FAILED_REPAIR_REQUIRED',
+            'termsStatus': 'TERMS ACCEPTED',
+            'studentId': 'STU-31B84E07',
+            'studentName': 'Ishaan Verma',
+            'phoneMasked': '••••••3445',
+            'branch': 'KANDIVALI',
+            'teacherName': 'Vikram Singh',
+            'instrument': 'Tabla',
+            'amount': '5500',
+            'months': 1,
+            'currentDueDate': '2026-09-02',
+            'projectedNextDueDate': '2026-10-02',
+            'paymentDate': '2026-09-09',
+            'paymentMode': 'Cash',
+            'completeness': {'complete': false, 'missing': ['Monthly Fee']},
+            'repairRequired': true,
+            'submittedAt': '2026-09-09 09:30:00',
+          },
+        ],
+        'note': 'demo payment draft queue',
+      };
+
   Map<String, dynamic> _approvalsList() => {
         'ok': true,
         'build': 'RC2.57',
@@ -882,6 +988,44 @@ class DemoApiClient extends ApiClient {
           },
         ],
       };
+
+  Map<String, dynamic> _staffStudentHub(Map<String, dynamic> a) {
+    final sid = _s(a['studentId'] ?? '');
+    final all = _studentRows();
+    final s = sid.isEmpty ? all.first : (all.where((r) => r['studentId'] == sid).isNotEmpty ? all.firstWhere((r) => r['studentId'] == sid) : all.first);
+    return {
+      'ok': true,
+      'profile': {
+        ...s,
+        'parentName': 'Parent of ${s['studentName']}',
+        'fee': '${s['lastReceiptAmount'] ?? 5000}',
+        'dueDate': s['nextDueDate'],
+      },
+      'fees': {'available': true, 'total': 15400, 'capped': false, 'rows': []},
+      'pending': {
+        'available': true,
+        'rows': [
+          {
+            'draftId': 'PDRAFT-DEMO-FIN-1',
+            'amount': '${s['lastReceiptAmount'] ?? 5000}',
+            'paymentDate': '2026-09-10',
+            'approvalAuthority': 'FOUNDER',
+            'approvedBy': 'sharvil@demo',
+            'founderDecision': true,
+            'label': 'Approved by sharvil@demo',
+            'repairRequired': false,
+            'status': 'APPROVED',
+            'canFinalise': true,
+            'blockedReason': '',
+          },
+        ],
+      },
+      'terms': {'found': false, 'link': '', 'status': '', 'label': 'No terms link yet', 'note': ''},
+      'note': 'demo hub',
+    };
+  }
+
+  String _s(dynamic v) => v == null ? '' : v.toString();
 
   Map<String, dynamic> _todaysTasks() =>
       {'ok': true, 'cards': _taskCards(), 'mode': 'COPY_ONLY', 'today': '2026-09-11'};

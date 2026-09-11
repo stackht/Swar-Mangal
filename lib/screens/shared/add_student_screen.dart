@@ -3,15 +3,21 @@ import 'package:provider/provider.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
+import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
 
-/// Add Student.
+/// Add Edit Student.
 /// founder: writes via the checked founder add path (draft + merge in one call).
-/// staff:   writes a STAFF_STUDENT_DRAFTS row for the founder to merge.
+/// staff:   writes a STAFF_STUDENT_DRAFTS row (ADD or, when [edit] is set, an
+///          EDIT draft) for the founder to merge — placing an edit creates the
+///          audited change record, never a silent direct write.
 class AddStudentScreen extends StatefulWidget {
-  const AddStudentScreen({super.key, required this.staff});
+  const AddStudentScreen({super.key, required this.staff, this.edit});
   final bool staff;
+
+  /// When set, the form edits this existing student (writes an EDIT draft).
+  final Student? edit;
   @override
   State<AddStudentScreen> createState() => _AddStudentScreenState();
 }
@@ -34,6 +40,23 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   String? _result; // server message after a save
   bool _success = false;
 
+  bool get _editing => widget.edit != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.edit;
+    if (e != null) {
+      _name.text = e.studentName;
+      _phone.text = e.phone;
+      _email.text = e.email;
+      _instrument.text = e.instrument;
+      _batch.text = e.batch;
+      _classCode = e.classCode == 'KMC' ? 'KMC' : 'GMC';
+      if (e.feeDueDay.isNotEmpty) _feeDueDay = int.tryParse(e.feeDueDay) ?? 5;
+    }
+  }
+
   @override
   void dispose() {
     for (final c in [_name, _phone, _email, _parent, _instrument, _fee, _months, _batch, _notes]) {
@@ -54,6 +77,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
     try {
       final payload = widget.staff
           ? {
+              if (_editing) 'studentId': widget.edit!.studentId,
               'name': _name.text.trim(),
               'phone': _phone.text.trim(),
               'email': _email.text.trim(),
@@ -77,9 +101,11 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               'feeDueDay': _feeDueDay,
               'instrument': _instrument.text.trim(),
             };
-      final r = widget.staff
-          ? await auth.service!.saveStudentDraft(payload)
-          : await auth.service!.addStudent(payload);
+      final r = _editing
+          ? await auth.service!.saveStudentDraft(payload) // EDIT draft → founder merge
+          : widget.staff
+              ? await auth.service!.saveStudentDraft(payload)
+              : await auth.service!.addStudent(payload);
       final m = r as Map<String, dynamic>;
       final dup = (m['duplicateWarning'] is Map<String, dynamic> && m['duplicateWarning']['hasDuplicates'] == true) ||
           m['duplicate'] == true;
@@ -89,8 +115,12 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
         _success = m['ok'] == true || m.containsKey('studentId');
         _result = _success
             ? dup
-                ? 'Saved. Possible duplicate flagged — founder will review the merge.'
-                : 'Saved. ${widget.staff ? 'Founder will merge it into the master.' : ''}'
+                ? (_editing
+                    ? 'Saved as an EDIT draft — duplicate flagged; founder reviews the merge.'
+                    : 'Saved. Possible duplicate flagged — founder will review the merge.')
+                : _editing
+                    ? 'Changes saved as an EDIT draft. Founder merges it into the master — refresh keeps the change once merged.'
+                    : 'Saved. ${widget.staff ? 'Founder will merge it into the master.' : ''}'
             : (m['error'] ?? 'Could not save.').toString();
       });
     } on ApiException catch (e) {
@@ -244,8 +274,12 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               ),
             const SizedBox(height: AppSpace.s4),
             LoadingButton(
-              label: widget.staff ? 'Save as draft for Sharvil' : 'Add student',
-              icon: Icons.person_add_alt,
+              label: _editing
+                  ? 'Save changes (founder approves)'
+                  : widget.staff
+                      ? 'Save as draft for Sharvil'
+                      : 'Add student',
+              icon: _editing ? Icons.save_outlined : Icons.person_add_alt,
               busy: _busy,
               onPressed: _save,
             ),

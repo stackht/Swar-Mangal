@@ -31,4 +31,44 @@ void main() {
     final p = StatusBadge.paint('OVERDUE');
     expect(p.label, contains('OVERDUE'));
   });
+
+  test('PaymentDraftRow parses approve/finalise queue', () {
+    final r = PaymentDraftRow.fromApi({
+      'draftId': 'PDRAFT-1',
+      'status': 'APPROVED',
+      'studentName': 'Aarav',
+      'amount': '5000',
+      'projectedNextDueDate': '2026-10-05',
+    });
+    expect(r.approved, true);
+    expect(r.draftId, 'PDRAFT-1');
+    expect(r.projectNextDueDate, '2026-10-05');
+  });
+
+  test('StaffHub parses pending finalise drafts', () {
+    final b = <String, dynamic>{
+      'profile': {'studentId': 'STU-1', 'studentName': 'Diya', 'feeStatus': 'paid'},
+      'fees': {'total': 15400, 'rows': []},
+      'pending': {
+        'rows': [
+          {
+            'draftId': 'PDRAFT-FIN-1',
+            'amount': '12000',
+            'approvalAuthority': 'FOUNDER',
+            'approvedBy': 'sharvil@demo',
+            'founderDecision': true,
+            'label': 'Approved',
+            'repairRequired': false,
+            'status': 'APPROVED',
+            'canFinalise': true,
+            'blockedReason': '',
+          }
+        ]
+      },
+    };
+    final hub = StaffHub.fromApi(b);
+    expect(hub.pending.length, 1);
+    expect(hub.pending.first.canFinalise, true);
+    expect(hub.feesTotal, '15400');
+  });
 }

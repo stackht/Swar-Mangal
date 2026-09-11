@@ -686,3 +686,133 @@ String moneyRounded(num amount) {
   final v = _n(amount);
   return (v % 1 == 0) ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 }
+
+/// A staff-approved payment draft ("approved, receipt not yet created").
+class PendingFinaliseDraft {
+  PendingFinaliseDraft({
+    required this.draftId,
+    required this.amount,
+    required this.paymentDate,
+    required this.approvalAuthority,
+    required this.approvedBy,
+    required this.founderDecision,
+    required this.label,
+    required this.repairRequired,
+    required this.status,
+    required this.canFinalise,
+    required this.blockedReason,
+  });
+  factory PendingFinaliseDraft.fromApi(Map<String, dynamic> b) =>
+      PendingFinaliseDraft(
+        draftId: _s(b['draftId']),
+        amount: _s(b['amount']),
+        paymentDate: _s(b['paymentDate']),
+        approvalAuthority: _s(b['approvalAuthority']),
+        approvedBy: _s(b['approvedBy']),
+        founderDecision: b['founderDecision'] == true,
+        label: _s(b['label']),
+        repairRequired: b['repairRequired'] == true,
+        status: _s(b['status']),
+        canFinalise: b['canFinalise'] == true,
+        blockedReason: _s(b['blockedReason']),
+      );
+  final String draftId;
+  final String amount;
+  final String paymentDate;
+  final String approvalAuthority;
+  final String approvedBy;
+  final bool founderDecision;
+  final String label;
+  final bool repairRequired;
+  final String status;
+  final bool canFinalise;
+  final String blockedReason;
+}
+
+/// Staff Student Hub — one call carrying profile + pending receipts + terms.
+/// A founder payment-draft queue row (SUBMITTED → approve/reject;
+/// APPROVED → finalise into a real receipt). From api_founder_listPaymentDrafts.
+class PaymentDraftRow {
+  PaymentDraftRow({
+    required this.draftId,
+    required this.status,
+    required this.studentId,
+    required this.studentName,
+    required this.amount,
+    required this.paymentMode,
+    required this.branch,
+    required this.termsStatus,
+    required this.projectNextDueDate,
+    required this.repairRequired,
+    required this.submittedAt,
+  });
+  factory PaymentDraftRow.fromApi(Map<String, dynamic> b) {
+    return PaymentDraftRow(
+      draftId: _s(b['draftId']),
+      status: _s(b['status']),
+      studentId: _s(b['studentId']),
+      studentName: _s(b['studentName']),
+      amount: _s(b['amount']),
+      paymentMode: _s(b['paymentMode']),
+      branch: _s(b['branch']),
+      termsStatus: _s(b['termsStatus']),
+      projectNextDueDate: _s(b['projectedNextDueDate']),
+      repairRequired: b['repairRequired'] == true,
+      submittedAt: _s(b['submittedAt']),
+    );
+  }
+  final String draftId;
+  final String status;
+  final String studentId;
+  final String studentName;
+  final String amount;
+  final String paymentMode;
+  final String branch;
+  final String termsStatus;
+  final String projectNextDueDate;
+  final bool repairRequired;
+  final String submittedAt;
+
+  bool get approved => status.toUpperCase() == 'APPROVED';
+  bool get waitingTerms => status.toUpperCase() == 'PENDING_TERMS_AND_APPROVAL';
+}
+
+class StaffHub {
+  StaffHub({
+    required this.profile,
+    required this.pending,
+    required this.feesTotal,
+    required this.feeStatus,
+    required this.dueDate,
+    required this.canonicalFee,
+  });
+  factory StaffHub.fromApi(Map<String, dynamic> b) {
+    final p = b['profile'] is Map<String, dynamic>
+        ? b['profile'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final pending =
+        b['pending'] is Map<String, dynamic> ? b['pending'] as Map<String, dynamic> : const <String, dynamic>{};
+    final fees = b['fees'] is Map<String, dynamic> ? b['fees'] as Map<String, dynamic> : const <String, dynamic>{};
+    return StaffHub(
+      profile: Student.fromApi({
+        ...p,
+        'studentId': _s(p['studentId']),
+        'feeStatus': _s(p['feeStatus']),
+      }),
+      pending: ((pending['rows'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(PendingFinaliseDraft.fromApi)
+          .toList(),
+      feesTotal: _n(fees['total']).toString(),
+      feeStatus: _s(p['feeStatus']),
+      dueDate: _s(p['dueDate']),
+      canonicalFee: _s(p['fee']),
+    );
+  }
+  final Student profile;
+  final List<PendingFinaliseDraft> pending;
+  final String feesTotal;
+  final String feeStatus;
+  final String dueDate;
+  final String canonicalFee;
+}

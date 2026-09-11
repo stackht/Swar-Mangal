@@ -20,6 +20,7 @@ class StudentProfileScreen extends StatefulWidget {
 
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
   List<ReceiptRow> _receipts = [];
+  StaffHub? _hub;
   String? _error;
   bool _busy = false;
 
@@ -27,6 +28,66 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   void initState() {
     super.initState();
     _loadReceipts();
+    if (widget.staff) _loadHub();
+  }
+
+  Future<void> _loadHub() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    try {
+      final hub = await auth.service!.staffStudentHub(
+        widget.student.studentId,
+        branch: auth.branch ?? 'ALL',
+      );
+      if (!mounted) return;
+      setState(() => _hub = hub);
+    } on ApiException {
+      // hub is an enhancement — receipts load independently; stay quiet
+    } on ApiUnreachable {
+      // same
+    }
+  }
+
+  Future<void> _staffFinalise(PendingFinaliseDraft d) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create receipt now?'),
+        content: Text(
+            'You are about to create the real receipt for ${d.draftId} (₹${d.amount}) server-side. '
+            'The founder already approved it — no further approval needed. This is audited money work.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create receipt')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final r = await auth.service!.staffFinalisePaymentDraft(d.draftId);
+      final m = r as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+            content: Text(m['ok'] == true
+                ? 'Receipt ${m['receiptNo'] ?? ''} created'
+                : (m['message'] ?? m['error'] ?? m['safeError'] ?? 'Could not finalise'))));
+      await _loadHub();
+      await _loadReceipts();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _loadReceipts() async {
@@ -63,6 +124,63 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     }
   }
 
+  Future<void> _setStatus(BuildContext context, String status) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final reason = await _askReason(
+      context,
+      title: 'Set ${widget.student.studentId} → $status',
+      label: 'Reason (required, stored in audit)',
+    );
+    if (reason == null || reason.trim().isEmpty) return;
+    if (!mounted) return;
+    setState(() => _busy = true);
+    try {
+      final r = await auth.service!.founderSetStudentStatus(
+        widget.student.studentId,
+        status,
+        reason,
+      );
+      final m = r as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() => _busy = false);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+            content: Text(m['ok'] == true
+                ? (m['changed'] == true ? '${widget.student.studentId} → $status (audited)' : (m['note'] ?? 'No change'))
+                : (m['error'] ?? 'Could not change status'))));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<String?> _askReason(BuildContext context,
+      {required String title, required String label}) {
+    final c = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(controller: c, maxLines: 2, decoration: InputDecoration(labelText: label)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, c.text.trim()),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _classFor(String branch) {
     if (branch == 'KANDIVALI') return 'KMC';
     if (branch == 'GOREGAON') return 'GMC';
@@ -73,7 +191,22 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   Widget build(BuildContext context) {
     final s = widget.student;
     return Scaffold(
-      appBar: AppBar(title: Text(s.studentName)),
+      appBar: AppBar(
+        title: Text(s.studentName),
+        actions: [
+          if (!widget.staff)
+            PopupMenuButton<String>(
+              tooltip: 'Lifecycle / archive',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (v) => _setStatus(context, v),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'ACTIVE', child: Text('Set ACTIVE')),
+                PopupMenuItem(value: 'PAUSED', child: Text('Pause (PAUSED)')),
+                PopupMenuItem(value: 'LEFT', child: Text('Mark LEFT (archive)')),
+              ],
+            ),
+        ],
+      ),
       body: RefreshScaffold(
         onRefresh: _loadReceipts,
         child: ListView(
@@ -97,7 +230,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
                     TagChip(s.classCode),
                     if (s.instrument.isNotEmpty) TagChip(s.instrument, color: AppColors.focus),
-                    StatusBadge(s.feeStatus),
+                    StatusBadge(s.status.isEmpty ? s.feeStatus : s.status),
                   ]),
                 ]),
               ),
@@ -139,6 +272,53 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               icon: const Icon(Icons.chat_outlined, size: 18),
               label: const Text('Message parent'),
             ),
+            if (widget.staff && _hub != null && _hub!.pending.isNotEmpty) ...[
+              const SizedBox(height: AppSpace.s3),
+              const SectionTitle('Approved payments'),
+              for (final d in _hub!.pending)
+                Card(
+                  margin: const EdgeInsets.only(bottom: AppSpace.s3),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpace.s4),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('₹${d.amount} · ${d.paymentDate}',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                            Text(d.draftId, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                          ]),
+                        ),
+                        StatusBadge(d.repairRequired ? 'REPAIR REQUIRED' : d.status),
+                      ]),
+                      if (d.label.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: AppSpace.s2),
+                          child: Text(d.label, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                        ),
+                      if (d.blockedReason.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: AppSpace.s2),
+                          child: Text(d.blockedReason,
+                              style: const TextStyle(fontSize: 12, color: AppColors.warnFg)),
+                        ),
+                      if (d.canFinalise)
+                        Padding(
+                          padding: const EdgeInsets.only(top: AppSpace.s2),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                              onPressed: _busy ? null : () => _staffFinalise(d),
+                              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                              label: const Text('Create receipt now'),
+                            ),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+            ],
             SectionTitle('Receipts${_busy ? ' …' : ''}'),
             if (_error != null) Card(child: Padding(padding: const EdgeInsets.all(AppSpace.s3), child: ErrorView(_error!, onRetry: _loadReceipts, compact: true)))
             else if (_receipts.isEmpty && !_busy)

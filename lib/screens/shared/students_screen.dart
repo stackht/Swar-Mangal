@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
 import 'student_profile_screen.dart';
+import 'add_student_screen.dart';
 
 /// Student search + directory. `staff` flips the API to the branch-isolated
 /// staff search endpoint and adds an inline "quick add" entry.
@@ -193,6 +194,14 @@ class _StudentsScreenState extends State<StudentsScreen> {
               ]),
             ]),
           ),
+          if (widget.staff)
+            IconButton(
+              tooltip: 'Edit student',
+              icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.muted),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => AddStudentScreen(staff: true, edit: s),
+              )),
+            ),
           Icon(Icons.chevron_right, color: AppColors.muted),
         ]),
       ),

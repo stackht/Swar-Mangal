@@ -113,7 +113,61 @@ class _TeachersScreenState extends State<TeachersScreen> {
           ]),
         ),
         StatusBadge(t.status.isEmpty ? 'UNKNOWN' : t.status),
+        if (!widget.staff)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
+            onSelected: (v) => _setStatus(t, v),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'ACTIVE', child: Text('Set ACTIVE')),
+              PopupMenuItem(value: 'INACTIVE', child: Text('Set INACTIVE')),
+              PopupMenuItem(value: 'HOLD', child: Text('Set HOLD')),
+            ],
+          ),
       ]),
+    );
+  }
+
+  Future<void> _setStatus(Teacher t, String status) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final reason = await _askReason('${t.teacherName} → $status', 'Reason (required, stored in audit)');
+    if (reason == null || reason.trim().isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final r = await auth.service!.founderUpdateTeacherStatus(t.teacherId, status, reason);
+      final m = r as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+            content: Text(m['ok'] == true
+                ? '${t.teacherName} → $status'
+                : (m['error'] ?? 'Could not change status'))));
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<String?> _askReason(String title, String label) {
+    final c = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(controller: c, maxLines: 2, decoration: InputDecoration(labelText: label)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Confirm')),
+        ],
+      ),
     );
   }
 

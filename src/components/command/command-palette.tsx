@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowRight, Command as CommandIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -70,7 +70,7 @@ export function CommandPalette() {
       ],
     });
     return items;
-  }, [role, router, theme, setTheme, logout]);
+  }, [role, router, theme, setTheme, logout, setOpen]);
 
   const results = React.useMemo(() => {
     if (!query) return sections;

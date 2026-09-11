@@ -1,19 +1,22 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Bell, ClipboardList, FileUp, Music, UserCheck, Users } from "lucide-react";
+import {
+  Bell, Clock, CheckCircle2, AlertCircle, Music,
+  ArrowRight, Users, MessageSquare, Plus,
+} from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/dashboard/section-header";
-import { StatCard } from "@/components/dashboard/stat-card";
-
+import { FrequencyBars } from "@/components/music/frequency-bars";
+import { EASE, listVariants, itemVariants } from "@/lib/motion";
 import { classes, students, practice, assignments } from "@/lib/data/demo";
-import { cn, formatTime } from "@/lib/utils/cn";
-import { EASE } from "@/lib/motion";
+import { formatTime } from "@/lib/utils/cn";
 
 function greeting() {
   const h = new Date().getHours();
@@ -22,20 +25,6 @@ function greeting() {
   return "Good evening";
 }
 
-const accentChip: Record<string, string> = {
-  lavender: "bg-lavender-100/80 text-lavender-700 dark:bg-lavender-500/15 dark:text-lavender-300",
-  mint: "bg-mint-100/80 text-mint-700 dark:bg-mint-500/15 dark:text-mint-300",
-  peach: "bg-peach-100/80 text-peach-700 dark:bg-peach-500/15 dark:text-peach-300",
-  sky: "bg-sky-100/80 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
-};
-
-const quickActions = [
-  { title: "Mark Attendance", href: "/teacher/attendance", icon: UserCheck, accent: "lavender" },
-  { title: "Add Assignment", href: "/teacher/assignments", icon: ClipboardList, accent: "mint" },
-  { title: "Give Feedback", href: "/teacher/students", icon: Users, accent: "peach" },
-  { title: "Upload Material", href: "/teacher/library", icon: FileUp, accent: "sky" },
-];
-
 export default function TeacherDashboard() {
   const { user } = useAuth();
   const todayClasses = classes
@@ -43,129 +32,136 @@ export default function TeacherDashboard() {
     .sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
   const myStudents = students.filter((s) => classes.some((c) => c.teacher_id === "t1" && c.student_ids.includes(s.id)));
   const lowPractice = myStudents.filter((s) => practice.filter((p) => p.student_id === s.id && new Date(p.date) >= new Date(Date.now() - 7 * 864e5)).reduce((x, p) => x + p.minutes, 0) < 30);
-  const toReview = assignments.filter((a) => a.teacher_id === "t1" && a.status === "submitted");
+  const pendingReview = assignments.filter((a) => a.teacher_id === "t1" && a.status === "submitted");
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Avatar name={user?.full_name ?? "Sarah Mitchell"} src={user?.avatar_url} size="lg" />
+    <div className="space-y-10">
+      {/* HEADER */}
+      <motion.header variants={listVariants} initial="hidden" animate="visible" className="flex items-center justify-between gap-4">
+        <motion.div variants={itemVariants} className="flex items-center gap-3.5">
+          <Avatar name={user?.full_name ?? "Sarah"} src={user?.avatar_url} size="lg" />
           <div>
-            <p className="text-xs font-medium text-muted-foreground">Teacher · Piano</p>
-            <h1 className="text-2xl font-bold tracking-tight">{greeting()}, {user?.full_name?.split(" ")[0] ?? "Sarah"}</h1>
-            <p className="text-sm text-muted-foreground">You have {todayClasses.length} class{todayClasses.length === 1 ? "" : "es"} today.</p>
+            <p className="text-eyebrow">Teacher · Piano</p>
+            <h1 className="text-display text-primary">{greeting()}, {user?.full_name?.split(" ")[0] ?? "Sarah"}</h1>
           </div>
-        </div>
-        <Button variant="ghost" size="icon" asChild className="relative">
-          <Link href="/teacher/notifications">
-            <Bell className="h-5 w-5" />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-peach-500" />
-          </Link>
-        </Button>
-      </header>
+        </motion.div>
+        <motion.div variants={itemVariants}>
+          <Button variant="ghost" size="icon" asChild className="relative">
+            <Link href="/teacher/notifications">
+              <Bell className="h-5 w-5" />
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-violet-500" />
+            </Link>
+          </Button>
+        </motion.div>
+      </motion.header>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Classes today" value={todayClasses.length} icon={UserCheck} accent="lavender" />
-        <StatCard label="My students" value={myStudents.length} icon={Users} accent="mint" />
-        <StatCard label="Attendance preview" value="94%" icon={UserCheck} accent="sky" />
-        <StatCard label="To review" value={toReview.length} icon={ClipboardList} accent="peach" />
-      </div>
+      {/* QUICK STATS */}
+      <motion.div variants={listVariants} initial="hidden" animate="visible" className="grid grid-cols-3 gap-3">
+        <motion.div variants={itemVariants} className="rounded-2xl border border-border/50 bg-card p-4 text-center">
+          <p className="text-2xl font-bold tabular-nums">{todayClasses.length}</p>
+          <p className="text-caption text-muted-foreground mt-0.5">Classes today</p>
+        </motion.div>
+        <motion.div variants={itemVariants} className="rounded-2xl border border-border/50 bg-card p-4 text-center">
+          <p className="text-2xl font-bold tabular-nums">{myStudents.length}</p>
+          <p className="text-caption text-muted-foreground mt-0.5">Students</p>
+        </motion.div>
+        <motion.div variants={itemVariants} className="rounded-2xl border border-border/50 bg-card p-4 text-center">
+          <p className="text-2xl font-bold tabular-nums text-violet-600 dark:text-violet-300">{pendingReview.length}</p>
+          <p className="text-caption text-muted-foreground mt-0.5">To review</p>
+        </motion.div>
+      </motion.div>
 
+      {/* TODAY'S CLASSES — timeline */}
       <section>
-        <SectionHeader title="Quick actions" />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {quickActions.map((a, i) => (
-            <motion.button
-              key={a.title}
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.06, ease: EASE }}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => (window.location.href = a.href)}
-              className={cn(
-                "flex flex-col items-start gap-5 rounded-2xl border border-border/60 bg-card p-4 text-left transition-[box-shadow,transform] duration-200 ease-ease-out-expo hover:shadow-soft",
-              )}
-            >
-              <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", accentChip[a.accent])}>
-                <a.icon className="h-4 w-4" />
-              </span>
-              <span className="text-sm font-semibold">{a.title}</span>
-            </motion.button>
+        <div className="flex items-end justify-between mb-4">
+          <h3 className="text-eyebrow">Today{"'"}s teaching</h3>
+          <Link href="/teacher/schedule" className="text-xs font-medium text-primary hover:underline">Schedule</Link>
+        </div>
+        {todayClasses.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border/50 bg-secondary/30 p-10 text-center">
+            <Music className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
+            <p className="text-sm font-medium">No classes today</p>
+            <p className="text-xs text-muted-foreground">A free day — catch up on feedback.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {todayClasses.map((c, i) => (
+              <motion.div key={c.id} initial={{ opacity: 0, x: -8 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05, ease: EASE }}
+                className="flex items-center gap-4 rounded-2xl border border-border/50 bg-card p-4 hover:shadow-soft transition-shadow">
+                <div className="text-center min-w-[52px]">
+                  <p className="text-sm font-bold tabular-nums">{formatTime(c.start_time).split(" ")[0]}</p>
+                  <p className="text-[10px] text-muted-foreground">{formatTime(c.start_time).split(" ")[1]}</p>
+                </div>
+                <div className="h-8 w-px bg-border/60" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">{c.title}</p>
+                  <p className="text-xs text-muted-foreground">{c.student_ids.length} students · {c.room ?? c.mode}</p>
+                </div>
+                <div className="h-8 w-16 opacity-50"><FrequencyBars bars={10} playing={false} /></div>
+                <Badge variant={c.mode === "online" ? "secondary" : "default"}>{c.mode}</Badge>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* STUDENTS NEEDING ATTENTION */}
+      <section>
+        <SectionHeader title="Students needing attention" />
+        <div className="space-y-2">
+          {lowPractice.length > 0 && lowPractice.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card p-4">
+              <Avatar name={s.full_name} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{s.full_name}</p>
+                <p className="text-xs text-orange-600 dark:text-orange-300 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Low practice this week</p>
+              </div>
+              <Button variant="ghost" size="sm" asChild><Link href="/teacher/students">View</Link></Button>
+            </div>
           ))}
+          {pendingReview.length > 0 && pendingReview.slice(0, 2).map((a) => (
+            <div key={a.id} className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card p-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{a.title}</p>
+                <p className="text-xs text-muted-foreground">Submitted — review pending</p>
+              </div>
+              <Button variant="ghost" size="sm" asChild><Link href="/teacher/assignments">Review</Link></Button>
+            </div>
+          ))}
+          {lowPractice.length === 0 && pendingReview.length === 0 && (
+            <p className="text-sm text-muted-foreground py-2">All students on track — great work.</p>
+          )}
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="lg:col-span-2">
-          <SectionHeader title="Today's classes" subtitle="In chronological order" action={<Link href="/teacher/schedule" className="text-sm font-medium text-primary">Schedule</Link>} />
-          {todayClasses.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-border/70 bg-secondary/30 p-10 text-center">
-              <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground shadow-xs ring-1 ring-border/50">
-                <Music className="h-5 w-5" />
-              </span>
-              <p className="text-sm font-medium">No classes today</p>
-              <p className="text-xs text-muted-foreground">Enjoy the break or catch up on feedback.</p>
-            </div>
-          ) : (
-            <div className="relative space-y-3 before:absolute before:bottom-4 before:left-[18px] before:top-4 before:w-px before:bg-border">
-              {todayClasses.map((c, i) => (
-                <motion.div
-                  key={c.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.05 }}
-                  className="relative flex items-center gap-4 rounded-3xl border bg-card p-4 shadow-card"
-                >
-                  <div className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full border-4 border-background bg-primary text-[10px] font-bold text-primary-foreground">
-                    {formatTime(c.start_time)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{c.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {c.student_ids.length} student{c.student_ids.length === 1 ? "" : "s"} · {c.room ?? c.mode}
-                    </p>
-                  </div>
-                  <Badge variant={c.mode === "online" ? "mint" : "lavender"}>{c.mode}</Badge>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section>
-          <SectionHeader title="Needs attention" />
-          <div className="space-y-3">
-            {lowPractice.length > 0 && (
-              <div className="surface p-4">
-                <p className="text-caption text-muted-foreground">Low practice this week</p>
-                {lowPractice.map((s) => (
-                  <p key={s.id} className="mt-1 text-sm font-semibold">{s.full_name}</p>
-                ))}
-              </div>
-            )}
-            {toReview.length > 0 && (
-              <div className="surface p-4">
-                <p className="text-caption text-muted-foreground">Assignments awaiting review</p>
-                {toReview.map((a) => (
-                  <p key={a.id} className="mt-1 text-sm font-semibold">{a.title}</p>
-                ))}
-              </div>
-            )}
-            <div className="surface p-4">
-              <p className="text-caption text-muted-foreground">Up next</p>
-              <p className="mt-1 text-sm font-semibold">
-                {todayClasses.length > 0 ? todayClasses[0].title : "No lessons"}
-              </p>
-              <Link href="/teacher/students" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                Manage students <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-          </div>
-        </section>
-      </div>
+      {/* QUICK ACTIONS */}
+      <section>
+        <h3 className="text-eyebrow mb-3">Quick actions</h3>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { icon: <UserCheck className="h-4 w-4" />, label: "Attendance", href: "/teacher/attendance" },
+            { icon: <Plus className="h-4 w-4" />, label: "New Assignment", href: "/teacher/assignments" },
+            { icon: <MessageSquare className="h-4 w-4" />, label: "Message Students", href: "/teacher/messages" },
+            { icon: <Upload className="h-4 w-4" />, label: "Upload Material", href: "/teacher/library" },
+          ].map((a) => (
+            <Link key={a.label} href={a.href}
+              className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card p-4 text-left transition-shadow hover:shadow-soft">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100/80 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">{a.icon}</span>
+              <span className="text-sm font-medium">{a.label}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
     </div>
   );
+}
+
+function UserCheck(props: React.SVGProps<SVGSVGElement>) {
+  return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>;
+}
+function Upload(props: React.SVGProps<SVGSVGElement>) {
+  return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
 }

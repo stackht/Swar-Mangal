@@ -10,7 +10,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useCommandPalette } from "@/components/command/command-palette";
 
 export function Header() {
-  const { user, role, logout } = useAuth();
+  const { user, role } = useAuth();
   const { open: openCmd } = useCommandPalette();
   const notifBase = `/${role}/notifications`;
   const scheduleBase = `/${role}/schedule`;

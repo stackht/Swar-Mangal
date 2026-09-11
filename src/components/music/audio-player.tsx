@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Pause, Play, Volume2, VolumeX, Minus, Plus } from "lucide-react";
+import { Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 
 import { FrequencyBars } from "@/components/music/frequency-bars";
@@ -37,7 +37,6 @@ export function AudioPlayer({
   const [speedIdx, setSpeedIdx] = React.useState(2);
   const [volume, setVolume] = React.useState(1);
   const scrubRef = React.useRef(false);
-  const scrubX = React.useRef(0);
 
   React.useEffect(() => {
     const a = new Audio(src);

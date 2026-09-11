@@ -4,58 +4,61 @@
 
 @layer base {
   :root {
-    --background: 224 38% 97%;
-    --foreground: 224 44% 7%;
+    --background: 40 30% 97%;
+    --foreground: 226 40% 7%;
     --card: 0 0% 100%;
-    --card-foreground: 224 44% 7%;
+    --card-foreground: 226 40% 7%;
     --popover: 0 0% 100%;
-    --popover-foreground: 224 44% 7%;
-    --primary: 224 42% 10%;
+    --popover-foreground: 226 40% 7%;
+    --primary: 250 80% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 226 30% 95%;
-    --secondary-foreground: 224 40% 10%;
-    --muted: 226 30% 95%;
-    --muted-foreground: 224 15% 44%;
-    --accent: 252 72% 96%;
-    --accent-foreground: 254 55% 36%;
+    --secondary: 226 20% 96%;
+    --secondary-foreground: 226 35% 10%;
+    --muted: 220 18% 95%;
+    --muted-foreground: 224 14% 42%;
+    --accent: 262 80% 96%;
+    --accent-foreground: 262 60% 30%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 224 24% 90%;
-    --input: 224 22% 88%;
-    --ring: 253 72% 60%;
+    --border: 224 22% 90%;
+    --input: 224 20% 88%;
+    --ring: 262 80% 60%;
+
     --radius: 1rem;
 
-    --shadow-xs: 0 1px 2px rgb(19 24 38 / 0.04);
-    --shadow-soft: 0 1px 2px rgb(19 24 38 / 0.04), 0 4px 12px -2px rgb(19 24 38 / 0.06);
-    --shadow-lift: 0 2px 4px rgb(19 24 38 / 0.05), 0 12px 28px -8px rgb(19 24 38 / 0.1);
-    --shadow-float: 0 8px 16px -6px rgb(19 24 38 / 0.08), 0 28px 56px -16px rgb(19 24 38 / 0.16);
+    --shadow-xs: 0 1px 2px rgb(19 24 38 / 0.03);
+    --shadow-soft: 0 2px 8px -2px rgb(19 24 38 / 0.06), 0 1px 2px rgb(19 24 38 / 0.03);
+    --shadow-lift: 0 4px 16px -4px rgb(19 24 38 / 0.08), 0 1px 3px rgb(19 24 38 / 0.04);
+    --shadow-float: 0 12px 40px -8px rgb(19 24 38 / 0.12), 0 4px 12px rgb(19 24 38 / 0.04);
+    --shadow-glow: 0 0 40px -10px hsl(262 80% 60% / 0.25);
   }
 
   .dark {
-    --background: 226 42% 6%;
-    --foreground: 220 22% 94%;
-    --card: 226 36% 9%;
-    --card-foreground: 220 22% 94%;
-    --popover: 226 40% 8%;
-    --popover-foreground: 220 22% 94%;
-    --primary: 226 30% 92%;
-    --primary-foreground: 226 42% 6%;
-    --secondary: 226 28% 13%;
-    --secondary-foreground: 220 22% 90%;
-    --muted: 226 28% 14%;
-    --muted-foreground: 224 14% 62%;
-    --accent: 250 32% 20%;
-    --accent-foreground: 250 60% 88%;
+    --background: 245 35% 5%;
+    --foreground: 230 20% 92%;
+    --card: 240 30% 9%;
+    --card-foreground: 230 20% 92%;
+    --popover: 240 30% 8%;
+    --popover-foreground: 230 20% 92%;
+    --primary: 262 80% 68%;
+    --primary-foreground: 245 40% 6%;
+    --secondary: 240 25% 13%;
+    --secondary-foreground: 230 18% 88%;
+    --muted: 240 22% 14%;
+    --muted-foreground: 230 14% 58%;
+    --accent: 255 40% 22%;
+    --accent-foreground: 255 60% 86%;
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 226 28% 16%;
-    --input: 226 28% 19%;
-    --ring: 253 70% 64%;
+    --border: 240 24% 16%;
+    --input: 240 24% 18%;
+    --ring: 262 75% 66%;
 
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.25);
-    --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px -2px rgb(0 0 0 / 0.22);
-    --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 28px -8px rgb(0 0 0 / 0.35);
-    --shadow-float: 0 8px 16px -6px rgb(0 0 0 / 0.35), 0 28px 56px -16px rgb(0 0 0 / 0.45);
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-soft: 0 2px 8px -2px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.2);
+    --shadow-lift: 0 4px 16px -4px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.25);
+    --shadow-float: 0 16px 48px -8px rgb(0 0 0 / 0.5), 0 4px 16px rgb(0 0 0 / 0.3);
+    --shadow-glow: 0 0 60px -12px hsl(262 80% 68% / 0.3);
   }
 }
 
@@ -73,8 +76,8 @@
     text-rendering: optimizeLegibility;
   }
   ::selection {
-    background-color: hsl(var(--accent));
-    color: hsl(var(--accent-foreground));
+    background-color: hsl(var(--primary) / 0.2);
+    color: hsl(var(--primary));
   }
 }
 
@@ -82,43 +85,66 @@
 @layer components {
   .text-display {
     @apply text-3xl font-bold tracking-tight lg:text-4xl;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.028em;
   }
   .text-h1 {
-    @apply text-2xl font-bold tracking-tight lg:text-3xl;
-    letter-spacing: -0.02em;
+    @apply text-2xl font-bold tracking-tight lg:text-[26px];
+    letter-spacing: -0.022em;
   }
   .text-h2 {
     @apply text-lg font-semibold tracking-tight;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.012em;
   }
   .text-h3 {
     @apply text-base font-semibold tracking-tight;
   }
   .text-body {
-    @apply text-base leading-relaxed;
+    @apply text-[15px] leading-relaxed;
   }
   .text-body-sm {
-    @apply text-sm leading-relaxed;
+    @apply text-[13px] leading-relaxed;
   }
   .text-caption {
     @apply text-xs font-medium tracking-normal;
   }
   .text-eyebrow {
-    @apply text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground;
+    @apply text-[10px] font-bold uppercase tracking-[0.16em];
+    color: hsl(var(--muted-foreground));
   }
 }
 
 /* ---------- Surfaces ---------- */
 @layer components {
   .surface {
-    @apply rounded-2xl border border-border/70 bg-card;
+    @apply rounded-2xl border border-border/60 bg-card;
   }
   .surface-soft {
-    @apply rounded-2xl border border-transparent bg-secondary/70;
+    @apply rounded-2xl bg-secondary/60;
+  }
+  .surface-elevated {
+    @apply rounded-2xl bg-card shadow-lift;
+  }
+  .glass {
+    @apply rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-2xl;
+  }
+  .dark .glass {
+    @apply bg-white/[0.06] border-white/[0.08];
   }
   .separator {
-    @apply h-px w-full bg-border/70;
+    @apply h-px w-full bg-border/60;
+  }
+}
+
+/* ---------- Music accent gradient ---------- */
+@layer components {
+  .gradient-music {
+    @apply bg-gradient-to-br from-violet-600 via-purple-500 to-fuchsia-500;
+  }
+  .gradient-music-soft {
+    @apply bg-gradient-to-br from-violet-500/20 via-purple-500/10 to-fuchsia-500/20;
+  }
+  .gradient-lime {
+    @apply bg-gradient-to-br from-emerald-400 to-teal-400;
   }
 }
 
@@ -149,7 +175,7 @@
 /* ---------- Skeleton ---------- */
 @layer components {
   .skeleton {
-    @apply relative overflow-hidden bg-muted;
+    @apply relative overflow-hidden bg-muted/60;
   }
   .skeleton::after {
     content: "";
@@ -158,16 +184,17 @@
     background-image: linear-gradient(
       90deg,
       transparent 0,
-      hsl(var(--foreground) / 0.05) 40%,
+      hsl(var(--foreground) / 0.04) 40%,
       transparent 70%
     );
     animation: shimmer 1.8s ease-in-out infinite;
   }
 }
 
+/* ---------- Scrollbar ---------- */
 .page-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 .page-scroll::-webkit-scrollbar-thumb {
   border-radius: 9999px;
@@ -186,4 +213,13 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ---------- Music ambient animation ---------- */
+@keyframes ambient-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+.ambient-pulse {
+  animation: ambient-pulse 4s ease-in-out infinite;
 }

@@ -25,9 +25,16 @@ class StaffShell extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     if (auth.branch == null) return const BranchGate();
     return DrawerShell(
-      title: 'Staff App',
+      title: 'Staff',
       navItems: staffItems,
       branchChip: _BranchChip(auth.branch!),
+      sections: const [
+        (label: 'Today', keys: ['today', 'todayClasses']),
+        (label: 'Students', keys: ['students', 'addStudent', 'attendance']),
+        (label: 'Money', keys: ['addFee', 'receipts', 'expenses']),
+        (label: 'Connect', keys: ['inquiries', 'requests']),
+        (label: '', keys: ['about']),
+      ],
       buildBody: (context, key) {
         switch (key) {
           case 'todayClasses':

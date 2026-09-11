@@ -19,8 +19,15 @@ class FounderShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DrawerShell(
-      title: 'Founder App',
+      title: 'Founder',
       navItems: founderItems,
+      sections: const [
+        (label: 'Today', keys: ['home']),
+        (label: 'Students', keys: ['students', 'addStudent']),
+        (label: 'Money', keys: ['addFee', 'receipts', 'payouts', 'expenses']),
+        (label: 'People', keys: ['teachers', 'approvals']),
+        (label: '', keys: ['about']),
+      ],
       buildBody: (context, key) {
         switch (key) {
           case 'approvals':

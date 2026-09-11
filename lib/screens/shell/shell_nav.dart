@@ -22,13 +22,15 @@ class ShellNavigator extends InheritedWidget {
 }
 
 /// Drawer-driven shell reused by both apps. Each nav item maps to a body
-/// widget built lazily on selection.
+/// widget built lazily on selection. Optional `sections` group items under
+/// quiet semantic labels (premium navigation hierarchy).
 class DrawerShell extends StatefulWidget {
   const DrawerShell({
     super.key,
     required this.title,
     required this.navItems,
     required this.buildBody,
+    this.sections,
     this.headerTrailing,
     this.branchChip,
   });
@@ -36,6 +38,9 @@ class DrawerShell extends StatefulWidget {
   final String title;
   final List<({String key, String label, IconData icon})> navItems;
   final Widget Function(BuildContext, String key) buildBody;
+
+  /// Group definition: label + the item keys it contains (drawn in order).
+  final List<({String label, List<String> keys})>? sections;
   final Widget? headerTrailing;
   final Widget? branchChip;
 
@@ -120,78 +125,138 @@ class _DrawerShellState extends State<DrawerShell> {
   Widget _drawer(BuildContext context, AuthProvider auth) {
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return NavigationDrawer(
-      backgroundColor: dark ? AppColors.dSurfaceAlt : AppColors.surface,
-      indicatorColor: AppColors.primary,
-      onDestinationSelected: (i) { _go(widget.navItems[i].key); },
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpace.s4, AppSpace.s5, AppSpace.s4, AppSpace.s2),
-          child: Row(children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.music_note, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: AppSpace.s3),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.title,
-                    style: TextStyle(
-                        color: scheme.onSurface,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15)),
-                Text('AcademyOS', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+    return Drawer(
+      backgroundColor: dark ? AppColors.dSurface : AppColors.surface,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            right: BorderSide(color: scheme.outlineVariant.withValues(alpha: .6)),
+          ),
+        ),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            // Brand lockup — quiet monogram + two-line wordmark + descriptor.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpace.s4, AppSpace.s6, AppSpace.s4, AppSpace.s4),
+              child: Row(children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: .35),
+                        blurRadius: 14,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.music_note, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: AppSpace.s3),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('SWAR',
+                      style: AppType.title.copyWith(
+                          color: scheme.onSurface, letterSpacing: 3, fontSize: 16)),
+                  Text('MANGAL',
+                      style: AppType.title.copyWith(
+                          color: scheme.onSurface, letterSpacing: 3, fontSize: 16)),
+                  Text('Music Academy',
+                      style: AppType.eyebrow.copyWith(
+                          color: scheme.onSurfaceVariant, fontSize: 10)),
+                ]),
               ]),
             ),
-          ]),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: AppSpace.s3),
-          child: Divider(color: scheme.outlineVariant, thickness: 1),
-        ),
-        const SizedBox(height: AppSpace.s2),
-        for (final item in widget.navItems)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3, vertical: 2),
-            child: ListTile(
-              selected: _current == item.key,
-              selectedTileColor: scheme.primary.withValues(alpha: dark ? .16 : .12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
-              leading: Icon(item.icon, size: 20,
-                  color: _current == item.key ? AppColors.primary : scheme.onSurfaceVariant),
-              title: Text(item.label,
-                  style: TextStyle(
-                      color: _current == item.key ? scheme.onSurface : scheme.onSurfaceVariant,
-                      fontWeight: _current == item.key ? FontWeight.w800 : FontWeight.w500,
-                      fontSize: 14)),
-              dense: true,
-              minTileHeight: 44,
-              onTap: () => _go(item.key),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.s4),
+              child: Divider(color: scheme.outlineVariant, height: 1),
             ),
-          ),
-        const Spacer(),
-        Padding(
-          padding: const EdgeInsets.all(AppSpace.s4),
-          child: Row(children: [
-            Expanded(
-              child: Text(
-                '${auth.operator?.role ?? ''}\n${auth.operator?.email ?? ''}',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+            const SizedBox(height: AppSpace.s2),
+            // Grouped navigation with quiet section labels.
+            for (final group in _groups) ...[
+              if (group.label.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpace.s5, AppSpace.s3, AppSpace.s5, AppSpace.s2),
+                  child: Text(group.label,
+                      style: AppType.eyebrow.copyWith(
+                        color: scheme.onSurfaceVariant.withValues(alpha: .75),
+                        fontSize: 10,
+                      )),
+                ),
+              for (final item in group.items) _navTile(item, scheme, dark),
+            ],
+            const SizedBox(height: AppSpace.s3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<({String label, List<({String key, String label, IconData icon})> items})> get _groups {
+    if (widget.sections == null || widget.sections!.isEmpty) {
+      return [(label: '', items: widget.navItems)];
+    }
+    final byKey = <String, ({String key, String label, IconData icon})>{
+      for (final it in widget.navItems) it.key: it,
+    };
+    return [
+      for (final s in widget.sections!)
+        (label: s.label, items: [for (final k in s.keys) if (byKey.containsKey(k)) byKey[k]!]),
+    ];
+  }
+
+  Widget _navTile(({String key, String label, IconData icon}) item,
+      ColorScheme scheme, bool dark) {
+    final selected = _current == item.key;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3 + 2, vertical: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _go(item.key),
+          borderRadius: BorderRadius.circular(AppRadius.m),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3),
+            decoration: BoxDecoration(
+              color: selected
+                  ? scheme.primary.withValues(alpha: dark ? .18 : .10)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.m),
+            ),
+            child: Row(children: [
+              Icon(
+                selected ? item.icon : item.icon,
+                size: 18,
+                color: selected ? AppColors.primary : scheme.onSurfaceVariant,
               ),
-            ),
-            IconButton(
-              icon: Icon(Icons.info_outline, color: scheme.onSurfaceVariant, size: 20),
-              onPressed: () => Navigator.pop(context),
-              tooltip: 'About',
-            ),
-          ]),
+              const SizedBox(width: AppSpace.s3),
+              Expanded(
+                child: Text(
+                  item.label,
+                  style: TextStyle(
+                    color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (selected)
+                Container(
+                  width: 3,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+            ]),
+          ),
         ),
-      ],
+      ),
     );
   }
 }

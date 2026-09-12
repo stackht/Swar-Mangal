@@ -3,61 +3,27 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import { teachers, students } from "@/lib/data/demo";
 import type { Profile, Role } from "@/types";
 
-const DEMO_KEY = "maestro-demo-user";
-
-export interface DemoUser extends Profile {
+export interface SessionUser extends Profile {
   instrument?: string;
   level?: string;
 }
 
 interface AuthContextValue {
-  user: DemoUser | null;
+  user: SessionUser | null;
   role: Role | null;
   isLoading: boolean;
-  isSupabase: boolean;
-  loginDemo: (role: Role) => void;
-  loginSupabase: (email: string, password: string) => Promise<{ error?: string }>;
+  login: (email: string, password: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   refresh: () => void;
 }
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
 
-const demoProfiles: Record<Role, DemoUser[]> = {
-  admin: [
-    {
-      id: "admin",
-      email: "admin@maestro.app",
-      full_name: "Marcus Reed",
-      role: "admin",
-      avatar_url: null,
-    },
-  ],
-  teacher: teachers.map((t) => ({
-    ...t,
-    role: "teacher" as Role,
-  })),
-  student: students.map((s) => ({
-    ...s,
-    role: "student" as Role,
-  })),
-  parent: [
-    {
-      id: "parent",
-      email: "parent@maestro.app",
-      full_name: "Rohan Sharma",
-      role: "parent",
-      avatar_url: null,
-    },
-  ],
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [user, setUser] = React.useState<DemoUser | null>(null);
+  const [user, setUser] = React.useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -75,30 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {})
-      .finally(() => {
-        const raw = localStorage.getItem(DEMO_KEY);
-        if (raw && !user) {
-          try {
-            setUser(JSON.parse(raw));
-          } catch {
-            localStorage.removeItem(DEMO_KEY);
-          }
-        }
-        setIsLoading(false);
-      });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const loginDemo = (role: Role) => {
-    const pool = demoProfiles[role];
-    const profile = pool[0];
-    localStorage.setItem(DEMO_KEY, JSON.stringify(profile));
-    setUser(profile);
-    router.push(`/${role === "admin" ? "admin" : `${role}`}`);
-  };
-
-  const loginSupabase = async (email: string, password: string) => {
+  const login = async (email: string, password: string) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -123,7 +69,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await fetch("/api/auth/me", { method: "POST" });
     } catch {}
     setUser(null);
-    localStorage.removeItem(DEMO_KEY);
     router.push("/login");
   };
 
@@ -135,9 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         role: user?.role ?? null,
         isLoading,
-        isSupabase: true,
-        loginDemo,
-        loginSupabase,
+        login,
         logout,
         refresh,
       }}

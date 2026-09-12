@@ -1,10 +1,34 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { createHash, randomBytes, scryptSync } from "node:crypto";
 import pg from "pg";
 
 const { Client } = pg;
 const here = dirname(fileURLToPath(import.meta.url));
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+async function ensureUser(client, { email, password, role, fullName }) {
+  const hash = hashPassword(password);
+  const inserted = await client.query(
+    `insert into users (email, password_hash, role) values ($1, $2, $3)
+     on conflict (email) do update set password_hash = excluded.password_hash, role = excluded.role
+     returning id`,
+    [email, hash, role],
+  );
+  const userId = inserted.rows[0].id;
+  await client.query(
+    `insert into profiles (user_id, email, full_name, role) values ($1, $2, $3, $4)
+     on conflict (user_id) do update set full_name = excluded.full_name, role = excluded.role`,
+    [userId, email, fullName, role],
+  );
+  return userId;
+}
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -49,6 +73,13 @@ async function main() {
       console.error("academyos_import FAILED:", err.message);
       throw err;
     }
+
+    // Login users — passwords from env (APPLY auto-creates/updates on each boot).
+    const adminPw = process.env.ADMIN_PASSWORD || "Admin@123";
+    const teacherPw = process.env.TEACHER_PASSWORD || "Teacher@123";
+    await ensureUser(client, { email: "admin@maestro.app", password: adminPw, role: "admin", fullName: "Academy Admin" });
+    await ensureUser(client, { email: "teacher@maestro.app", password: teacherPw, role: "teacher", fullName: "Academy Teacher" });
+    console.log("users ensured (admin/teacher, passwords from env)");
 
     const r = await client.query(
       "select (select count(*) from students) as students, (select count(*) from students_acad) as students_acad, (select count(*) from teachers_acad) as teachers_acad, (select count(*) from receipts) as receipts, (select count(*) from attendance_acad) as attendance, (select count(*) from inquiries) as inquiries",

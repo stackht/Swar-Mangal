@@ -1,18 +1,7 @@
 -- Swar Mangal Academy — seed data (Railway Postgres)
 -- Demo-faithful IDs (s1, t1, c1, th1…) so existing screen filters keep resolving.
 -- Idempotent: safe to run repeatedly.
-
-insert into users (email, password_hash, role) values
-  ('admin@maestro.app', 'e0b84d44b180c151b860b3653310a0af:bd7178af945c4ce089da7a06c0710b1b93f2794037ab7d506b2f0733c14b131ccb5dd3d446c57f69152dee144d7c7c95a039295490a5231410197517a2b063b7', 'admin'),
-  ('sarah.mitchell@maestro.app', 'e0b84d44b180c151b860b3653310a0af:bd7178af945c4ce089da7a06c0710b1b93f2794037ab7d506b2f0733c14b131ccb5dd3d446c57f69152dee144d7c7c95a039295490a5231410197517a2b063b7', 'teacher'),
-  ('aarav.sharma@maestro.app', 'e0b84d44b180c151b860b3653310a0af:bd7178af945c4ce089da7a06c0710b1b93f2794037ab7d506b2f0733c14b131ccb5dd3d446c57f69152dee144d7c7c95a039295490a5231410197517a2b063b7', 'student')
-on conflict (email) do update set password_hash = excluded.password_hash;
-
-insert into profiles (user_id, email, full_name, role) values
-  ((select id from users where email = 'admin@maestro.app'), 'admin@maestro.app', 'Marcus Reed', 'admin'),
-  ((select id from users where email = 'sarah.mitchell@maestro.app'), 'sarah.mitchell@maestro.app', 'Sarah Mitchell', 'teacher'),
-  ((select id from users where email = 'aarav.sharma@maestro.app'), 'aarav.sharma@maestro.app', 'Aarav Sharma', 'student')
-on conflict (user_id) do nothing;
+-- Login users (admin/teacher) are upserted by db/apply.mjs from ADMIN_PASSWORD / TEACHER_PASSWORD env vars.
 
 insert into instruments (id, name, icon, color) values
   ('inst-1', 'Piano', 'Piano', '#8d6bf6'),

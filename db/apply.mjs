@@ -42,12 +42,13 @@ async function main() {
     console.log("seed applied", seedStatements.length, "statements");
 
     const real = readFileSync(join(here, "academyos_import.sql"), "utf8");
-    const realStatements = real
-      .split(";")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    await runStatements(client, realStatements, "academyos_import");
-    console.log("academyos_import applied", realStatements.length, "statements");
+    try {
+      await client.query(real);
+      console.log("academyos_import applied (single batch)");
+    } catch (err) {
+      console.error("academyos_import FAILED:", err.message);
+      throw err;
+    }
 
     const r = await client.query(
       "select (select count(*) from students) as students, (select count(*) from students_acad) as students_acad, (select count(*) from teachers_acad) as teachers_acad, (select count(*) from receipts) as receipts, (select count(*) from attendance_acad) as attendance, (select count(*) from inquiries) as inquiries",

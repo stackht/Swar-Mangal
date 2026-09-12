@@ -1048,18 +1048,15 @@ class InvoiceOwner {
   final String title;
 }
 
-/// Authoritative school-invoice snapshot (never reconstructed from student data).
+/// Authoritative SCHOOL-LEVEL invoice snapshot. No student dependency: the
+/// document bills a CLASS, not a student, at the school level.
 class SchoolInvoice {
   SchoolInvoice({
     required this.invoiceId,
     required this.invoiceNo,
     required this.invoiceDate,
-    required this.studentId,
-    required this.studentName,
-    required this.className,
-    required this.course,
-    required this.teacherName,
     required this.branch,
+    required this.className,
     required this.amount,
     required this.tenure,
     required this.owner1,
@@ -1078,12 +1075,8 @@ class SchoolInvoice {
       invoiceId: _s(b['invoiceId']),
       invoiceNo: _s(b['invoiceNo']),
       invoiceDate: _s(b['invoiceDate']),
-      studentId: _s(b['studentId']),
-      studentName: _s(b['studentName']),
+      branch: _s(b['branch'] ?? b['classCode']),
       className: _s(b['className']),
-      course: _s(b['course'] ?? b['instrument']),
-      teacherName: _s(b['teacherName'] ?? b['teacher']),
-      branch: _s(b['branch']),
       amount: _n(b['amount']),
       tenure: _s(b['tenure']),
       pdfUrl: _s(b['pdfUrl']),
@@ -1095,25 +1088,17 @@ class SchoolInvoice {
   final String invoiceId;
   final String invoiceNo;
   final String invoiceDate;
-  final String studentId;
-  final String studentName;
-  final String className;
-  final String course;
-  final String teacherName;
   final String branch;
+  final String className;
   final num amount;
   final String tenure;
   final String pdfUrl;
   final bool demo;
   final InvoiceOwner owner1;
   final InvoiceOwner owner2;
-
-  /// Class name resolution — className, else course, else '—' (never fabricated).
-  String get displayClassName =>
-      className.isNotEmpty ? className : (course.isNotEmpty ? course : '—');
 }
 
-/// Invoice list row (history).
+/// Invoice list row (school-level history, no student).
 class InvoiceSummary {
   InvoiceSummary({
     required this.invoiceNo,
@@ -1121,6 +1106,7 @@ class InvoiceSummary {
     required this.tenure,
     required this.amount,
     required this.invoiceId,
+    required this.className,
   });
   factory InvoiceSummary.fromApi(Map<String, dynamic> b) => InvoiceSummary(
         invoiceNo: _s(b['invoiceNo']),
@@ -1128,15 +1114,17 @@ class InvoiceSummary {
         tenure: _s(b['tenure']),
         amount: _n(b['amount']),
         invoiceId: _s(b['invoiceId']),
+        className: _s(b['className']),
       );
   final String invoiceNo;
   final String invoiceDate;
   final String tenure;
   final num amount;
   final String invoiceId;
+  final String className;
 }
 
-/// Invoice input validation — amount numeric > 0, tenure non-empty.
+/// Invoice input validation — amount numeric > 0, tenure + class required.
 class InvoiceValidator {
   InvoiceValidator._();
 
@@ -1147,6 +1135,103 @@ class InvoiceValidator {
     return (ok: true, error: null, amount: v);
   }
 
-  static String? tenure(String raw) =>
-      raw.trim().isEmpty ? 'Pick a tenure.' : null;
+  static String? tenure(String raw) => raw.trim().isEmpty ? 'Pick a tenure.' : null;
+
+  static String? className(String raw) => raw.trim().isEmpty ? 'Class name is required.' : null;
+}
+
+/// Day-of-week for the timetable (0 = Monday … 6 = Sunday, ISO).
+const timetableDayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+/// One scheduled class on the branch timetable.
+class TimetableEntry {
+  const TimetableEntry({
+    required this.id,
+    required this.branch,
+    required this.dayOfWeek,
+    required this.startTime,
+    required this.endTime,
+    required this.className,
+    this.teacherId = '',
+    this.teacherName = '',
+    this.status = 'ENABLED',
+  });
+  factory TimetableEntry.fromApi(Map<String, dynamic> b) => TimetableEntry(
+        id: _s(b['id']),
+        branch: _s(b['branch']),
+        dayOfWeek: (b['dayOfWeek'] as num?)?.toInt() ?? 0,
+        startTime: _s(b['startTime']),
+        endTime: _s(b['endTime']),
+        className: _s(b['className'] ?? b['instrument']),
+        teacherId: _s(b['teacherId']),
+        teacherName: _s(b['teacherName'] ?? b['teacher']),
+        status: _s(b['status']).toUpperCase().isEmpty ? 'ENABLED' : _s(b['status']).toUpperCase(),
+      );
+  Map<String, dynamic> toWrite() => {
+        'id': id,
+        'branch': branch,
+        'dayOfWeek': dayOfWeek,
+        'startTime': startTime,
+        'endTime': endTime,
+        'className': className,
+        'teacherId': teacherId,
+        'teacherName': teacherName,
+        'status': status,
+      };
+  final String id;
+  final String branch;
+  final int dayOfWeek;
+  final String startTime;
+  final String endTime;
+  final String className;
+  final String teacherId;
+  final String teacherName;
+  final String status;
+
+  String get dayLabel => dayOfWeek >= 0 && dayOfWeek < timetableDayNames.length ? timetableDayNames[dayOfWeek] : '?';
+  bool get enabled => status == 'ENABLED';
+
+  /// Human time "5:00 PM" from a "17:00" (HH:mm) value.
+  String get timeLabelStart => time12(startTime);
+  String get timeLabelEnd => time12(endTime);
+
+  static String time12(String t) {
+    final p = t.split(':');
+    if (p.length < 2) return t;
+    final h = int.tryParse(p[0]) ?? 0;
+    final m = p[1];
+    final suffix = h >= 12 ? 'PM' : 'AM';
+    final hh = h % 12 == 0 ? 12 : h % 12;
+    return '$hh:$m $suffix';
+  }
+}
+
+/// Timetable edit validation — time ordering + required fields.
+class TimetableValidator {
+  TimetableValidator._();
+
+  static String? time(String raw) {
+    if (!RegExp(r'^\d{2}:\d{2}$').hasMatch(raw.trim())) return 'Time must be HH:mm.';
+    final p = raw.split(':');
+    final h = int.parse(p[0]);
+    final m = int.parse(p[1]);
+    if (h < 0 || h > 23 || m < 0 || m > 59) return 'Time out of range.';
+    return null;
+  }
+
+  static ({bool ok, String? error}) range(String start, String end) {
+    if (time(start) != null) return (ok: false, error: 'Start: ${time(start)}');
+    if (time(end) != null) return (ok: false, error: 'End: ${time(end)}');
+    if (start.compareTo(end) >= 0) return (ok: false, error: 'End time must be after start time.');
+    return (ok: true, error: null);
+  }
+
+  static String? className(String raw) => raw.trim().isEmpty ? 'Class / instrument is required.' : null;
+}
+
+/// Timetable edit access policy (UI convenience; backend stays authoritative).
+class TimetablePolicy {
+  TimetablePolicy._();
+
+  static bool canEdit({required bool staff}) => !staff;
 }

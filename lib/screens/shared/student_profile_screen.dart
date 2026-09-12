@@ -9,8 +9,6 @@ import '../../widgets/atoms.dart';
 import 'fee_collection_screen.dart';
 import 'message_compose_screen.dart';
 import 'teacher_profile_screen.dart';
-import 'invoice_config_screen.dart';
-import 'invoice_detail_screen.dart';
 
 /// Student profile — the shared one-screen view of a student for both apps.
 class StudentProfileScreen extends StatefulWidget {
@@ -23,7 +21,6 @@ class StudentProfileScreen extends StatefulWidget {
 
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
   List<ReceiptRow> _receipts = [];
-  List<InvoiceSummary> _invoices = [];
   StaffHub? _hub;
   StudentProfileDetail? _detail;
   String? _error;
@@ -34,25 +31,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     super.initState();
     _loadReceipts();
     _loadDetail();
-    _loadInvoices();
     if (widget.staff) _loadHub();
-  }
-
-  Future<void> _loadInvoices() async {
-    final auth = context.read<AuthProvider>();
-    if (auth.service == null) return;
-    try {
-      final invoices = await auth.service!.listStudentInvoices(
-        widget.student.studentId,
-        branch: auth.branch ?? 'ALL',
-      );
-      if (!mounted) return;
-      setState(() => _invoices = invoices);
-    } on ApiException {
-      // invoice history endpoint absent — section hidden, never faked
-    } on ApiUnreachable {
-      // same
-    }
   }
 
   /// Best-effort richer detail (backend profile endpoint). Live deployments
@@ -332,14 +311,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             ),
             const SizedBox(height: AppSpace.s3),
             OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => InvoiceConfigScreen(student: s, staff: widget.staff),
-              )),
-              icon: const Icon(Icons.receipt_long_outlined, size: 18),
-              label: const Text('Generate School Invoice'),
-            ),
-            const SizedBox(height: AppSpace.s3),
-            OutlinedButton.icon(
               style: OutlinedButton.styleFrom(foregroundColor: AppColors.focus),
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => MessageComposeScreen(
@@ -400,32 +371,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   ),
                 ),
             ],
-            SectionTitle('Invoices'),
-            if (_invoices.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(AppSpace.s3),
-                  child: Text('No invoices issued for this student yet.',
-                      style: TextStyle(fontSize: 12, color: AppColors.muted)),
-                ),
-              )
-            else
-              for (final inv in _invoices)
-                Card(
-                  margin: const EdgeInsets.only(bottom: AppSpace.s2),
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: 4),
-                    leading: const Icon(Icons.description_outlined, color: AppColors.muted),
-                    title: Text(inv.invoiceNo, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                    subtitle: Text('${inv.tenure} · ${inr(inv.amount)} · ${inv.invoiceDate}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => InvoiceDetailScreen(invoiceId: inv.invoiceId, staff: widget.staff),
-                    )),
-                  ),
-                ),
             SectionTitle('Receipts${_busy ? ' …' : ''}'),
             if (_error != null) Card(child: Padding(padding: const EdgeInsets.all(AppSpace.s3), child: ErrorView(_error!, onRetry: _loadReceipts, compact: true)))
             else if (_receipts.isEmpty && !_busy)

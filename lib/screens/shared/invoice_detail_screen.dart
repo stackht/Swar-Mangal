@@ -38,7 +38,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       _error = null;
     });
     try {
-      final inv = await auth.service!.getStudentInvoice(
+      final inv = await auth.service!.getSchoolInvoice(
         widget.invoiceId,
         branch: auth.branch ?? 'ALL',
       );
@@ -98,16 +98,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               ]),
             ),
           ),
-          const SectionTitle('Billed to'),
+          const SectionTitle('Issued to'),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.s4),
               child: Column(children: [
-                InfoRow('Student', inv.studentName),
-                InfoRow('Student ID', inv.studentId),
-                InfoRow('Class', inv.displayClassName),
-                InfoRow('Course', inv.course.isNotEmpty ? inv.course : '—'),
-                InfoRow('Teacher', inv.teacherName.isNotEmpty ? inv.teacherName : '—'),
+                InfoRow('Class', inv.className.isNotEmpty ? inv.className : '—'),
                 InfoRow('Branch', inv.branch.isNotEmpty ? inv.branch : '—'),
                 InfoRow('Invoice date', inv.invoiceDate.isNotEmpty ? inv.invoiceDate : '—'),
               ]),

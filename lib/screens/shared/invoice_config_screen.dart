@@ -8,20 +8,19 @@ import '../../state/auth_provider.dart';
 import '../../services/invoice_pdf.dart';
 import '../../widgets/atoms.dart';
 
-/// School-invoice generation: one primary action.
-/// Identity is prefilled from the student and NOT editable; amount + tenure
-/// are editable. Backend assigns the number + snapshot; Flutter renders the
-/// PDF. One intent key per screen prevents duplicate invoices.
+/// School-level invoice editor. Fields are class/amount/tenure/date — NO
+/// student identity. One primary "Generate PDF" action; one intent key per
+/// form prevents duplicate invoices on retry/double-tap.
 class InvoiceConfigScreen extends StatefulWidget {
-  const InvoiceConfigScreen({super.key, required this.student, required this.staff});
-  final Student student;
+  const InvoiceConfigScreen({super.key, required this.staff});
   final bool staff;
   @override
   State<InvoiceConfigScreen> createState() => _InvoiceConfigScreenState();
 }
 
 class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
-  final _amount = TextEditingController();
+  final _amount = TextEditingController(text: '18000');
+  final _class = TextEditingController();
   final _intent = 'SINV-${DateTime.now().microsecondsSinceEpoch}';
   String _tenure = '6 Months';
   String _invoiceDate = '';
@@ -33,8 +32,6 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
   @override
   void initState() {
     super.initState();
-    final suggested = num.tryParse(widget.student.lastReceiptAmount) ?? 18000;
-    _amount.text = '${suggested > 0 ? suggested : 18000}';
     final n = DateTime.now();
     _invoiceDate = '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
   }
@@ -42,6 +39,7 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
   @override
   void dispose() {
     _amount.dispose();
+    _class.dispose();
     super.dispose();
   }
 
@@ -58,13 +56,18 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
       setState(() => _error = tErr);
       return;
     }
+    final cErr = InvoiceValidator.className(_class.text);
+    if (cErr != null) {
+      setState(() => _error = cErr);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
       final inv = await auth.service!.generateSchoolInvoice(
-        studentId: widget.student.studentId,
+        className: _class.text.trim(),
         amount: a.amount!,
         tenure: _tenure,
         invoiceDate: _invoiceDate,
@@ -86,7 +89,7 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e.message; // keep the entered values; retry is safe (intent key)
+        _error = e.message; // keep entered values; retry uses the same intent key
       });
     } on ApiUnreachable catch (e) {
       if (!mounted) return;
@@ -99,8 +102,7 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.student;
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('School invoice')),
       body: ListView(
@@ -110,32 +112,33 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.s4),
               child: Column(children: [
-                InfoRow('Student', s.studentName),
-                InfoRow('Student ID', s.studentId),
-                InfoRow('Class', s.className.isNotEmpty ? s.className : (s.instrument.isNotEmpty ? s.instrument : '—')),
-                InfoRow('Course / Instrument', s.instrument.isNotEmpty ? s.instrument : '—'),
-                InfoRow('Teacher', s.teacher.isNotEmpty ? s.teacher : '—'),
-                InfoRow('Branch', s.location.isNotEmpty ? s.location : (s.classCode.isNotEmpty ? s.classCode : '—')),
-              ]),
-            ),
-          ),
-          const SizedBox(height: AppSpace.s3),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpace.s4),
-              child: Column(children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('CLASS',
+                      style: AppType.eyebrow.copyWith(color: scheme.onSurfaceVariant)),
+                ),
+                const SizedBox(height: AppSpace.s2),
+                TextFormField(
+                  controller: _class,
+                  decoration: const InputDecoration(
+                    labelText: 'Class name *',
+                    hintText: 'e.g. Keyboard',
+                    prefixIcon: Icon(Icons.music_note_outlined),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.s3),
                 TextFormField(
                   controller: _amount,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
-                      labelText: 'Invoice amount (INR)',
+                      labelText: 'Invoice amount (INR) *',
                       prefixIcon: Icon(Icons.currency_rupee)),
                 ),
                 const SizedBox(height: AppSpace.s3),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text('TENURE',
-                      style: AppType.eyebrow.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      style: AppType.eyebrow.copyWith(color: scheme.onSurfaceVariant)),
                 ),
                 const SizedBox(height: AppSpace.s2),
                 Wrap(
@@ -197,9 +200,9 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
           ),
           const SizedBox(height: AppSpace.s3),
           Text(
-            'Identity comes from the backend. Amount and tenure are editable here — an invoice is a '
-            'separate document and never silently changes the student\'s fee plan.',
-            style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+            'School-level invoice — no student is attached. The backend assigns the number and persists '
+            'an immutable snapshot; the app only renders the PDF.',
+            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
           ),
         ],
       ),

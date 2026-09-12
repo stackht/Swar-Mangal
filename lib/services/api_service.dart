@@ -115,11 +115,12 @@ class ApiService {
   }
 
   // ---------------------------------------------------------- school invoices
-  /// Generates a school invoice for a student and returns the authoritative
-  /// snapshot. Backend assigns the number + records the snapshot; Flutter
-  /// renders the PDF. Intent key stays stable per attempt (no duplicates).
+  /// Generates a SCHOOL-LEVEL invoice (class/amount/tenure, no student) and
+  /// returns the authoritative snapshot. Backend assigns the number + persists
+  /// the immutable snapshot; Flutter renders the PDF. One intent key per form
+  /// prevents duplicate invoices.
   Future<SchoolInvoice> generateSchoolInvoice({
-    required String studentId,
+    required String className,
     required num amount,
     required String tenure,
     String invoiceDate = '',
@@ -127,7 +128,7 @@ class ApiService {
     required String intentKey,
   }) async {
     final b = await _api.call('api_generateSchoolInvoice', {
-      'studentId': studentId,
+      'className': className,
       'amount': amount,
       'tenure': tenure,
       if (invoiceDate.isNotEmpty) 'invoiceDate': invoiceDate,
@@ -137,9 +138,9 @@ class ApiService {
     return SchoolInvoice.fromApi(b as Map<String, dynamic>);
   }
 
-  /// Invoice history for a student (snapshot rows — never current-profile data).
-  Future<List<InvoiceSummary>> listStudentInvoices(String studentId, {String branch = 'ALL'}) async {
-    final b = await _api.call('api_listStudentInvoices', {'studentId': studentId, 'branch': branch});
+  /// School-level invoice history (global). No student dimension.
+  Future<List<InvoiceSummary>> listSchoolInvoices({String branch = 'ALL'}) async {
+    final b = await _api.call('api_listSchoolInvoices', {'branch': branch});
     return ((b as Map)['invoices'] as List?)
             ?.whereType<Map<String, dynamic>>()
             .map(InvoiceSummary.fromApi)
@@ -147,12 +148,34 @@ class ApiService {
         [];
   }
 
-  /// Open one stored invoice snapshot (historical data — never rebuilt from
-  /// the student's current profile).
-  Future<SchoolInvoice> getStudentInvoice(String invoiceId, {String branch = 'ALL'}) async {
-    final b = await _api.call('api_getStudentInvoice', {'invoiceId': invoiceId, 'branch': branch});
+  /// Open one stored school-invoice snapshot (immutable — never rebuilt from
+  /// current configuration).
+  Future<SchoolInvoice> getSchoolInvoice(String invoiceId, {String branch = 'ALL'}) async {
+    final b = await _api.call('api_getSchoolInvoice', {'invoiceId': invoiceId, 'branch': branch});
     return SchoolInvoice.fromApi((b as Map)['invoice'] as Map<String, dynamic>);
   }
+
+  // -------------------------------------------------------------- timetable
+  /// Branch timetable. Seed is backend-owned and applied only when the
+  /// timetable has never been initialised — founder edits are never
+  /// overwritten on app start.
+  Future<List<TimetableEntry>> timetableList({String branch = 'ALL'}) async {
+    final b = await _api.call('api_timetableList', {'branch': branch});
+    return ((b as Map)['entries'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(TimetableEntry.fromApi)
+            .toList() ??
+        [];
+  }
+
+  Future<dynamic> timetableCreate(Map<String, dynamic> form) =>
+      _api.call('api_timetableCreate', form);
+
+  Future<dynamic> timetableUpdate(String id, Map<String, dynamic> form) =>
+      _api.call('api_timetableUpdate', {'id': id, ...form});
+
+  Future<dynamic> timetableDelete(String id) =>
+      _api.call('api_timetableDelete', {'id': id});
 
 // -------------------------------------------------------------- teachers
   Future<List<Teacher>> listTeachers() async {

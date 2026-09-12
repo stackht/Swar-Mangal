@@ -14,6 +14,8 @@ import '../shared/receipts_screen.dart';
 import '../shared/students_screen.dart';
 import '../shared/todays_classes_screen.dart';
 import '../shared/my_requests_screen.dart';
+import '../shared/timetable_screen.dart';
+import '../shared/school_invoice_screen.dart';
 
 /// Staff surface. Branch-gated: every read/write is isolated to the branch
 /// picked by the operator at the door (server-enforced, same rule as web).
@@ -44,6 +46,7 @@ class StaffShell extends StatelessWidget {
           (label: 'Students', keys: ['students', 'addStudent', 'attendance']),
           (label: 'Money', keys: ['addFee', 'receipts', 'expenses']),
           (label: 'Connect', keys: ['inquiries', 'requests']),
+          (label: 'Academy', keys: ['timetable', 'schoolInvoice']),
           (label: '', keys: ['about']),
         ],
         buildBody: (context, key) {
@@ -66,6 +69,10 @@ class StaffShell extends StatelessWidget {
               return const InquiriesScreen();
             case 'requests':
               return const MyRequestsScreen();
+            case 'timetable':
+              return const TimetableScreen(staff: true);
+            case 'schoolInvoice':
+              return const SchoolInvoiceScreen(staff: true);
             case 'about':
               return const AboutScreen(staff: true);
             case 'today':

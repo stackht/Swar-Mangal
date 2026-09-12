@@ -1,4 +1,6 @@
 import '../core/api.dart';
+import '../data/kandivali_timetable_seed.dart';
+import '../models/models.dart';
 
 String _slice10(dynamic v) {
   final s = v == null ? '' : v.toString();
@@ -7,12 +9,19 @@ String _slice10(dynamic v) {
 
 /// Offline demo backend. Returns realistic canned payloads for every call the
 /// screens make, so the whole UI can be smoke-tested on a device with no
-/// network and no deployed gateway. Zero writes ever.
+/// network and no deployed gateway. Zero real writes ever.
 class DemoApiClient extends ApiClient {
   DemoApiClient({this.branch = 'ALL'})
       : super(execUrl: 'demo://local', token: 'demo');
 
   final String branch;
+
+  /// In-memory timetable. Seeded once from the Kandivali seed on the first
+  /// `timetableList`; founder edits afterwards are never reseeded or
+  /// overwritten (mirrors the backend's idempotent seed contract).
+  List<TimetableEntry>? _timetable;
+  List<TimetableEntry> get _tt =>
+      _timetable ??= kandivaliTimetableSeed.map((e) => e).toList();
 
   /// Write endpoints that must carry DEMO provenance (no real write happens).
   static const _writes = <String>{
@@ -37,6 +46,9 @@ class DemoApiClient extends ApiClient {
     'api_founder_mergeStudentDraft',
     'api_updateTeacherCompensation',
     'api_generateSchoolInvoice',
+    'api_timetableCreate',
+    'api_timetableUpdate',
+    'api_timetableDelete',
   };
 
   @override
@@ -137,10 +149,18 @@ class DemoApiClient extends ApiClient {
         };
       case 'api_generateSchoolInvoice':
         return _schoolInvoice(a);
-      case 'api_listStudentInvoices':
+      case 'api_listSchoolInvoices':
         return _schoolInvoicesList(a);
-      case 'api_getStudentInvoice':
+      case 'api_getSchoolInvoice':
         return _schoolInvoiceDetail(a);
+      case 'api_timetableList':
+        return _timetableList(a);
+      case 'api_timetableCreate':
+        return _timetableCreate(a);
+      case 'api_timetableUpdate':
+        return _timetableUpdate(a);
+      case 'api_timetableDelete':
+        return _timetableDelete(a);
       case 'api_staff_studentHub':
         return _staffStudentHub(a);
       case 'api_teacherProfile':
@@ -1148,25 +1168,14 @@ class DemoApiClient extends ApiClient {
   }
 
   Map<String, dynamic> _schoolInvoice(Map<String, dynamic> a) {
-    final sid = _s(a['studentId'] ?? '');
-    final rows = _studentRows();
-    final s = sid.isEmpty
-        ? rows.first
-        : rows.where((r) => r['studentId'] == sid).isNotEmpty
-            ? rows.firstWhere((r) => r['studentId'] == sid)
-            : rows.first;
     final no = 'INV-DEMO-${98000 + (a['amount'] as num).toInt()}';
     return {
       'ok': true,
       'invoiceId': 'SINV-DEMO-${DateTime.now().microsecondsSinceEpoch}',
       'invoiceNo': no,
       'invoiceDate': a['invoiceDate'] ?? '2026-09-12',
-      'studentId': s['studentId'],
-      'studentName': s['studentName'],
-      'className': s['className'],
-      'course': s['instrument'],
-      'teacherName': s['teacher'],
-      'branch': s['location'],
+      'branch': a['branch'] ?? 'KANDIVALI',
+      'className': a['className'] ?? '',
       'amount': a['amount'] ?? 0,
       'tenure': a['tenure'] ?? '6 Months',
       'owner1': {'name': 'Sharvil Vaidya', 'id': 'OWNER-1', 'signatureUrl': '', 'title': 'Owner 1'},
@@ -1185,6 +1194,7 @@ class DemoApiClient extends ApiClient {
           'tenure': '6 Months',
           'amount': 18000,
           'invoiceId': 'SINV-DEMO-1',
+          'className': 'Keyboard',
         },
         {
           'invoiceNo': 'INV-DEMO-97887',
@@ -1192,6 +1202,7 @@ class DemoApiClient extends ApiClient {
           'tenure': '3 Months',
           'amount': 9000,
           'invoiceId': 'SINV-DEMO-2',
+          'className': 'Flute',
         },
       ],
     };
@@ -1199,17 +1210,74 @@ class DemoApiClient extends ApiClient {
 
   Map<String, dynamic> _schoolInvoiceDetail(Map<String, dynamic> a) {
     final idIn = _s(a['invoiceId'] ?? '');
-    final map = _schoolInvoice({'studentId': '', 'amount': 18000, 'tenure': '6 Months', 'invoiceDate': '2026-09-12'});
+    final map = _schoolInvoice({'amount': 18000, 'tenure': '6 Months', 'invoiceDate': '2026-09-12', 'className': 'Keyboard', 'branch': 'KANDIVALI'});
     map['invoiceId'] = idIn == 'SINV-DEMO-2' ? 'SINV-DEMO-2' : 'SINV-DEMO-1';
     map['invoiceNo'] = idIn == 'SINV-DEMO-2' ? 'INV-DEMO-97887' : 'INV-DEMO-98000';
     if (idIn == 'SINV-DEMO-2') {
       map['amount'] = 9000;
       map['tenure'] = '3 Months';
       map['invoiceDate'] = '2026-06-10';
-      map['studentId'] = 'STU-55DCD622';
-      map['studentName'] = 'Aarav Mehta';
+      map['className'] = 'Flute';
     }
     return {'ok': true, 'invoice': map};
+  }
+
+  Map<String, dynamic> _timetableList(Map<String, dynamic> a) {
+    final branch = (_s(a['branch'] ?? '') ).toUpperCase();
+    final rows = _tt.where((e) => branch.isEmpty || branch == 'ALL' || e.branch == branch).toList();
+    return {
+      'ok': true,
+      'entries': rows.map((e) => e.toWrite()).toList(),
+      'seeded': true,
+      'note': 'demo timetable. Seeded once; founder edits persist for this session.',
+    };
+  }
+
+  Map<String, dynamic> _timetableCreate(Map<String, dynamic> a) {
+    final e = TimetableEntry(
+      id: 'TT-DEMO-${DateTime.now().microsecondsSinceEpoch}',
+      branch: (_s(a['branch'] ?? 'KANDIVALI')).toUpperCase(),
+      dayOfWeek: (a['dayOfWeek'] as num?)?.toInt() ?? 0,
+      startTime: _s(a['startTime']),
+      endTime: _s(a['endTime']),
+      className: _s(a['className']),
+      teacherId: _s(a['teacherId']),
+      teacherName: _s(a['teacherName']),
+      status: _s(a['status']).isEmpty ? 'ENABLED' : _s(a['status']).toUpperCase(),
+    );
+    _tt.add(e);
+    return {'ok': true, 'entry': e.toWrite(), 'note': 'demo timetable entry added'};
+  }
+
+  Map<String, dynamic> _timetableUpdate(Map<String, dynamic> a) {
+    final id = _s(a['id']);
+    final idx = _tt.indexWhere((e) => e.id == id);
+    if (idx < 0) return {'ok': false, 'code': 'TT_ENTRY_NOT_FOUND', 'error': 'Entry not found.'};
+    final cur = _tt[idx];
+    final next = TimetableEntry(
+      id: cur.id,
+      branch: _s(a['branch'] ?? cur.branch).toUpperCase(),
+      dayOfWeek: (a['dayOfWeek'] as num?)?.toInt() ?? cur.dayOfWeek,
+      startTime: _s(a['startTime']).isEmpty ? cur.startTime : _s(a['startTime']),
+      endTime: _s(a['endTime']).isEmpty ? cur.endTime : _s(a['endTime']),
+      className: _s(a['className']).isEmpty ? cur.className : _s(a['className']),
+      teacherId: _s(a['teacherId']),
+      teacherName: _s(a['teacherName']),
+      status: _s(a['status']).isEmpty ? cur.status : _s(a['status']).toUpperCase(),
+    );
+    _tt[idx] = next;
+    return {'ok': true, 'entry': next.toWrite(), 'note': 'demo timetable entry updated'};
+  }
+
+  Map<String, dynamic> _timetableDelete(Map<String, dynamic> a) {
+    final id = _s(a['id']);
+    final before = _tt.length;
+    _tt.removeWhere((e) => e.id == id);
+    return {
+      'ok': true,
+      'deleted': before != _tt.length,
+      'note': 'demo timetable entry deleted',
+    };
   }
 
   Map<String, dynamic> _todaysTasks() =>

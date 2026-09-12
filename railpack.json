@@ -1,6 +1,9 @@
 {
   "$schema": "https://schema.railpack.com",
   "provider": "node",
+  "deploy": {
+    "startCommand": "node db/apply.mjs && npm start"
+  },
   "exclude": [
     "android",
     "build",

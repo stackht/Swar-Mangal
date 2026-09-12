@@ -3,13 +3,15 @@ class AppConfig {
 
   /// Default back-end target. Overridden at runtime from the Login screen
   /// (gear icon -> "API server"), persisted in shared_preferences.
+  /// The Railway gateway answers the same RPC protocol the Apps Script
+  /// backend used — no Google Script dependency remains.
   static const String founderExecUrl =
-      'https://script.google.com/macros/s/REPLACE_WITH_FOUNDER_SCRIPT_ID/exec';
+      'https://swarmangal-app-production.up.railway.app/api/rpc';
 
   static const String staffExecUrl =
-      'https://script.google.com/macros/s/REPLACE_WITH_STAFF_SCRIPT_ID/exec';
+      'https://swarmangal-app-production.up.railway.app/api/rpc';
 
   static const String appVersion = '1.0.0';
-  static const String appBuild = 'RC201'; // 2 apps, 0 external, 1 gateway
+  static const String appBuild = 'RC300'; // standalone — no Google Script
   static const String appName = 'Swar Mangal';
 }

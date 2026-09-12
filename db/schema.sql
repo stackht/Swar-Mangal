@@ -486,3 +486,72 @@ create table if not exists schools (
   entity_id text,
   active boolean default true
 );
+
+-- ============ RPC SUPPORT TABLES (standalone gateway) ============
+
+create table if not exists payment_drafts (
+  id text primary key,
+  status text not null default 'SUBMITTED',
+  student_id text,
+  student_name text,
+  amount numeric(10,2) not null,
+  payment_mode text,
+  branch text,
+  terms_status text default '',
+  projected_next_due_date text,
+  repair_required boolean default false,
+  submitted_by text,
+  submitted_at timestamptz not null default now(),
+  approval_authority text default '',
+  approved_by text default '',
+  approved_at timestamptz,
+  finalised_receipt_no text,
+  finalised_at timestamptz
+);
+
+create table if not exists timetable (
+  id text primary key,
+  branch text not null,
+  day_of_week int not null,
+  start_time text not null,
+  end_time text not null,
+  class_name text not null,
+  teacher_id text,
+  teacher_name text,
+  status text default 'ENABLED'
+);
+
+create table if not exists scheduled_sessions (
+  id text primary key,
+  session_date text,
+  start_time text,
+  teacher_id text,
+  teacher_name text,
+  branch text,
+  course text,
+  outcome text default '',
+  delivered_by text default '',
+  payee_teacher_id text default '',
+  recorded_by text default '',
+  evidence_class text default '',
+  evidence_reason text default '',
+  not_required boolean default false,
+  closure_reason text default '',
+  custom_kind text default '',
+  custom_reason text default '',
+  resolved boolean default false,
+  answerable boolean default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists school_invoices_rpc (
+  id text primary key,
+  invoice_no text,
+  invoice_date text,
+  branch text,
+  class_name text,
+  amount numeric(10,2),
+  tenure text,
+  status text default 'FINAL',
+  created_at timestamptz not null default now()
+);

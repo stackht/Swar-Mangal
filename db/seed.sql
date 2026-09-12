@@ -1,7 +1,7 @@
 -- Swar Mangal Academy — seed data (Railway Postgres)
 -- Demo-faithful IDs (s1, t1, c1, th1…) so existing screen filters keep resolving.
 -- Idempotent: safe to run repeatedly.
--- Login users (admin/teacher) are upserted by db/apply.mjs from ADMIN_PASSWORD / TEACHER_PASSWORD env vars.
+-- Login users (admin/staff) are upserted by db/apply.mjs from ADMIN_PASSWORD / STAFF_PASSWORD env vars.
 
 insert into instruments (id, name, icon, color) values
   ('inst-1', 'Piano', 'Piano', '#8d6bf6'),

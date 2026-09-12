@@ -263,14 +263,14 @@ class _ServerSheetState extends State<_ServerSheet> {
             controller: _c,
             keyboardType: TextInputType.url,
             decoration: const InputDecoration(
-              labelText: 'Web app /exec URL',
-              hintText: 'https://script.google.com/macros/s/<ID>/exec',
+              labelText: 'Gateway URL /api/rpc',
+              hintText: 'https://swarmangal-app-production.up.railway.app/api/rpc',
             ),
           ),
           const SizedBox(height: AppSpace.s3),
           const Text(
-            'Point the app at a deployed Swar Mangal backend, then enter the '
-            'device token that backend issues.',
+            'Point the app at the Swar Mangal Railway gateway, then enter the '
+            'device token that gateway issues.',
             style: TextStyle(fontSize: 12, color: AppColors.muted),
           ),
           const SizedBox(height: AppSpace.s4),

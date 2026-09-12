@@ -27,7 +27,7 @@ class ApiUnreachable implements Exception {
 const _timeout = Duration(seconds: 45);
 
 /// One client instance per login session. All `api_*` calls go through here
-/// as posts to the Apps Script `/exec` URL.
+/// as posts to the Railway gateway `/api/rpc`.
 class ApiClient {
   ApiClient({required this.execUrl, required this.token}) {
     _http = http.Client();

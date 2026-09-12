@@ -76,10 +76,10 @@ async function main() {
 
     // Login users — passwords from env (APPLY auto-creates/updates on each boot).
     const adminPw = process.env.ADMIN_PASSWORD || "Admin@123";
-    const teacherPw = process.env.TEACHER_PASSWORD || "Teacher@123";
+    const staffPw = process.env.STAFF_PASSWORD || "Staff@123";
     await ensureUser(client, { email: "admin@maestro.app", password: adminPw, role: "admin", fullName: "Academy Admin" });
-    await ensureUser(client, { email: "teacher@maestro.app", password: teacherPw, role: "teacher", fullName: "Academy Teacher" });
-    console.log("users ensured (admin/teacher, passwords from env)");
+    await ensureUser(client, { email: "staff@maestro.app", password: staffPw, role: "teacher", fullName: "Academy Staff" });
+    console.log("users ensured (admin/staff, passwords from env)");
 
     const r = await client.query(
       "select (select count(*) from students) as students, (select count(*) from students_acad) as students_acad, (select count(*) from teachers_acad) as teachers_acad, (select count(*) from receipts) as receipts, (select count(*) from attendance_acad) as attendance, (select count(*) from inquiries) as inquiries",

@@ -337,4 +337,3 @@ create table if not exists payments (
 );
 
 create index if not exists idx_invoices_student on invoices(student_id, status);
-create index if not exists idx_payments_student on payments(student_id, paid_at);

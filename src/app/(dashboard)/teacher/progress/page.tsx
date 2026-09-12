@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-import { students, progress } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 const chartData = [
   { month: "Apr", aarav: 52, kai: 48 },
@@ -21,6 +21,7 @@ const chartData = [
 ];
 
 export default function TeacherProgressPage() {
+  const { students, progress } = useAcademyData();
   const myStudents = students.filter((s) => ["s1", "s3", "s2", "s10"].includes(s.id));
 
   return (

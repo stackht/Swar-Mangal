@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 
-import { messages, threads } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Message } from "@/types";
 
 export function MessagesView({ currentUserId, currentName }: { currentUserId: string; currentName: string }) {
+  const { messages, threads, refetch, isDemo } = useAcademyData();
   const [activeThreadId, setActiveThreadId] = React.useState(threads[0]?.id ?? null);
   const [convo, setConvo] = React.useState<Record<string, Message[]>>({
     th1: messages,
@@ -23,8 +24,16 @@ export function MessagesView({ currentUserId, currentName }: { currentUserId: st
   const active = threads.find((t) => t.id === activeThreadId);
   const activeMessages = active ? convo[active.id] ?? [] : [];
 
-  const send = () => {
+  const send = async () => {
     if (!draft.trim() || !active) return;
+    if (!isDemo) {
+      await fetch("/api/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ thread_id: active.id, sender_id: currentUserId, sender_name: currentName, body: draft.trim() }),
+      });
+      await refetch();
+    }
     const msg: Message = {
       id: `m-${Date.now()}`,
       thread_id: active.id,

@@ -6,9 +6,10 @@ import { ClassCard } from "@/components/dashboard/class-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { classes, students } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherClassesPage() {
+  const { classes, students } = useAcademyData();
   const mine = classes.filter((c) => c.teacher_id === "t1");
   const future = mine.filter((c) => new Date(c.start_time) >= new Date());
   const past = mine.filter((c) => new Date(c.start_time) < new Date());

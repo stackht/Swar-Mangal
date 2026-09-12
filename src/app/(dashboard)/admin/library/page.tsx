@@ -10,7 +10,7 @@ import { SectionHeader } from "@/components/dashboard/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-import { resources } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Resource } from "@/types";
 
 const typeLabels: Record<Resource["type"], string> = {
@@ -26,6 +26,7 @@ const typeLabels: Record<Resource["type"], string> = {
 };
 
 export default function AdminLibraryPage() {
+  const { resources } = useAcademyData();
   const [list, setList] = React.useState(resources);
   return (
     <div>
@@ -48,7 +49,7 @@ export default function AdminLibraryPage() {
                 </button>
               </div>
               <p className="mt-4 font-semibold leading-snug">{r.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} · {r.level}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} Ã‚Â· {r.level}</p>
               <div className="mt-3"><Badge variant="secondary">{typeLabels[r.type]}</Badge></div>
             </motion.div>
           ))}

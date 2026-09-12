@@ -10,9 +10,10 @@ import { Avatar } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
-import { practice, students } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherPracticePage() {
+  const { practice, students } = useAcademyData();
   const myStudents = students.filter((s) => ["s1", "s2", "s3", "s10"].includes(s.id));
 
   const minsOf = (id: string, dayWindow: number) =>
@@ -64,7 +65,7 @@ export default function TeacherPracticePage() {
                   <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
                     {sessions.map((p) => (
                       <span key={p.id} className="shrink-0 rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">
-                        {p.activity} · {p.minutes} min
+                        {p.activity} Ã‚Â· {p.minutes} min
                       </span>
                     ))}
                   </div>

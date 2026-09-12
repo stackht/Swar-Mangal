@@ -10,7 +10,7 @@ import { SectionHeader } from "@/components/dashboard/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-import { resources } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Resource } from "@/types";
 
 const typeLabels: Partial<Record<Resource["type"], string>> = {
@@ -26,6 +26,7 @@ const typeLabels: Partial<Record<Resource["type"], string>> = {
 };
 
 export default function TeacherLibraryPage() {
+  const { resources } = useAcademyData();
   const [list, setList] = React.useState(resources);
   const [uploading, setUploading] = React.useState(false);
 
@@ -85,7 +86,7 @@ export default function TeacherLibraryPage() {
                 </button>
               </div>
               <p className="mt-4 font-semibold leading-snug">{r.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} · {r.level}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} Ã‚Â· {r.level}</p>
               <div className="mt-3 flex items-center gap-2">
                 <Badge variant="secondary">{typeLabels[r.type]}</Badge>
                 {r.author && <span className="text-xs text-muted-foreground">by {r.author}</span>}

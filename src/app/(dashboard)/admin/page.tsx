@@ -14,7 +14,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EASE, listVariants, itemVariants } from "@/lib/motion";
-import { classes, students, teachers, payments, invoices } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import { formatTime } from "@/lib/utils/cn";
 
 function greeting() {
@@ -35,6 +35,7 @@ const revenueData = [
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { classes, students, teachers, payments, invoices } = useAcademyData();
   const todayClasses = classes.filter((c) => new Date(c.start_time).toDateString() === new Date().toDateString());
   const outstanding = invoices.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount), 0);
 

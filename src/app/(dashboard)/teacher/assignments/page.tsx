@@ -14,17 +14,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-import { assignments, students } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Assignment } from "@/types";
 
 export default function TeacherAssignmentsPage() {
+  const { assignments, students, refetch, isDemo } = useAcademyData();
   const [list, setList] = React.useState<Assignment[]>(assignments.filter((a) => a.teacher_id === "t1"));
   const [feedback, setFeedback] = React.useState("");
   const [reviewing, setReviewing] = React.useState<Assignment | null>(null);
 
   const submitted = list.filter((a) => a.status === "submitted");
 
-  const review = (a: Assignment) => {
+  const review = async (a: Assignment) => {
+    if (!isDemo) {
+      await fetch("/api/assignments", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: a.id, status: "reviewed" }),
+      });
+      await refetch();
+    }
     setList((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: "reviewed" as const } : x)));
     setReviewing(null);
     setFeedback("");
@@ -44,7 +53,7 @@ export default function TeacherAssignmentsPage() {
       <section className="mb-8">
         <SectionHeader title={`Awaiting review (${submitted.length})`} />
         <div className="space-y-3">
-          {submitted.length === 0 && <p className="rounded-3xl border bg-card p-8 text-center text-sm text-muted-foreground">Nothing to review — all caught up!</p>}
+          {submitted.length === 0 && <p className="rounded-3xl border bg-card p-8 text-center text-sm text-muted-foreground">Nothing to review Ã¢â‚¬â€ all caught up!</p>}
           {submitted.map((a, i) => {
             const student = students.find((s) => s.id === a.student_id);
             return (
@@ -61,7 +70,7 @@ export default function TeacherAssignmentsPage() {
                       <CheckCircle2 className="h-5 w-5 text-lavender-600" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold">{a.title}</p>
-                        <p className="text-xs text-muted-foreground">by {student?.full_name ?? "Student"} · submitted recently</p>
+                        <p className="text-xs text-muted-foreground">by {student?.full_name ?? "Student"} Ã‚Â· submitted recently</p>
                       </div>
                       <Dialog open={reviewing?.id === a.id} onOpenChange={(o) => !o && setReviewing(null)}>
                         <DialogTrigger asChild>
@@ -70,7 +79,7 @@ export default function TeacherAssignmentsPage() {
                         <DialogContent>
                           <DialogHeader>
                             <DialogTitle>{a.title}</DialogTitle>
-                            <DialogDescription>by {student?.full_name} — expected {a.expected_minutes} min</DialogDescription>
+                            <DialogDescription>by {student?.full_name} Ã¢â‚¬â€ expected {a.expected_minutes} min</DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4">
                             <div className="space-y-2">
@@ -104,7 +113,7 @@ export default function TeacherAssignmentsPage() {
                 <Circle className="h-4 w-4 text-muted-foreground/40" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">{a.title}</p>
-                  <p className="text-xs text-muted-foreground">{student?.full_name} · due {new Date(a.due_date).toLocaleDateString()}</p>
+                  <p className="text-xs text-muted-foreground">{student?.full_name} Ã‚Â· due {new Date(a.due_date).toLocaleDateString()}</p>
                 </div>
                 <Badge variant={a.status === "reviewed" ? "mint" : "peach"}>{a.status}</Badge>
               </div>

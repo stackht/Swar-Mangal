@@ -10,9 +10,10 @@ import { GradientCard } from "@/components/dashboard/gradient-card";
 import { ProgressRing } from "@/components/dashboard/progress-ring";
 import { Progress } from "@/components/ui/progress";
 
-import { progress, feedback, achievements, skillCategories } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function StudentProgressPage() {
+  const { progress, feedback, achievements, skillCategories } = useAcademyData();
   const chartData = [
     { week: "W1", score: 52 },
     { week: "W2", score: 55 },

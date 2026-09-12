@@ -14,11 +14,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
-import { practice, weeklyHours } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 const activities = ["Scales & Arpeggios", "Sight Reading", "Repertoire", "Warm-up Exercises", "Ear Training"];
 
 export default function StudentPracticePage() {
+  const { practice, weeklyHours, refetch, isDemo } = useAcademyData();
   const [activity, setActivity] = React.useState(activities[0]);
   const [sessions, setSessions] = React.useState(practice);
   const [minutes, setMinutes] = React.useState("");
@@ -26,26 +27,33 @@ export default function StudentPracticePage() {
   const goal = 150;
   const max = Math.max(...weeklyHours, 1);
 
-  const handleComplete = (sec: number) => {
-    const mins = sec > 0 ? Math.max(1, Math.round(sec / 60)) : 0;
-    if (mins > 0) {
-      setSessions((prev) => [
-        { id: `p-${Date.now()}`, student_id: "s1", instrument: "Piano", activity, minutes: mins, date: new Date().toISOString(), goal_met: mins >= 20 },
-        ...prev,
-      ]);
+  const submitSession = async (mins: number) => {
+    if (!isDemo) {
+      await fetch("/api/practice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ student_id: "s1", instrument: "Piano", activity, minutes: mins }),
+      });
+      await refetch();
     }
+    setSessions((prev) => [
+      { id: `p-${Date.now()}`, student_id: "s1", instrument: "Piano", activity, minutes: mins, date: new Date().toISOString(), goal_met: mins >= 20 },
+      ...prev,
+    ]);
   };
 
-  const handleManual = () => {
+  const handleComplete = (sec: number) => {
+    const mins = sec > 0 ? Math.max(1, Math.round(sec / 60)) : 0;
+    if (mins > 0) submitSession(mins);
+  };
+
+  const handleManual = async () => {
     const n = Number(minutes);
     if (!n || n <= 0) {
       toast.error("Enter a minute count");
       return;
     }
-    setSessions((prev) => [
-      { id: `p-${Date.now()}`, student_id: "s1", instrument: "Piano", activity, minutes: n, date: new Date().toISOString(), goal_met: n >= 20 },
-      ...prev,
-    ]);
+    await submitSession(n);
     setMinutes("");
     toast.success("Session logged");
   };
@@ -129,7 +137,7 @@ export default function StudentPracticePage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{s.activity}</p>
                 <p className="text-xs text-muted-foreground">
-                  {s.instrument} · {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                  {s.instrument} Ã‚Â· {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
                 </p>
               </div>
               <span className="text-sm font-semibold tabular-nums">{s.minutes} min</span>

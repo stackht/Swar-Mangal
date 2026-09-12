@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { AudioPlayer } from "@/components/music/audio-player";
 import { cn } from "@/lib/utils/cn";
 
-import { resources } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Resource } from "@/types";
 
 const typeLabels: Partial<Record<Resource["type"], string>> = {
@@ -33,6 +33,7 @@ function typeIcon(t: Resource["type"]) {
 }
 
 export default function StudentLibraryPage() {
+  const { resources } = useAcademyData();
   const [filter, setFilter] = React.useState<(typeof allTypes)[number]>("All");
   const [query, setQuery] = React.useState("");
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set(resources.filter((r) => r.favorite).map((r) => r.id)));
@@ -107,7 +108,7 @@ export default function StudentLibraryPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{r.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{r.author ?? r.instrument} · {r.level}</p>
+                      <p className="truncate text-xs text-muted-foreground">{r.author ?? r.instrument} Ã‚Â· {r.level}</p>
                     </div>
                   </div>
                   <FavHeart id={r.id} />
@@ -138,7 +139,7 @@ export default function StudentLibraryPage() {
             </div>
             <p className="mt-4 font-semibold leading-snug">{r.title}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {r.instrument} · {r.level}
+              {r.instrument} Ã‚Â· {r.level}
             </p>
             <div className="mt-3 flex items-center justify-between">
               <Badge variant="secondary">{typeLabels[r.type]}</Badge>

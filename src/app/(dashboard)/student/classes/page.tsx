@@ -7,9 +7,10 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { Button } from "@/components/ui/button";
 import { CalendarX2 } from "lucide-react";
 
-import { classes } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function StudentClassesPage() {
+  const { classes } = useAcademyData();
   const mine = classes.filter((c) => c.student_ids.includes("s1"));
 
   return (

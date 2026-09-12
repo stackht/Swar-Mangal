@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
 
-import { classes, students } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { AttendanceStatus } from "@/types";
 
 const statuses: { key: AttendanceStatus; label: string; icon: React.ReactNode; activeCls: string }[] = [
@@ -24,6 +24,7 @@ const statuses: { key: AttendanceStatus; label: string; icon: React.ReactNode; a
 ];
 
 export default function TeacherAttendancePage() {
+  const { classes, students, refetch, isDemo } = useAcademyData();
   const todayClasses = classes.filter((c) => c.teacher_id === "t1" && new Date(c.start_time).toDateString() === new Date().toDateString());
   const [activeClass, setActiveClass] = React.useState(todayClasses[0]?.id ?? todayClasses[0]?.id);
   const [marks, setMarks] = React.useState<Record<string, AttendanceStatus>>({});
@@ -39,10 +40,28 @@ export default function TeacherAttendancePage() {
     setMarks(next);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!allMarked) {
       toast.error("Mark attendance for every student first");
       return;
+    }
+    if (!isDemo) {
+      await Promise.all(
+        roster.map((s) =>
+          fetch("/api/attendance", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              class_id: activeClass,
+              student_id: s.id,
+              status: marks[s.id],
+              date: new Date().toISOString(),
+              marked_by: "t1",
+            }),
+          }),
+        ),
+      );
+      await refetch();
     }
     setSavedFor(activeClass);
     toast.success("Attendance saved");
@@ -79,13 +98,13 @@ export default function TeacherAttendancePage() {
               <div>
                 <p className="font-semibold">{current.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  {current.student_ids.length} students · {new Date(current.start_time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                  {current.student_ids.length} students Ã‚Â· {new Date(current.start_time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={reset}>Reset</Button>
                 <Button variant="secondary" size="sm" onClick={() => markAll("present")}>All present</Button>
-                <Button size="sm" onClick={save}>{savedFor === activeClass ? "Saved ✓" : "Save attendance"}</Button>
+                <Button size="sm" onClick={save}>{savedFor === activeClass ? "Saved Ã¢Å“â€œ" : "Save attendance"}</Button>
               </div>
             </div>
 
@@ -101,7 +120,7 @@ export default function TeacherAttendancePage() {
                   <Avatar name={s.full_name} size="md" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{s.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{s.instrument} · {s.level}</p>
+                    <p className="text-xs text-muted-foreground">{s.instrument} Ã‚Â· {s.level}</p>
                   </div>
                   <div className="flex gap-1.5">
                     {statuses.map((st) => (

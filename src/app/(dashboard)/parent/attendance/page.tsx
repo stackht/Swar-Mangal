@@ -8,7 +8,7 @@ import { SectionHeader } from "@/components/dashboard/section-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { cn } from "@/lib/utils/cn";
 
-import { attendance } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { AttendanceStatus } from "@/types";
 
 const meta: Record<AttendanceStatus, string> = {
@@ -19,6 +19,7 @@ const meta: Record<AttendanceStatus, string> = {
 };
 
 export default function ParentAttendancePage() {
+  const { attendance } = useAcademyData();
   const mine = attendance.filter((a) => a.student_id === "s1");
   const pct = mine.length ? Math.round((mine.filter((a) => a.status === "present" || a.status === "late").length / mine.length) * 100) : 100;
 

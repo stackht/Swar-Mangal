@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-import { instruments } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 const initialCourses = [
   { id: "co1", name: "Piano Fundamentals", instrument: "Piano", level: "Beginner", color: "#8d6bf6" },
@@ -25,6 +25,7 @@ const initialCourses = [
 ];
 
 export default function AdminCoursesPage() {
+  const { instruments } = useAcademyData();
   const [courses, setCourses] = React.useState(initialCourses);
   const [name, setName] = React.useState("");
   const [instrument, setInstrument] = React.useState("Piano");

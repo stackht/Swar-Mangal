@@ -9,9 +9,10 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-import { instruments } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function AdminInstrumentsPage() {
+  const { instruments } = useAcademyData();
   const [list, setList] = React.useState(instruments);
   const [name, setName] = React.useState("");
 
@@ -48,7 +49,7 @@ export default function AdminInstrumentsPage() {
             <div>
               <p className="font-semibold">{inst.name}</p>
               <p className="text-xs text-muted-foreground">
-                {inst.id === "inst-6" || inst.id === "inst-7" ? "In use" : "In use"} · {inst.name}
+                {inst.id === "inst-6" || inst.id === "inst-7" ? "In use" : "In use"} Ã‚Â· {inst.name}
               </p>
             </div>
           </motion.div>

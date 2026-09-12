@@ -22,7 +22,7 @@ import { AmbientGlow } from "@/components/music/ambient-glow";
 import { TiltCard, MagneticButton } from "@/components/3d/tilt-card";
 import { useCommandPalette } from "@/components/command/command-palette";
 
-import { classes, assignments, practice, progress as skillProgress, achievements } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import { countdown } from "@/lib/utils/time";
 import { cn } from "@/lib/utils/cn";
 import { EASE, listVariants, itemVariants } from "@/lib/motion";
@@ -37,7 +37,7 @@ function greeting() {
 
 function greetingSub() {
   const h = new Date().getHours();
-  if (h < 12) return "A fresh day — ready to make music?";
+  if (h < 12) return "A fresh day Ã¢â‚¬â€ ready to make music?";
   if (h < 17) return "Your next session is in reach.";
   return "Wind down with some practice.";
 }
@@ -51,7 +51,7 @@ const ACCENTS = [
   "from-indigo-500 to-violet-500",
 ];
 
-/** Filter pills — map to real student routes. */
+/** Filter pills Ã¢â‚¬â€ map to real student routes. */
 const PILLS: { label: string; href: string }[] = [
   { label: "All", href: "/student" },
   { label: "Practice", href: "/student/practice" },
@@ -62,6 +62,7 @@ const PILLS: { label: string; href: string }[] = [
 ];
 
 export default function StudentDashboard() {
+const { classes, assignments, practice, progress: skillProgress, achievements } = useAcademyData();
   const { user } = useAuth();
   const pathname = usePathname();
   const reduced = useReducedMotion();
@@ -88,7 +89,7 @@ export default function StudentDashboard() {
               <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-lime-400 ring-2 ring-background" aria-hidden />
             </div>
             <div>
-              <p className="text-eyebrow">Piano · Grade 3</p>
+              <p className="text-eyebrow">Piano Ã‚Â· Grade 3</p>
               <h1 className="text-[22px] font-bold leading-tight tracking-tight sm:text-[26px]">{greeting()}<span className="text-primary">, {user?.full_name?.split(" ")[0] ?? "there"}</span></h1>
               <p className="mt-0.5 text-body-sm text-muted-foreground">{greetingSub()}</p>
             </div>
@@ -113,7 +114,7 @@ export default function StudentDashboard() {
           </motion.div>
         </motion.header>
 
-        {/* ============ HERO — NEXT SESSION ============ */}
+        {/* ============ HERO Ã¢â‚¬â€ NEXT SESSION ============ */}
         {nextClass && (
           <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.08, ease: EASE }}>
             <TiltCard className="rounded-[1.75rem] sm:rounded-[2rem]" maxTilt={4}>
@@ -142,18 +143,18 @@ export default function StudentDashboard() {
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime-400 opacity-75" />
                             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-lime-400" />
                           </span>
-                          Next class · {countdown(nextClass.start_time)}
+                          Next class Ã‚Â· {countdown(nextClass.start_time)}
                         </Badge>
                         <div>
                           <p className="text-[11px] text-white/55 uppercase tracking-[0.18em]">Continue your journey</p>
                           <h2 className="mt-1 text-h1 text-white leading-tight">{nextClass.title}</h2>
                           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-white/70">
                             <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> {nextClass.teacher_name}</span>
-                            <span className="hidden text-white/30 sm:inline">·</span>
-                            <span>Today · {new Date(nextClass.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
-                            <span className="text-white/30">·</span>
+                            <span className="hidden text-white/30 sm:inline">Ã‚Â·</span>
+                            <span>Today Ã‚Â· {new Date(nextClass.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                            <span className="text-white/30">Ã‚Â·</span>
                             <span>{nextClass.duration_min} min</span>
-                            <span className="hidden text-white/30 sm:inline">·</span>
+                            <span className="hidden text-white/30 sm:inline">Ã‚Â·</span>
                             <span className="capitalize">{nextClass.room ?? nextClass.mode}</span>
                           </p>
                         </div>
@@ -221,7 +222,7 @@ export default function StudentDashboard() {
           </div>
         </motion.section>
 
-        {/* ============ YOUR MUSIC TODAY — cohesive band ============ */}
+        {/* ============ YOUR MUSIC TODAY Ã¢â‚¬â€ cohesive band ============ */}
         <section>
           <SectionHeading title="Here's your music today" action={<Target className="h-4 w-4 text-muted-foreground" />} />
           <div className="surface overflow-hidden rounded-[1.4rem]">
@@ -252,7 +253,7 @@ export default function StudentDashboard() {
                   sublabel={l.instrument}
                   icon={<NextIcon className="h-5 w-5" />}
                   aspect="aspect-square"
-                  playLabel="→"
+                  playLabel="Ã¢â€ â€™"
                 />
               </Link>
             ))}
@@ -276,7 +277,7 @@ export default function StudentDashboard() {
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <Flame className="h-3.5 w-3.5 text-orange-400" />
                     <span>3-day streak</span>
-                    <span className="text-muted-foreground/50">·</span>
+                    <span className="text-muted-foreground/50">Ã‚Â·</span>
                     <span>{practice.length} sessions</span>
                   </div>
                 </div>
@@ -300,7 +301,7 @@ export default function StudentDashboard() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <p className="text-h3">{skillProgress.instrument}</p>
-                <p className="text-body-sm text-muted-foreground">{skillProgress.level} · improving steadily</p>
+                <p className="text-body-sm text-muted-foreground">{skillProgress.level} Ã‚Â· improving steadily</p>
               </div>
               <span className="text-2xl font-bold tabular-nums text-primary">{skillProgress.overall}%</span>
             </div>
@@ -337,7 +338,7 @@ export default function StudentDashboard() {
                 <div className="h-6 w-px shrink-0 bg-border/60" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{p.activity}</p>
-                  <p className="text-xs text-muted-foreground">{p.instrument} · {new Date(p.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</p>
+                  <p className="text-xs text-muted-foreground">{p.instrument} Ã‚Â· {new Date(p.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold tabular-nums">{p.minutes}</p>

@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { teachers, students } from "@/lib/data/demo";
 import type { Profile, Role } from "@/types";
 
@@ -61,36 +60,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<DemoUser | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  const isSupabase = isSupabaseConfigured;
-
   React.useEffect(() => {
-    if (isSupabaseConfigured) {
-      const supabase = createClient();
-      supabase.auth.getSession().then(({ data }) => {
-        if (data.session) {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(({ user: live }) => {
+        if (live) {
           setUser({
-            id: data.session.user.id,
-            email: data.session.user.email ?? "",
-            full_name: data.session.user.user_metadata?.full_name ?? "Student",
-            role: (data.session.user.user_metadata?.role as Role) ?? "student",
-            avatar_url: data.session.user.user_metadata?.avatar_url ?? null,
+            id: live.id,
+            email: live.email,
+            full_name: live.full_name ?? "User",
+            role: live.role,
+            avatar_url: null,
           });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        const raw = localStorage.getItem(DEMO_KEY);
+        if (raw && !user) {
+          try {
+            setUser(JSON.parse(raw));
+          } catch {
+            localStorage.removeItem(DEMO_KEY);
+          }
         }
         setIsLoading(false);
       });
-      return;
-    }
 
-    const raw = localStorage.getItem(DEMO_KEY);
-    if (raw) {
-      try {
-        setUser(JSON.parse(raw));
-      } catch {
-        localStorage.removeItem(DEMO_KEY);
-      }
-    }
-    setIsLoading(false);
-  }, [isSupabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loginDemo = (role: Role) => {
     const pool = demoProfiles[role];
@@ -101,26 +99,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginSupabase = async (email: string, password: string) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
-    const role = (data.user.user_metadata?.role as Role) ?? "student";
-    setUser({
-      id: data.user.id,
-      email: data.user.email ?? "",
-      full_name: data.user.user_metadata?.full_name ?? "Student",
-      role,
-      avatar_url: data.user.user_metadata?.avatar_url ?? null,
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
-    router.push(`/${role}`);
+    const json = await res.json();
+    if (!res.ok) return { error: json.error ?? "Invalid credentials" };
+    const live = json.user;
+    setUser({
+      id: live.id,
+      email: live.email,
+      full_name: live.full_name ?? "User",
+      role: live.role,
+      avatar_url: null,
+    });
+    router.push(`/${live.role}`);
     return {};
   };
 
   const logout = async () => {
-    if (isSupabaseConfigured) {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-    }
+    try {
+      await fetch("/api/auth/me", { method: "POST" });
+    } catch {}
     setUser(null);
     localStorage.removeItem(DEMO_KEY);
     router.push("/login");
@@ -134,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         role: user?.role ?? null,
         isLoading,
-        isSupabase,
+        isSupabase: true,
         loginDemo,
         loginSupabase,
         logout,

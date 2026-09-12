@@ -13,21 +13,30 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-import { announcements } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function AdminAnnouncementsPage() {
+  const { announcements, refetch, isDemo } = useAcademyData();
   const [list, setList] = React.useState(announcements);
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
   const [audience, setAudience] = React.useState("All students");
 
-  const publish = () => {
+  const publish = async () => {
     if (!title.trim()) {
       toast.error("Add a title");
       return;
     }
+    if (!isDemo) {
+      await fetch("/api/announcements", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), body: body.trim(), audience }),
+      });
+      await refetch();
+    }
     setList((prev) => [
-      { id: `an-${Date.now()}`, title: title.trim(), body: body.trim() || "—", author: "The Swar Mangal Team", created_at: new Date().toISOString(), audience },
+      { id: `an-${Date.now()}`, title: title.trim(), body: body.trim() || "Ã¢â‚¬â€", author: "The Swar Mangal Team", created_at: new Date().toISOString(), audience },
       ...prev,
     ]);
     setTitle("");
@@ -89,7 +98,7 @@ export default function AdminAnnouncementsPage() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{a.body}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {a.author} · {new Date(a.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      {a.author} Ã‚Â· {new Date(a.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                     </p>
                   </div>
                 </div>

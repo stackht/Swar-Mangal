@@ -12,9 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/auth/auth-provider";
 
-import { teachers } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherProfilePage() {
+  const { teachers } = useAcademyData();
   const { user, logout } = useAuth();
   const t = teachers[0];
   const [name, setName] = React.useState(user?.full_name ?? t.full_name);
@@ -34,7 +35,7 @@ export default function TeacherProfilePage() {
             <p className="text-sm text-muted-foreground">{email}</p>
             <div className="mt-2 flex gap-2">
               <Badge variant="lavender">{t.instrument}</Badge>
-              <Badge variant="mint">★ {t.rating}</Badge>
+              <Badge variant="mint">Ã¢Ëœâ€¦ {t.rating}</Badge>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={logout}><LogOut className="h-4 w-4" /> Sign out</Button>

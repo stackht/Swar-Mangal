@@ -3,9 +3,10 @@
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ScheduleCalendar } from "@/components/calendar/schedule-calendar";
 
-import { classes } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherSchedulePage() {
+  const { classes } = useAcademyData();
   const mine = classes.filter((c) => c.teacher_id === "t1");
   return (
     <div>

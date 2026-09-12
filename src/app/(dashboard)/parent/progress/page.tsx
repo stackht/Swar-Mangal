@@ -6,9 +6,10 @@ import { GradientCard } from "@/components/dashboard/gradient-card";
 import { ProgressRing } from "@/components/dashboard/progress-ring";
 import { Progress } from "@/components/ui/progress";
 
-import { progress } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function ParentProgressPage() {
+  const { progress } = useAcademyData();
   return (
     <div>
       <PageHeader title="Progress" subtitle="Aarav's musical development." />

@@ -4,8 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  Bell, Clock, CheckCircle2, AlertCircle, Music,
-  ArrowRight, Users, MessageSquare, Plus,
+  Bell, CheckCircle2, AlertCircle, Music,
+  MessageSquare, Plus,
 } from "lucide-react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/dashboard/section-header";
 import { FrequencyBars } from "@/components/music/frequency-bars";
 import { EASE, listVariants, itemVariants } from "@/lib/motion";
-import { classes, students, practice, assignments } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import { formatTime } from "@/lib/utils/cn";
 
 function greeting() {
@@ -26,6 +26,7 @@ function greeting() {
 }
 
 export default function TeacherDashboard() {
+  const { classes, students, practice, assignments } = useAcademyData();
   const { user } = useAuth();
   const todayClasses = classes
     .filter((c) => c.teacher_id === "t1" && new Date(c.start_time).toDateString() === new Date().toDateString())
@@ -41,7 +42,7 @@ export default function TeacherDashboard() {
         <motion.div variants={itemVariants} className="flex items-center gap-3.5">
           <Avatar name={user?.full_name ?? "Sarah"} src={user?.avatar_url} size="lg" />
           <div>
-            <p className="text-eyebrow">Teacher · Piano</p>
+            <p className="text-eyebrow">Teacher Ã‚Â· Piano</p>
             <h1 className="text-display text-primary">{greeting()}, {user?.full_name?.split(" ")[0] ?? "Sarah"}</h1>
           </div>
         </motion.div>
@@ -71,7 +72,7 @@ export default function TeacherDashboard() {
         </motion.div>
       </motion.div>
 
-      {/* TODAY'S CLASSES — timeline */}
+      {/* TODAY'S CLASSES Ã¢â‚¬â€ timeline */}
       <section>
         <div className="flex items-end justify-between mb-4">
           <h3 className="text-eyebrow">Today{"'"}s teaching</h3>
@@ -81,7 +82,7 @@ export default function TeacherDashboard() {
           <div className="rounded-2xl border border-dashed border-border/50 bg-secondary/30 p-10 text-center">
             <Music className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
             <p className="text-sm font-medium">No classes today</p>
-            <p className="text-xs text-muted-foreground">A free day — catch up on feedback.</p>
+            <p className="text-xs text-muted-foreground">A free day Ã¢â‚¬â€ catch up on feedback.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -95,7 +96,7 @@ export default function TeacherDashboard() {
                 <div className="h-8 w-px bg-border/60" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">{c.title}</p>
-                  <p className="text-xs text-muted-foreground">{c.student_ids.length} students · {c.room ?? c.mode}</p>
+                  <p className="text-xs text-muted-foreground">{c.student_ids.length} students Ã‚Â· {c.room ?? c.mode}</p>
                 </div>
                 <div className="h-8 w-16 opacity-50"><FrequencyBars bars={10} playing={false} /></div>
                 <Badge variant={c.mode === "online" ? "secondary" : "default"}>{c.mode}</Badge>
@@ -126,13 +127,13 @@ export default function TeacherDashboard() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{a.title}</p>
-                <p className="text-xs text-muted-foreground">Submitted — review pending</p>
+                <p className="text-xs text-muted-foreground">Submitted Ã¢â‚¬â€ review pending</p>
               </div>
               <Button variant="ghost" size="sm" asChild><Link href="/teacher/assignments">Review</Link></Button>
             </div>
           ))}
           {lowPractice.length === 0 && pendingReview.length === 0 && (
-            <p className="text-sm text-muted-foreground py-2">All students on track — great work.</p>
+            <p className="text-sm text-muted-foreground py-2">All students on track Ã¢â‚¬â€ great work.</p>
           )}
         </div>
       </section>

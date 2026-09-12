@@ -9,7 +9,7 @@ import { ProgressRing } from "@/components/dashboard/progress-ring";
 import { UserCheck, UserX, Clock3, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-import { attendance } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { AttendanceStatus } from "@/types";
 
 const statusMeta: Record<AttendanceStatus, { label: string; cls: string }> = {
@@ -20,6 +20,7 @@ const statusMeta: Record<AttendanceStatus, { label: string; cls: string }> = {
 };
 
 export default function StudentAttendancePage() {
+  const { attendance } = useAcademyData();
   const mine = attendance.filter((a) => a.student_id === "s1");
   const present = mine.filter((a) => a.status === "present").length;
   const late = mine.filter((a) => a.status === "late").length;

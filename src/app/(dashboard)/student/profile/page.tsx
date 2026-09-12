@@ -12,9 +12,10 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Badge } from "@/components/ui/badge";
 
-import { students } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function StudentProfilePage() {
+  const { students } = useAcademyData();
   const { user, logout } = useAuth();
   const profile = students[0];
   const [name, setName] = React.useState(user?.full_name ?? profile.full_name);

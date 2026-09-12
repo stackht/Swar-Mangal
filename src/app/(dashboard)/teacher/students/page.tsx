@@ -15,9 +15,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-import { students, practice, progress as skillProgress, feedback } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherStudentsPage() {
+const { students, practice, progress: skillProgress, feedback } = useAcademyData();
   const myStudents = students.filter((s) => ["s1", "s2", "s3", "s10"].includes(s.id));
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState<string | null>(null);
@@ -55,7 +56,7 @@ export default function TeacherStudentsPage() {
                 <Avatar name={s.full_name} size="lg" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{s.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{s.instrument} · {s.level}</p>
+                  <p className="text-xs text-muted-foreground">{s.instrument} Ã‚Â· {s.level}</p>
                 </div>
                 <Badge variant={s.fee_status === "paid" ? "mint" : s.fee_status === "pending" ? "lavender" : "peach"}>{s.fee_status}</Badge>
               </div>

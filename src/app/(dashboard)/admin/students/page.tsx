@@ -12,10 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-import { students, instruments } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Student } from "@/types";
 
 export default function AdminStudentsPage() {
+  const { students, instruments, refetch, isDemo } = useAcademyData();
   const [list, setList] = React.useState(students);
   const [query, setQuery] = React.useState("");
   const [newName, setNewName] = React.useState("");
@@ -28,9 +29,20 @@ export default function AdminStudentsPage() {
       s.level.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const addStudent = () => {
+  const addStudent = async () => {
     if (!newName.trim()) {
       toast.error("Enter a student name");
+      return;
+    }
+    if (!isDemo) {
+      await fetch("/api/students", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ full_name: newName.trim(), instrument: newInstrument }),
+      });
+      await refetch();
+      setNewName("");
+      toast.success("Student added");
       return;
     }
     const newStudent: Student = {
@@ -48,7 +60,17 @@ export default function AdminStudentsPage() {
     toast.success("Student added");
   };
 
-  const removeStudent = (id: string) => {
+  const removeStudent = async (id: string) => {
+    if (!isDemo) {
+      await fetch("/api/students", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await refetch();
+      toast.success("Student removed");
+      return;
+    }
     setList((prev) => prev.filter((s) => s.id !== id));
     toast.success("Student removed");
   };

@@ -18,7 +18,7 @@ const demoRoles: { role: Role; label: string; desc: string; gradient: string }[]
 ];
 
 export default function LoginPage() {
-  const { loginDemo, loginSupabase, isSupabase, user } = useAuth();
+  const { loginDemo, loginSupabase, user } = useAuth();
   const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -58,53 +58,52 @@ export default function LoginPage() {
           <p className="text-eyebrow">Swar Mangal</p>
           <h1 className="text-h1 mt-1 text-balance">Welcome back.</h1>
           <p className="mt-1.5 max-w-xs text-body-sm text-muted-foreground">
-            Your premium music academy companion. Explore a demo below.
+            Sign in with your account, or explore the demo below.
           </p>
         </div>
 
-        {!isSupabase ? (
-          <>
-            <p className="mb-3 text-left text-caption uppercase tracking-[0.14em] text-muted-foreground">
-              Explore as
-            </p>
-            <div className="space-y-2.5">
-              {demoRoles.map((r, i) => (
-                <motion.button
-                  key={r.role}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 + i * 0.07, ease: [0.22, 1, 0.36, 1] }}
-                  whileHover={{ y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => loginDemo(r.role)}
-                  className="flex w-full items-center gap-4 rounded-2xl border border-border/60 bg-card p-4 text-left transition-[box-shadow,transform] duration-200 ease-ease-out-expo hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-xs ${r.gradient}`}>
-                    <Music className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{r.label}</p>
-                    <p className="text-caption text-muted-foreground">{r.desc}</p>
-                  </div>
-                  <span className="ml-auto text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5">→</span>
-                </motion.button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border/60 bg-card p-6">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@maestro.app" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" loading={submitting} className="w-full">Sign in</Button>
-          </form>
-        )}
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border/60 bg-card p-6">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@maestro.app" required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" loading={submitting} className="w-full">Sign in</Button>
+        </form>
+
+        <div className="my-6 flex items-center gap-3 text-caption uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          Explore as
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
+        <div className="space-y-2.5">
+          {demoRoles.map((r, i) => (
+            <motion.button
+              key={r.role}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.07, ease: [0.22, 1, 0.36, 1] }}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => loginDemo(r.role)}
+              className="flex w-full items-center gap-4 rounded-2xl border border-border/60 bg-card p-4 text-left transition-[box-shadow,transform] duration-200 ease-ease-out-expo hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-xs ${r.gradient}`}>
+                <Music className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{r.label}</p>
+                <p className="text-caption text-muted-foreground">{r.desc}</p>
+              </div>
+              <span className="ml-auto text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5">→</span>
+            </motion.button>
+          ))}
+        </div>
       </motion.div>
     </div>
   );

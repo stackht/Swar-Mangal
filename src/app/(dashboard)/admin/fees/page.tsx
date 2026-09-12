@@ -14,10 +14,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { invoices, payments, students } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Invoice } from "@/types";
 
 export default function AdminFeesPage() {
+  const { invoices, payments, students, refetch, isDemo } = useAcademyData();
   const [inv, setInv] = React.useState<Invoice[]>(invoices);
   const [amount, setAmount] = React.useState("120");
   const [selectedStudent, setSelectedStudent] = React.useState(students[0].id);
@@ -25,8 +26,18 @@ export default function AdminFeesPage() {
   const outstanding = inv.reduce((s, i) => (i.status !== "paid" ? s + Number(i.amount) : s), 0);
   const collected = payments.reduce((s, p) => s + p.amount, 0);
 
-  const createInvoice = () => {
+  const createInvoice = async () => {
     const student = students.find((s) => s.id === selectedStudent)!;
+    if (!isDemo) {
+      await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ student_id: selectedStudent, amount: Number(amount), description: "Monthly tuition" }),
+      });
+      await refetch();
+      toast.success("Invoice created");
+      return;
+    }
     setInv((prev) => [
       {
         id: `inv-${Date.now()}`,
@@ -43,7 +54,17 @@ export default function AdminFeesPage() {
     toast.success("Invoice created");
   };
 
-  const markPaid = (id: string) => {
+  const markPaid = async (id: string) => {
+    if (!isDemo) {
+      await fetch("/api/invoices", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, status: "paid" }),
+      });
+      await refetch();
+      toast.success("Payment recorded");
+      return;
+    }
     setInv((prev) => prev.map((i) => (i.id === id ? { ...i, status: "paid" as const } : i)));
     toast.success("Payment recorded");
   };
@@ -116,7 +137,7 @@ export default function AdminFeesPage() {
                     {i.status !== "paid" ? (
                       <Button size="sm" variant="secondary" onClick={() => markPaid(i.id)}>Mark paid</Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">Ã¢â‚¬â€</span>
                     )}
                   </td>
                 </motion.tr>
@@ -160,7 +181,7 @@ export default function AdminFeesPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium">{p.student_name}</p>
-                <p className="text-xs text-muted-foreground">{p.method} · {new Date(p.date).toLocaleDateString()}</p>
+                <p className="text-xs text-muted-foreground">{p.method} Ã‚Â· {new Date(p.date).toLocaleDateString()}</p>
               </div>
               <span className="font-bold text-mint-700 dark:text-mint-300">+${p.amount}</span>
             </motion.div>

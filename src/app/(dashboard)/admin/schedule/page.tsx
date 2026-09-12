@@ -8,9 +8,10 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { ScheduleCalendar } from "@/components/calendar/schedule-calendar";
 import { Button } from "@/components/ui/button";
 
-import { classes } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function AdminSchedulePage() {
+  const { classes } = useAcademyData();
   return (
     <div>
       <PageHeader

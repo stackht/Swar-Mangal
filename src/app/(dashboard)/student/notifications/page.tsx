@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 
-import { notifications } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 
 const typeIcon: Record<string, React.ReactNode> = {
   class: <CalendarClock className="h-5 w-5" />,
@@ -18,10 +18,28 @@ const typeIcon: Record<string, React.ReactNode> = {
 };
 
 export default function StudentNotificationsPage() {
+  const { notifications, refetch, isDemo } = useAcademyData();
   const [items, setItems] = React.useState(notifications);
 
-  const markAll = () => setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-  const markOne = (id: string) => setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const updateRead = async (id: string, read: boolean) => {
+    if (!isDemo) {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, read }),
+      });
+      await refetch();
+    }
+  };
+
+  const markAll = async () => {
+    for (const n of items) if (!n.read) await updateRead(n.id, true);
+    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+  const markOne = async (id: string) => {
+    await updateRead(id, true);
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  };
 
   return (
     <div>

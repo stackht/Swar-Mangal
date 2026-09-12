@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { assignments } from "@/lib/data/demo";
+import { useAcademyData } from "@/hooks/use-academy-data";
 import type { Assignment } from "@/types";
 
 const statusStyle: Record<Assignment["status"], { label: string; cls: string; variant: "lavender" | "mint" | "peach" | "secondary" | "destructive" | "default" | "outline" }> = {
@@ -25,12 +25,21 @@ const statusStyle: Record<Assignment["status"], { label: string; cls: string; va
 };
 
 export default function StudentAssignmentsPage() {
+  const { assignments, refetch, isDemo } = useAcademyData();
   const mine = assignments.filter((a) => a.student_id === "s1");
   const [list, setList] = React.useState(mine);
   const [submitStep, setSubmitStep] = React.useState<Assignment | null>(null);
   const [note, setNote] = React.useState("");
 
-  const submit = (a: Assignment) => {
+  const submit = async (a: Assignment) => {
+    if (!isDemo) {
+      await fetch("/api/assignments", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: a.id, status: "submitted" }),
+      });
+      await refetch();
+    }
     setList((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: "submitted" as const } : x)));
     setSubmitStep(null);
     setNote("");
@@ -46,7 +55,7 @@ export default function StudentAssignmentsPage() {
       <SectionHeader title={`In progress (${pending.length})`} />
       <div className="space-y-4">
         {pending.length === 0 && (
-          <p className="rounded-3xl border bg-card p-10 text-center text-sm text-muted-foreground">No pending assignments — all caught up!</p>
+          <p className="rounded-3xl border bg-card p-10 text-center text-sm text-muted-foreground">No pending assignments Ã¢â‚¬â€ all caught up!</p>
         )}
         {pending.map((a, i) => (
           <motion.div
@@ -74,7 +83,7 @@ export default function StudentAssignmentsPage() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{a.description}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      by {a.teacher_name} · expected {a.expected_minutes} min · due{" "}
+                      by {a.teacher_name} Ã‚Â· expected {a.expected_minutes} min Ã‚Â· due{" "}
                       {new Date(a.due_date).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                     </p>
                   </div>

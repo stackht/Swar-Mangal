@@ -44,6 +44,10 @@ coverage/
 maestro_app/
 maestro-android/
 
+# Archive artifacts
+*.zip
+SwarMangal AcademyOS-*/
+
 # Misc
 .DS_Store
 *.pem

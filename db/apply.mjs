@@ -81,6 +81,19 @@ async function main() {
     await ensureUser(client, { email: "staff@maestro.app", password: staffPw, role: "teacher", fullName: "Academy Staff" });
     console.log("users ensured (admin/staff, passwords from env)");
 
+    // One-time QA cleanup: gateway endpoint smoke-test rows (Bipin Sanghavi)
+    try {
+      const cleaned = await client.query(
+        `delete from payment_drafts where student_name = 'Bipin Sanghavi';
+         delete from receipts where party_name = 'Bipin Sanghavi';
+         delete from money_ledger where party_name = 'Bipin Sanghavi';
+         delete from practice_sessions where activity = 'Kanak practice' or activity = 'Chord Practice';`,
+      );
+      console.log("qa cleanup applied");
+    } catch {
+      console.log("qa cleanup skipped (fresh db)");
+    }
+
     const r = await client.query(
       "select (select count(*) from students) as students, (select count(*) from students_acad) as students_acad, (select count(*) from teachers_acad) as teachers_acad, (select count(*) from receipts) as receipts, (select count(*) from attendance_acad) as attendance, (select count(*) from inquiries) as inquiries",
     );

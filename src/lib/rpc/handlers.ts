@@ -333,8 +333,10 @@ async function addFeePayment(arg: Record<string, unknown>): Promise<Record<strin
 }
 
 async function nextReceiptNumber(): Promise<number> {
-  const row = await queryOne<{ c: string }>(`select count(*)::text as c from receipts`);
-  return (Number(row?.c) || 0) + 1;
+  const row = await queryOne<{ m: string }>(
+    `select max(right(receipt_no, 3)::int)::text as m from receipts where receipt_no ~ 'SMR-26-27-[0-9]+$'`,
+  );
+  return (Number(row?.m) || 0) + 1;
 }
 
 async function prepareReceiptDraft(arg: Record<string, unknown>): Promise<Record<string, unknown>> {

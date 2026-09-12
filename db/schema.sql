@@ -59,6 +59,8 @@ create table if not exists profiles (
   updated_at timestamptz not null default now()
 );
 
+create unique index if not exists idx_profiles_user on profiles(user_id);
+
 -- ============ INSTRUMENTS ============
 create table if not exists instruments (
   id text primary key,

@@ -230,7 +230,7 @@ async function loadMirror(): Promise<AcademyDataset> {
     return {
       id: r.receipt_no || r.id,
       student_id: student?.id ?? notFoundId(r.party_name),
-      student_name: r.party_name || "Student",
+      student_name: r.party_name || `Student (${r.receipt_no || r.id})`,
       amount: Number(r.amount) || 0,
       status: toStatus(r.status),
       due_date: "",

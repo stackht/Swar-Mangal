@@ -19,8 +19,8 @@ const meta: Record<AttendanceStatus, string> = {
 };
 
 export default function ParentAttendancePage() {
-  const { attendance } = useAcademyData();
-  const mine = attendance.filter((a) => a.student_id === "s1");
+  const { attendance , currentStudentId } = useAcademyData();
+  const mine = attendance.filter((a) => a.student_id === currentStudentId);
   const pct = mine.length ? Math.round((mine.filter((a) => a.status === "present" || a.status === "late").length / mine.length) * 100) : 100;
 
   return (

@@ -13,8 +13,8 @@ import { Button } from "@/components/ui/button";
 import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function StudentPaymentsPage() {
-  const { invoices } = useAcademyData();
-  const mine = invoices.filter((i) => i.student_id === "s1");
+  const { invoices , currentStudentId } = useAcademyData();
+  const mine = invoices.filter((i) => i.student_id === currentStudentId);
   const balance = invoices.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount), 0);
 
   return (
@@ -45,7 +45,7 @@ export default function StudentPaymentsPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{inv.description}</p>
                 <p className="text-xs text-muted-foreground">
-                  Issued {new Date(inv.issued_date).toLocaleDateString()} Ã‚Â· Due {new Date(inv.due_date).toLocaleDateString()}
+                  Issued {new Date(inv.issued_date).toLocaleDateString()} Ãƒâ€šÃ‚Â· Due {new Date(inv.due_date).toLocaleDateString()}
                 </p>
               </div>
               <span className="text-lg font-bold">${inv.amount}</span>

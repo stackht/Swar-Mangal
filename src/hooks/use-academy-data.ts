@@ -38,6 +38,8 @@ function demoDataset(): AcademyDataset {
     achievements: demo.achievements,
     feedback: demo.feedback,
     weeklyHours: demo.weeklyHours,
+    currentStudentId: "s1",
+    currentTeacherId: "t1",
   };
 }
 
@@ -61,5 +63,7 @@ export function useAcademyData() {
     isLoading: pane.isLoading,
     refetch,
     isFetching,
+    currentStudentId: pane.dataset.currentStudentId ?? pane.dataset.students[0]?.id ?? "s1",
+    currentTeacherId: pane.dataset.currentTeacherId ?? pane.dataset.teachers[0]?.id ?? "t1",
   };
 }

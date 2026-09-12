@@ -6,8 +6,8 @@ import { ScheduleCalendar } from "@/components/calendar/schedule-calendar";
 import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherSchedulePage() {
-  const { classes } = useAcademyData();
-  const mine = classes.filter((c) => c.teacher_id === "t1");
+  const { classes , currentTeacherId } = useAcademyData();
+  const mine = classes.filter((c) => c.teacher_id === currentTeacherId);
   return (
     <div>
       <PageHeader title="Schedule" subtitle="Your teaching timetable." />

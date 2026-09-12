@@ -9,8 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherClassesPage() {
-  const { classes, students } = useAcademyData();
-  const mine = classes.filter((c) => c.teacher_id === "t1");
+  const { classes, students , currentTeacherId } = useAcademyData();
+  const mine = classes.filter((c) => c.teacher_id === currentTeacherId);
   const future = mine.filter((c) => new Date(c.start_time) >= new Date());
   const past = mine.filter((c) => new Date(c.start_time) < new Date());
 

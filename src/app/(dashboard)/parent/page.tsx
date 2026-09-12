@@ -25,12 +25,12 @@ function greeting() {
 }
 
 export default function ParentDashboard() {
-  const { classes, practice, progress, assignments } = useAcademyData();
+  const { classes, practice, progress, assignments , currentStudentId } = useAcademyData();
   const { user } = useAuth();
-  const nextClass = classes.find((c) => c.student_ids.includes("s1"));
+  const nextClass = classes.find((c) => c.student_ids.includes(currentStudentId));
   const weekMins = practice.reduce((s, p) => s + p.minutes, 0);
   const pct = Math.round((weekMins / 150) * 100);
-  const pending = assignments.filter((a) => a.student_id === "s1" && a.status === "pending");
+  const pending = assignments.filter((a) => a.student_id === currentStudentId && a.status === "pending");
 
   return (
     <div className="space-y-10">
@@ -93,7 +93,7 @@ export default function ParentDashboard() {
             <ProgressRing value={progress.overall} size={96} stroke={10} color="hsl(var(--primary))" label={`${progress.overall}`} sublabel="overall" />
             <div className="flex-1">
               <p className="text-h2">{progress.instrument}</p>
-              <p className="text-body-sm text-muted-foreground">{progress.level} Ã‚Â· {progress.overall}% skill score</p>
+              <p className="text-body-sm text-muted-foreground">{progress.level} Ãƒâ€šÃ‚Â· {progress.overall}% skill score</p>
               <div className="mt-3 h-12 opacity-50"><MusicWave bars={24} animate={false} /></div>
             </div>
           </div>
@@ -110,7 +110,7 @@ export default function ParentDashboard() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">{nextClass.title}</p>
-              <p className="text-xs text-muted-foreground">{nextClass.teacher_name} Ã‚Â· {nextClass.duration_min} min</p>
+              <p className="text-xs text-muted-foreground">{nextClass.teacher_name} Ãƒâ€šÃ‚Â· {nextClass.duration_min} min</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-semibold">{formatTime(nextClass.start_time)}</p>

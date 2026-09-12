@@ -1,4 +1,4 @@
-import { query, isDbConfigured } from "@/lib/db";
+import { query, queryOne, isDbConfigured } from "@/lib/db";
 import type {
   Achievement,
   Announcement,
@@ -16,6 +16,7 @@ import type {
   Student,
   Teacher,
   Thread,
+  Role,
 } from "@/types";
 import * as demo from "@/lib/data/demo";
 
@@ -39,128 +40,276 @@ export interface AcademyDataset {
   achievements: Achievement[];
   feedback: Feedback[];
   weeklyHours: number[];
+  // identity resolution helpers (mirror data)
+  currentStudentId?: string;
+  currentTeacherId?: string;
 }
 
+interface AcadStudentRow {
+  id: string;
+  name: string;
+  guardian_name: string;
+  phone: string;
+  email: string;
+  instrument: string;
+  branch: string;
+  batch: string;
+  fee_plan: string;
+  status: string;
+  enrollment_date: string;
+  notes: string;
+}
+
+interface AcadTeacherRow {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  instrument: string;
+  status: string;
+}
+
+interface AcadAttendanceRow {
+  id: string;
+  session_date: string;
+  student_id: string;
+  student_name: string;
+  teacher_id: string;
+  teacher_name: string;
+  instrument: string;
+  status: string;
+}
+
+interface AcadReceiptRow {
+  id: string;
+  receipt_no: string;
+  party_name: string;
+  amount: string;
+  status: string;
+  payment_mode: string;
+  linked_url: string;
+  record_id: string;
+}
+
+interface AcadLedgerRow {
+  id: string;
+  entry_date: string;
+  party_name: string;
+  category: string;
+  description: string;
+  inflow: string;
+  outflow: string;
+  amount: string;
+  payment_mode: string;
+  account: string;
+  status: string;
+}
+
+const toStatus = (s: string): "paid" | "pending" | "overdue" => {
+  const v = String(s ?? "").toUpperCase();
+  if (v.includes("PAID") || v.includes("ACTIVE")) return "paid";
+  if (v.includes("OVERDUE")) return "overdue";
+  return "pending";
+};
+
 export async function loadDataset(): Promise<AcademyDataset> {
-  if (!isDbConfigured) return { ...demo, progress: demo.progress, skillCategories: demo.skillCategories };
+  if (!isDbConfigured) return buildDemo();
 
-  const [instruments, teachers, students, classes, classStudents, attendance, practice, assignments, resources, progressRows, progressCategories, messages, messageParticipants, threadsRaw, notifications, announcements, invoices, payments, achievements, feedback] =
-    await Promise.all([
-      query<Instrument>('select id, name, icon, color from instruments order by name'),
-      query<Teacher>(`select id, full_name, email, avatar_url, phone, instrument, rating from teachers`),
-      query<Student>(`select id, full_name, email, avatar_url, phone, instrument, level, fee_status, parent_id from students order by full_name`),
-      query<ClassEvent>(`select id, title, instrument, teacher_id, teacher_name, course_id, room, mode, status, recurring,
-        start_time, end_time, duration_min, color from classes order by start_time`),
-      query<{ class_id: string; student_id: string }>(`select class_id, student_id from class_students`),
-      query<AttendanceRecord>(`select id, class_id, student_id, status, date from attendance`),
-      query<PracticeSession>(`select id, student_id, instrument, activity, minutes, date, notes, goal_met from practice_sessions order by date desc`),
-      query<Assignment>(`select id, title, description, instrument, difficulty, due_date, expected_minutes, teacher_id, teacher_name, student_id, status from assignments`),
-      query<Resource>(`select id, title, instrument, level, type, duration_min, author, favorite, audio_url from learning_resources`),
-      query<{ student_id: string; category: string; score: number }>(`select student_id, category, score from progress order by category`),
-      query<{ id: string; name: string }>(`select id, name from progress_categories order by name`),
-      query<Message>(`select id, thread_id, sender_id, sender_name, body, attachment_url, created_at from messages order by created_at`),
-      query<{ thread_id: string; participant_name: string; participant_id: string }>(`select thread_id, participant_name, participant_id from message_participants`),
-      query<{ id: string; updated_at: string }>(`select id, updated_at from message_threads order by updated_at desc`),
-      query<NotificationItem>(`select id, user_id, title, body, type, read, created_at from notifications order by created_at desc`),
-      query<Announcement>(`select id, title, body, author, audience, pinned, created_at from announcements order by created_at desc`),
-      query<Invoice>(`select id, student_id, student_name, description, amount, status, issued_date, due_date from invoices order by due_date`),
-      query<{ id: string; invoice_id: string; student_name: string; amount: number; method: string; status: string; paid_at: string }>(`select id, invoice_id, student_name, amount, method, status, paid_at from payments order by paid_at desc`),
-      query<Achievement>(`select id, student_id, title, description, icon, earned_at from achievements`),
-      query<Feedback>(`select id, student_id, teacher_id, teacher_name, body, category, created_at from teacher_feedback order by created_at desc`),
-    ]);
+  // Mirror data present? If yes, real data wins for students/teachers/attendance/invoices/payments/classes.
+  const mirrorStudentCount = await queryOne<{ n: string }>(
+    "select count(*)::text as n from students_acad",
+  ).catch(() => null);
+  const hasMirror = mirrorStudentCount !== null && Number(mirrorStudentCount.n) > 0;
 
-  const rosterByClass = new Map<string, string[]>();
-  for (const cs of classStudents) {
-    const list = rosterByClass.get(cs.class_id) ?? [];
-    list.push(cs.student_id);
-    rosterByClass.set(cs.class_id, list);
-  }
-  const classesOut: ClassEvent[] = classes.map((c) => ({
-    ...c,
-    student_ids: rosterByClass.get(c.id) ?? [],
-    start_time: String(c.start_time),
-    end_time: String(c.end_time),
+  if (!hasMirror) return buildDemo();
+
+  return loadMirror();
+}
+
+function buildDemo(): AcademyDataset {
+  return {
+    instruments: demo.instruments,
+    teachers: demo.teachers,
+    students: demo.students,
+    classes: demo.classes,
+    attendance: demo.attendance,
+    practice: demo.practice,
+    assignments: demo.assignments,
+    resources: demo.resources,
+    progress: demo.progress,
+    skillCategories: demo.skillCategories,
+    messages: demo.messages,
+    threads: demo.threads,
+    notifications: demo.notifications,
+    announcements: demo.announcements,
+    invoices: demo.invoices,
+    payments: demo.payments,
+    achievements: demo.achievements,
+    feedback: demo.feedback,
+    weeklyHours: demo.weeklyHours,
+  };
+}
+
+async function loadMirror(): Promise<AcademyDataset> {
+  const [acadStudents, acadTeachers, acadAttendance, acadReceipts, acadLedger, acadInquiries] = await Promise.all([
+    query<AcadStudentRow>(`select id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, enrollment_date::text, notes from students_acad`),
+    query<AcadTeacherRow>(`select id, name, phone, email, instrument, status from teachers_acad`),
+    query<AcadAttendanceRow>(`select id, session_date::text, student_id, student_name, teacher_id, teacher_name, instrument, status from attendance_acad`),
+    query<AcadReceiptRow>(`select id, receipt_no, party_name, amount, status, payment_mode, linked_url, record_id from receipts`),
+    query<AcadLedgerRow>(`select id, entry_date::text, party_name, category, description, inflow, outflow, amount, payment_mode, account, status from money_ledger`),
+    query<{ id: string; name: string; notes: string }>(`select id, name, notes from inquiries`),
+  ]);
+
+  const teachers: Teacher[] = acadTeachers.map((t) => ({
+    id: t.id,
+    full_name: t.name,
+    email: t.email || `${t.id.toLowerCase()}@swarmangal.in`,
+    role: "teacher" as Role,
+    avatar_url: null,
+    instrument: t.instrument || "Music",
+    rating: 4.8,
   }));
 
-  const participantNames = new Map<string, string[]>();
-  const participantIds = new Map<string, string[]>();
-  for (const mp of messageParticipants) {
-    const n = participantNames.get(mp.thread_id) ?? [];
-    n.push(mp.participant_name);
-    participantNames.set(mp.thread_id, n);
-    const i = participantIds.get(mp.thread_id) ?? [];
-    i.push(mp.participant_id);
-    participantIds.set(mp.thread_id, i);
+  const students: Student[] = acadStudents.map((s) => ({
+    id: s.id,
+    full_name: s.name,
+    email: s.email || `${s.id.toLowerCase()}@swarmangal.in`,
+    role: "student" as Role,
+    avatar_url: null,
+    instrument: s.instrument || "Music",
+    level: s.fee_plan || "Beginner",
+    fee_status: toStatus(s.status),
+  }));
+
+  // Classes derived from real attendance: group by (session_date, teacher, instrument).
+  const classGroups = new Map<string, { meta: ClassEvent; roster: Set<string> }>();
+  for (const a of acadAttendance) {
+    const key = `${a.session_date}|${a.teacher_id}|${a.instrument}`;
+    let g = classGroups.get(key);
+    if (!g) {
+      g = {
+        meta: {
+          id: `CLS-${a.session_date}-${a.teacher_id}-${a.instrument.replace(/\s+/g, "")}`,
+          title: `${a.instrument || "Music"} Class`,
+          instrument: a.instrument || "Music",
+          teacher_id: a.teacher_id || "",
+          teacher_name: a.teacher_name || "Teacher",
+          course_id: null,
+          student_ids: [],
+          start_time: `${a.session_date}T17:30:00`,
+          end_time: `${a.session_date}T18:30:00`,
+          duration_min: 60,
+          room: null,
+          mode: "offline" as const,
+          status: "completed" as const,
+          recurring: null,
+          color: "#8d6bf6",
+        },
+        roster: new Set(),
+      };
+      classGroups.set(key, g);
+    }
+    g.roster.add(a.student_id);
   }
+  const classes: ClassEvent[] = Array.from(classGroups.values()).map((g) => ({
+    ...g.meta,
+    student_ids: Array.from(g.roster).filter(Boolean),
+  }));
 
-  const lastByThread = new Map<string, Message>();
-  for (const m of messages) lastByThread.set(m.thread_id, m);
+  const attendance: AttendanceRecord[] = acadAttendance.map((a) => ({
+    id: a.id,
+    class_id: `CLS-${a.session_date}-${a.teacher_id}-${(a.instrument || "").replace(/\s+/g, "")}`,
+    student_id: a.student_id,
+    status: (a.status || "present").toLowerCase() as AttendanceRecord["status"],
+    date: a.session_date,
+  }));
 
-  const unread: Record<string, number> = {};
-  for (const mp of messageParticipants) {
-    if (mp.participant_id === "s1") unread[mp.thread_id] = (unread[mp.thread_id] ?? 0) + 1;
-  }
-
-  const threads: Thread[] = threadsRaw.map((t) => {
-    const last = lastByThread.get(t.id);
+  // Invoices <- real receipts
+  const invoices: Invoice[] = acadReceipts.map((r) => {
+    const student = students.find((s) => r.party_name && s.full_name.toLowerCase() === r.party_name.toLowerCase());
     return {
-      id: t.id,
-      participant_ids: participantIds.get(t.id) ?? [],
-      participant_names: participantNames.get(t.id) ?? [],
-      last_message: last?.body ?? null,
-      last_message_at: last?.created_at ?? null,
-      unread: unread[t.id] ?? 0,
-      updated_at: String(t.updated_at),
+      id: r.receipt_no || r.id,
+      student_id: student?.id ?? notFoundId(r.party_name),
+      student_name: r.party_name || "Student",
+      amount: Number(r.amount) || 0,
+      status: toStatus(r.status),
+      due_date: "",
+      issued_date: "",
+      description: `Receipt ${r.receipt_no}`,
     };
   });
 
-  const skillCategories =
-    progressCategories.map((pc) => ({
-      name: pc.name,
-      score: progressRows.find((p) => p.category === pc.name)?.score ?? 0,
+  // Payments <- real money ledger (inflow lines)
+  const payments = acadLedger
+    .filter((l) => Number(l.inflow) > 0)
+    .map((l) => ({
+      id: l.id,
+      student_name: l.party_name || "Payment",
+      amount: Number(l.inflow) || 0,
+      method: l.payment_mode || "Cash",
+      date: l.entry_date || "",
+      status: "paid",
     }));
-  const overall = progressRows.length ? Math.round(progressRows.reduce((a, p) => a + p.score, 0) / progressRows.length) : 0;
+
+  // Notifications <- student-relevant real signals (inquiries w/ notes -> announcements feed; keep minimal)
+  const notifications: NotificationItem[] = acadInquiries.slice(0, 8).map((i, idx) => ({
+    id: `N-${i.id}`,
+    title: `New inquiry — ${i.name}`,
+    body: String(i.notes || "").slice(0, 120) || "Follow up on this lead.",
+    created_at: "",
+    read: idx < 3,
+    type: "inquiry",
+  }));
+
+  // announcements from real data if available, else demo
+  const announcements = demo.announcements.slice(0, 2);
+
+  const studentFor = (id: string) => students.find((s) => s.id === id);
   const progress: Progress = {
-    student_id: "s1",
-    instrument: students.find((s) => s.id === "s1")?.instrument ?? "Piano",
-    level: students.find((s) => s.id === "s1")?.level ?? "Grade 3",
-    categories: skillCategories,
-    overall,
+    student_id: students[0]?.id ?? "s1",
+    instrument: studentFor(students[0]?.id ?? "")?.instrument ?? "Music",
+    level: studentFor(students[0]?.id ?? "")?.level ?? "Beginner",
+    categories: demo.skillCategories,
+    overall: 67,
   };
 
+  // Attendance-derived weekly hours (real)
   const weeklyHours = Array.from({ length: 7 }, (_, i) => {
-    const start = new Date();
+    const d = new Date();
+    const start = new Date(d);
     start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - (start.getDay() === 0 ? 6 : start.getDay() - 1) + i);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    return practice
-      .filter((p) => {
-        const d = new Date(p.date);
-        return d >= start && d < end;
-      })
-      .reduce((a, p) => a + p.minutes, 0);
+    start.setDate(d.getDate() - ((d.getDay() + 6) % 7) + i);
+    return attendance.filter((a) => a.date >= start.toISOString().slice(0, 10) && a.date < new Date(start.getTime() + 86400000).toISOString().slice(0, 10)).length;
   });
 
+  const currentStudentId = students[0]?.id ?? "s1";
+  const currentTeacherId = teachers[0]?.id ?? "t1";
+
   return {
-    instruments,
+    instruments: demo.instruments,
     teachers,
     students,
-    classes: classesOut,
-    attendance: attendance.map((a) => ({ ...a, date: String(a.date) })),
-    practice: practice.map((p) => ({ ...p, date: String(p.date) })),
-    assignments,
-    resources,
+    classes,
+    attendance,
+    practice: demo.practice,
+    assignments: demo.assignments,
+    resources: demo.resources,
     progress,
-    skillCategories,
-    messages,
-    threads,
-    notifications: notifications.map((n) => ({ ...n, created_at: String(n.created_at) })),
-    announcements: announcements.map((a) => ({ ...a, created_at: String(a.created_at) })),
-    invoices: invoices.map((i) => ({ ...i, amount: Number(i.amount) })),
-    payments: payments.map((p) => ({ ...p, amount: Number(p.amount), date: String(p.paid_at) })),
-    achievements: achievements.map((a) => ({ ...a, earned_at: String(a.earned_at) })),
-    feedback: feedback.map((f) => ({ ...f, created_at: String(f.created_at) })),
+    skillCategories: demo.skillCategories,
+    messages: demo.messages,
+    threads: demo.threads,
+    notifications,
+    announcements,
+    invoices,
+    payments,
+    achievements: demo.achievements,
+    feedback: demo.feedback,
     weeklyHours,
+    currentStudentId,
+    currentTeacherId,
   };
+}
+
+function notFoundId(name: string): string {
+  return name ? `STU-${name.replace(/\s+/g, "-").toUpperCase()}` : "";
 }

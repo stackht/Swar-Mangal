@@ -19,7 +19,7 @@ import { useAcademyData } from "@/hooks/use-academy-data";
 const activities = ["Scales & Arpeggios", "Sight Reading", "Repertoire", "Warm-up Exercises", "Ear Training"];
 
 export default function StudentPracticePage() {
-  const { practice, weeklyHours, refetch, isDemo } = useAcademyData();
+  const { practice, weeklyHours, refetch, isDemo, currentStudentId } = useAcademyData();
   const [activity, setActivity] = React.useState(activities[0]);
   const [sessions, setSessions] = React.useState(practice);
   const [minutes, setMinutes] = React.useState("");
@@ -32,12 +32,12 @@ export default function StudentPracticePage() {
       await fetch("/api/practice", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ student_id: "s1", instrument: "Piano", activity, minutes: mins }),
+        body: JSON.stringify({ student_id: currentStudentId, instrument: "Piano", activity, minutes: mins }),
       });
       await refetch();
     }
     setSessions((prev) => [
-      { id: `p-${Date.now()}`, student_id: "s1", instrument: "Piano", activity, minutes: mins, date: new Date().toISOString(), goal_met: mins >= 20 },
+      { id: `p-${Date.now()}`, student_id: currentStudentId, instrument: "Piano", activity, minutes: mins, date: new Date().toISOString(), goal_met: mins >= 20 },
       ...prev,
     ]);
   };
@@ -137,7 +137,7 @@ export default function StudentPracticePage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{s.activity}</p>
                 <p className="text-xs text-muted-foreground">
-                  {s.instrument} Ã‚Â· {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                  {s.instrument} Ãƒâ€šÃ‚Â· {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
                 </p>
               </div>
               <span className="text-sm font-semibold tabular-nums">{s.minutes} min</span>

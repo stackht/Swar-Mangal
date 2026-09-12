@@ -20,8 +20,8 @@ const statusMeta: Record<AttendanceStatus, { label: string; cls: string }> = {
 };
 
 export default function StudentAttendancePage() {
-  const { attendance } = useAcademyData();
-  const mine = attendance.filter((a) => a.student_id === "s1");
+  const { attendance , currentStudentId } = useAcademyData();
+  const mine = attendance.filter((a) => a.student_id === currentStudentId);
   const present = mine.filter((a) => a.status === "present").length;
   const late = mine.filter((a) => a.status === "late").length;
   const pct = mine.length ? Math.round(((present + late) / mine.length) * 100) : 100;

@@ -25,8 +25,8 @@ const statusStyle: Record<Assignment["status"], { label: string; cls: string; va
 };
 
 export default function StudentAssignmentsPage() {
-  const { assignments, refetch, isDemo } = useAcademyData();
-  const mine = assignments.filter((a) => a.student_id === "s1");
+  const { assignments, refetch, isDemo , currentStudentId } = useAcademyData();
+  const mine = assignments.filter((a) => a.student_id === currentStudentId);
   const [list, setList] = React.useState(mine);
   const [submitStep, setSubmitStep] = React.useState<Assignment | null>(null);
   const [note, setNote] = React.useState("");
@@ -55,7 +55,7 @@ export default function StudentAssignmentsPage() {
       <SectionHeader title={`In progress (${pending.length})`} />
       <div className="space-y-4">
         {pending.length === 0 && (
-          <p className="rounded-3xl border bg-card p-10 text-center text-sm text-muted-foreground">No pending assignments Ã¢â‚¬â€ all caught up!</p>
+          <p className="rounded-3xl border bg-card p-10 text-center text-sm text-muted-foreground">No pending assignments ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all caught up!</p>
         )}
         {pending.map((a, i) => (
           <motion.div
@@ -83,7 +83,7 @@ export default function StudentAssignmentsPage() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{a.description}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      by {a.teacher_name} Ã‚Â· expected {a.expected_minutes} min Ã‚Â· due{" "}
+                      by {a.teacher_name} Ãƒâ€šÃ‚Â· expected {a.expected_minutes} min Ãƒâ€šÃ‚Â· due{" "}
                       {new Date(a.due_date).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                     </p>
                   </div>

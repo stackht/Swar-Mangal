@@ -10,8 +10,8 @@ import { CalendarX2 } from "lucide-react";
 import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function StudentClassesPage() {
-  const { classes } = useAcademyData();
-  const mine = classes.filter((c) => c.student_ids.includes("s1"));
+  const { classes , currentStudentId } = useAcademyData();
+  const mine = classes.filter((c) => c.student_ids.includes(currentStudentId));
 
   return (
     <div>

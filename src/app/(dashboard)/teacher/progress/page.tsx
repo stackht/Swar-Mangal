@@ -21,8 +21,9 @@ const chartData = [
 ];
 
 export default function TeacherProgressPage() {
-  const { students, progress } = useAcademyData();
-  const myStudents = students.filter((s) => ["s1", "s3", "s2", "s10"].includes(s.id));
+const { students, progress, classes, currentTeacherId } = useAcademyData();
+  const rosterIds = new Set(classes.filter((c) => c.teacher_id === currentTeacherId).flatMap((c) => c.student_ids));
+  const myStudents = students.filter((s) => rosterIds.has(s.id));
 
   return (
     <div>
@@ -64,8 +65,8 @@ export default function TeacherProgressPage() {
                   </span>
                 </div>
                 <div className="mt-2 flex items-center gap-3">
-                  <Progress value={(s.id === "s1" ? 67 : 58) + (s.id === "s10" ? 11 : 0)} className="flex-1" indicatorClassName="bg-gradient-to-r from-lavender-400 to-mint-400" />
-                  <Badge variant="secondary">{progress.categories[0].score + (s.id === "s1" ? 11 : 0)}/100</Badge>
+<Progress value={progress.categories[0].score} className="flex-1" indicatorClassName="bg-gradient-to-r from-lavender-400 to-mint-400" />
+                  <Badge variant="secondary">{progress.categories[0].score}/100</Badge>
                 </div>
               </div>
             </motion.div>

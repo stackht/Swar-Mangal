@@ -24,8 +24,8 @@ const statuses: { key: AttendanceStatus; label: string; icon: React.ReactNode; a
 ];
 
 export default function TeacherAttendancePage() {
-  const { classes, students, refetch, isDemo } = useAcademyData();
-  const todayClasses = classes.filter((c) => c.teacher_id === "t1" && new Date(c.start_time).toDateString() === new Date().toDateString());
+  const { classes, students, refetch, isDemo , currentTeacherId } = useAcademyData();
+  const todayClasses = classes.filter((c) => c.teacher_id === currentTeacherId && new Date(c.start_time).toDateString() === new Date().toDateString());
   const [activeClass, setActiveClass] = React.useState(todayClasses[0]?.id ?? todayClasses[0]?.id);
   const [marks, setMarks] = React.useState<Record<string, AttendanceStatus>>({});
   const [savedFor, setSavedFor] = React.useState<string | null>(null);
@@ -56,7 +56,7 @@ export default function TeacherAttendancePage() {
               student_id: s.id,
               status: marks[s.id],
               date: new Date().toISOString(),
-              marked_by: "t1",
+              marked_by: currentTeacherId,
             }),
           }),
         ),
@@ -74,7 +74,7 @@ export default function TeacherAttendancePage() {
       <PageHeader title="Attendance" subtitle="Mark the roll for today's classes." />
 
       <div className="mb-6 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-        {(todayClasses.length ? todayClasses : classes.filter((c) => c.teacher_id === "t1")).map((c) => (
+        {(todayClasses.length ? todayClasses : classes.filter((c) => c.teacher_id === currentTeacherId)).map((c) => (
           <button
             key={c.id}
             onClick={() => {
@@ -98,13 +98,13 @@ export default function TeacherAttendancePage() {
               <div>
                 <p className="font-semibold">{current.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  {current.student_ids.length} students Ã‚Â· {new Date(current.start_time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                  {current.student_ids.length} students Ãƒâ€šÃ‚Â· {new Date(current.start_time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={reset}>Reset</Button>
                 <Button variant="secondary" size="sm" onClick={() => markAll("present")}>All present</Button>
-                <Button size="sm" onClick={save}>{savedFor === activeClass ? "Saved Ã¢Å“â€œ" : "Save attendance"}</Button>
+                <Button size="sm" onClick={save}>{savedFor === activeClass ? "Saved ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : "Save attendance"}</Button>
               </div>
             </div>
 
@@ -120,7 +120,7 @@ export default function TeacherAttendancePage() {
                   <Avatar name={s.full_name} size="md" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{s.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{s.instrument} Ã‚Â· {s.level}</p>
+                    <p className="text-xs text-muted-foreground">{s.instrument} Ãƒâ€šÃ‚Â· {s.level}</p>
                   </div>
                   <div className="flex gap-1.5">
                     {statuses.map((st) => (
@@ -150,7 +150,7 @@ export default function TeacherAttendancePage() {
       <div className="mt-8">
         <SectionHeader title="Recent marks" />
         <div className="flex flex-wrap gap-3">
-          {classes.filter((c) => c.teacher_id === "t1").slice(0, 3).map((c) => (
+          {classes.filter((c) => c.teacher_id === currentTeacherId).slice(0, 3).map((c) => (
             <div key={c.id} className="flex items-center gap-2 rounded-2xl border bg-card px-4 py-2.5 shadow-card">
               <Badge variant="mint">Present</Badge>
               <span className="text-xs text-muted-foreground">{c.title}</span>

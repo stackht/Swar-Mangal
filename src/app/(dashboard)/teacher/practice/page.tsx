@@ -13,8 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherPracticePage() {
-  const { practice, students } = useAcademyData();
-  const myStudents = students.filter((s) => ["s1", "s2", "s3", "s10"].includes(s.id));
+const { practice, students, classes, currentTeacherId } = useAcademyData();
+  const rosterIds = new Set(classes.filter((c) => c.teacher_id === currentTeacherId).flatMap((c) => c.student_ids));
+  const myStudents = students.filter((s) => rosterIds.has(s.id));
 
   const minsOf = (id: string, dayWindow: number) =>
     practice.filter((p) => p.student_id === id && new Date(p.date) >= new Date(Date.now() - dayWindow * 864e5)).reduce((x, p) => x + p.minutes, 0);

@@ -6,8 +6,8 @@ import { ScheduleCalendar } from "@/components/calendar/schedule-calendar";
 import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function StudentSchedulePage() {
-  const { classes } = useAcademyData();
-  const mine = classes.filter((c) => c.student_ids.includes("s1"));
+  const { classes , currentStudentId } = useAcademyData();
+  const mine = classes.filter((c) => c.student_ids.includes(currentStudentId));
   return (
     <div>
       <PageHeader title="Schedule" subtitle="Your weekly timetable." />

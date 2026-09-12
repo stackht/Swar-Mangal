@@ -18,8 +18,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAcademyData } from "@/hooks/use-academy-data";
 
 export default function TeacherStudentsPage() {
-const { students, practice, progress: skillProgress, feedback } = useAcademyData();
-  const myStudents = students.filter((s) => ["s1", "s2", "s3", "s10"].includes(s.id));
+const { students, practice, progress: skillProgress, feedback, classes, currentTeacherId } = useAcademyData();
+  const rosterIds = new Set(classes.filter((c) => c.teacher_id === currentTeacherId).flatMap((c) => c.student_ids));
+  const myStudents = students.filter((s) => rosterIds.has(s.id));
   const [query, setQuery] = React.useState("");
   const [selected, setSelected] = React.useState<string | null>(null);
   const [fb, setFb] = React.useState("");

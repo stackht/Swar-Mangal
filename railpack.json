@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "exclude": [
+    "android",
+    "build",
+    ".dart_tool",
+    ".next",
+    "integration_test",
+    "maestro-android",
+    "maestro_app",
+    "node_modules",
+    "website"
+  ]
+}

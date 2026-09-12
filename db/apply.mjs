@@ -84,9 +84,9 @@ async function main() {
     // One-time QA cleanup: gateway endpoint smoke-test rows (Bipin Sanghavi)
     try {
       const cleaned = await client.query(
-        `delete from payment_drafts where student_name = 'Bipin Sanghavi';
-         delete from receipts where party_name = 'Bipin Sanghavi';
-         delete from money_ledger where party_name = 'Bipin Sanghavi';
+        `delete from payment_drafts where student_name ilike '%Bipin%' or student_name ilike '%QA RETEST%';
+         delete from receipts where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
+         delete from money_ledger where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
          delete from practice_sessions where activity = 'Kanak practice' or activity = 'Chord Practice';`,
       );
       console.log("qa cleanup applied");

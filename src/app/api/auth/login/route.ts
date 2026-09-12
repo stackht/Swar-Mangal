@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   }
 
   const profile = await queryOne<{ full_name: string }>(
-    "select full_name from profiles where id = $1",
+    "select full_name from profiles where user_id = $1",
     [user.id],
   );
 

@@ -3,10 +3,10 @@
 -- Idempotent: safe to run repeatedly.
 
 insert into users (email, password_hash, role) values
-  ('admin@maestro.app', '7502bb4665e6aff99c4f7b3f89dbfd49594aa359f669b6bca065e6755522b843d50085f48e260447ed05ab5403269a47ff2d6df4aa93341345e0bb7d4cc54c4e', 'admin'),
-  ('sarah.mitchell@maestro.app', '7502bb4665e6aff99c4f7b3f89dbfd49594aa359f669b6bca065e6755522b843d50085f48e260447ed05ab5403269a47ff2d6df4aa93341345e0bb7d4cc54c4e', 'teacher'),
-  ('aarav.sharma@maestro.app', '7502bb4665e6aff99c4f7b3f89dbfd49594aa359f669b6bca065e6755522b843d50085f48e260447ed05ab5403269a47ff2d6df4aa93341345e0bb7d4cc54c4e', 'student')
-on conflict (email) do nothing;
+  ('admin@maestro.app', 'e0b84d44b180c151b860b3653310a0af:bd7178af945c4ce089da7a06c0710b1b93f2794037ab7d506b2f0733c14b131ccb5dd3d446c57f69152dee144d7c7c95a039295490a5231410197517a2b063b7', 'admin'),
+  ('sarah.mitchell@maestro.app', 'e0b84d44b180c151b860b3653310a0af:bd7178af945c4ce089da7a06c0710b1b93f2794037ab7d506b2f0733c14b131ccb5dd3d446c57f69152dee144d7c7c95a039295490a5231410197517a2b063b7', 'teacher'),
+  ('aarav.sharma@maestro.app', 'e0b84d44b180c151b860b3653310a0af:bd7178af945c4ce089da7a06c0710b1b93f2794037ab7d506b2f0733c14b131ccb5dd3d446c57f69152dee144d7c7c95a039295490a5231410197517a2b063b7', 'student')
+on conflict (email) do update set password_hash = excluded.password_hash;
 
 insert into profiles (user_id, email, full_name, role) values
   ((select id from users where email = 'admin@maestro.app'), 'admin@maestro.app', 'Marcus Reed', 'admin'),

@@ -339,3 +339,147 @@ create table if not exists payments (
 );
 
 create index if not exists idx_invoices_student on invoices(student_id, status);
+
+-- ============ ACADEMYOS MIRROR TABLES (real ERP data import) ============
+
+create table if not exists entities (
+  id text primary key,
+  code text,
+  name text,
+  entity_type text,
+  address text,
+  active boolean default true
+);
+
+create table if not exists teachers_acad (
+  id text primary key,
+  name text,
+  phone text,
+  email text,
+  instrument text,
+  status text
+);
+
+create table if not exists students_acad (
+  id text primary key,
+  name text,
+  guardian_name text,
+  phone text,
+  email text,
+  instrument text,
+  branch text,
+  batch text,
+  fee_plan text,
+  status text,
+  enrollment_date date,
+  notes text
+);
+
+create table if not exists packages (
+  id text primary key,
+  entity_code text,
+  course text,
+  name text,
+  package_type text,
+  billing_type text,
+  fee_amount numeric(10,2)
+);
+
+create table if not exists student_packages (
+  id text primary key,
+  student_id text,
+  student_name text,
+  course text,
+  teacher_id text,
+  receipt_no text,
+  fee_amount numeric(10,2),
+  cycle_start date,
+  cycle_end date
+);
+
+create table if not exists receipts (
+  id text primary key,
+  receipt_no text,
+  party_name text,
+  amount numeric(10,2),
+  status text,
+  payment_mode text,
+  linked_url text,
+  record_id text
+);
+
+create table if not exists money_ledger (
+  id text primary key,
+  entry_date date,
+  party_name text,
+  category text,
+  description text,
+  inflow numeric(10,2),
+  outflow numeric(10,2),
+  amount numeric(10,2),
+  payment_mode text,
+  account text,
+  status text
+);
+
+create table if not exists expenses (
+  id text primary key,
+  expense_date date,
+  category text,
+  vendor text,
+  description text,
+  amount numeric(10,2),
+  approval_status text
+);
+
+create table if not exists attendance_acad (
+  id text primary key,
+  session_date date,
+  student_id text,
+  student_name text,
+  teacher_id text,
+  teacher_name text,
+  instrument text,
+  status text
+);
+
+create table if not exists inquiries (
+  id text primary key,
+  name text,
+  phone text,
+  instrument text,
+  branch text,
+  source text,
+  notes text,
+  status text,
+  created_at date
+);
+
+create table if not exists payout_rules (
+  id text primary key,
+  teacher_id text,
+  teacher_name text,
+  entity_id text,
+  course text,
+  payout_type text,
+  percentage numeric(5,2)
+);
+
+create table if not exists school_compensation (
+  id text primary key,
+  teacher_id text,
+  teacher_name text,
+  school_id text,
+  courses text,
+  monthly_amount numeric(10,2),
+  payout_type text,
+  status text
+);
+
+create table if not exists schools (
+  id text primary key,
+  name text,
+  address text,
+  entity_id text,
+  active boolean default true
+);

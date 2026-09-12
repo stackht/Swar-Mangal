@@ -34,23 +34,23 @@ async function main() {
     console.log("schema applied");
 
     const seed = readFileSync(join(here, "seed.sql"), "utf8");
-    const statements = seed
+    const seedStatements = seed
       .split(";")
       .map((s) => s.trim())
       .filter(Boolean);
-    for (const stmt of statements) {
-      try {
-        await client.query(stmt);
-      } catch (err) {
-        console.error("seed FAILED:", err.message);
-        console.error("SQL head:", stmt.replace(/\s+/g, " ").slice(0, 160));
-        throw err;
-      }
-    }
-    console.log("seed applied", statements.length, "statements");
+    await runStatements(client, seedStatements, "seed");
+    console.log("seed applied", seedStatements.length, "statements");
+
+    const real = readFileSync(join(here, "academyos_import.sql"), "utf8");
+    const realStatements = real
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    await runStatements(client, realStatements, "academyos_import");
+    console.log("academyos_import applied", realStatements.length, "statements");
 
     const r = await client.query(
-      "select (select count(*) from students) as students, (select count(*) from classes) as classes, (select count(*) from users) as users",
+      "select (select count(*) from students) as students, (select count(*) from students_acad) as students_acad, (select count(*) from teachers_acad) as teachers_acad, (select count(*) from receipts) as receipts, (select count(*) from attendance_acad) as attendance, (select count(*) from inquiries) as inquiries",
     );
     console.log("counts", JSON.stringify(r.rows[0]));
   } catch (err) {
@@ -58,6 +58,18 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (client) await client.end().catch(() => {});
+  }
+}
+
+async function runStatements(client, statements, label) {
+  for (const stmt of statements) {
+    try {
+      await client.query(stmt);
+    } catch (err) {
+      console.error(label + " FAILED:", err.message);
+      console.error("SQL head:", stmt.replace(/\s+/g, " ").slice(0, 180));
+      throw err;
+    }
   }
 }
 

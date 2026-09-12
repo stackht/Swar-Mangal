@@ -69,7 +69,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   );
   if (!row) return null;
   const user = await queryOne<{ id: string; email: string; role: Role; full_name: string }>(
-    "select id, email, role, full_name from users where id = $1",
+    `select u.id, u.email, u.role, coalesce(p.full_name, u.email) as full_name
+     from users u left join profiles p on p.user_id = u.id where u.id = $1`,
     [row.user_id],
   );
   return user ?? null;

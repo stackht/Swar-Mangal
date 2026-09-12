@@ -8,6 +8,12 @@ insert into users (email, password_hash, role) values
   ('aarav.sharma@maestro.app', '7502bb4665e6aff99c4f7b3f89dbfd49594aa359f669b6bca065e6755522b843d50085f48e260447ed05ab5403269a47ff2d6df4aa93341345e0bb7d4cc54c4e', 'student')
 on conflict (email) do nothing;
 
+insert into profiles (user_id, email, full_name, role) values
+  ((select id from users where email = 'admin@maestro.app'), 'admin@maestro.app', 'Marcus Reed', 'admin'),
+  ((select id from users where email = 'sarah.mitchell@maestro.app'), 'sarah.mitchell@maestro.app', 'Sarah Mitchell', 'teacher'),
+  ((select id from users where email = 'aarav.sharma@maestro.app'), 'aarav.sharma@maestro.app', 'Aarav Sharma', 'student')
+on conflict (user_id) do nothing;
+
 insert into instruments (id, name, icon, color) values
   ('inst-1', 'Piano', 'Piano', '#8d6bf6'),
   ('inst-2', 'Guitar', 'Guitar', '#2dbd7f'),

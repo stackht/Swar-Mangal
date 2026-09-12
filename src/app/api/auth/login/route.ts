@@ -12,8 +12,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
 
-  const user = await queryOne<{ id: string; email: string; password_hash: string; role: string; full_name: string }>(
-    "select id, email, password_hash, role, full_name from users where email = $1",
+  const user = await queryOne<{ id: string; email: string; password_hash: string; role: string }>(
+    "select id, email, password_hash, role from users where email = $1",
     [email],
   );
 
@@ -21,10 +21,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
+  const profile = await queryOne<{ full_name: string }>(
+    "select full_name from profiles where id = $1",
+    [user.id],
+  );
+
   const token = await createSession(user.id);
   await setSessionCookie(token);
 
   return NextResponse.json({
-    user: { id: user.id, email: user.email, role: user.role, full_name: user.full_name },
+    user: { id: user.id, email: user.email, role: user.role, full_name: profile?.full_name ?? user.email.split("@")[0] },
   });
 }

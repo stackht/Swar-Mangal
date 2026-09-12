@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -19,7 +20,17 @@ class StudentsScreen extends StatefulWidget {
   State<StudentsScreen> createState() => _StudentsScreenState();
 }
 
-class _StudentsScreenState extends State<StudentsScreen> {
+class _StudentsScreenState extends State<StudentsScreen> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'students' };
+
+  @override
+  Future<void> reloadFromSync() => _search; with SyncAware
+  @override
+  Set<String> get syncEntities => { 'students' };
+
+  @override
+  Future<void> reloadFromSync() => _search; {
   final _q = TextEditingController();
   List<Student> _rows = [];
   bool _busy = false;

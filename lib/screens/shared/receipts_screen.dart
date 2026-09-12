@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -17,7 +18,17 @@ class ReceiptsScreen extends StatefulWidget {
   State<ReceiptsScreen> createState() => _ReceiptsScreenState();
 }
 
-class _ReceiptsScreenState extends State<ReceiptsScreen> {
+class _ReceiptsScreenState extends State<ReceiptsScreen> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'receipts', 'payments' };
+
+  @override
+  Future<void> reloadFromSync() => _load; with SyncAware
+  @override
+  Set<String> get syncEntities => { 'receipts', 'payments' };
+
+  @override
+  Future<void> reloadFromSync() => _load; {
   final _q = TextEditingController();
   List<ReceiptRow> _rows = [];
   bool _busy = false;

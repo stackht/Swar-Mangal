@@ -114,7 +114,21 @@ class ApiService {
             overdue: [], gmcActive: 0, kmcActive: 0);
   }
 
-  // ---------------------------------------------------------- school invoices
+  // -------------------------------------------------------------- sync
+  /// Near-real-time sync check: returns server revisions for every entity.
+  /// READ-ONLY/invalidation only — never replays a write.
+  Future<SyncSnapshot> syncChanges({
+    required String branch,
+    required Map<String, int> knownRevisions,
+  }) async {
+    final b = await _api.call('api_syncChanges', {
+      'branch': branch,
+      'knownRevisions': knownRevisions,
+    });
+    return SyncSnapshot.fromApi(b as Map<String, dynamic>);
+  }
+
+// ---------------------------------------------------------- school invoices
   /// Generates a SCHOOL-LEVEL invoice (class/amount/tenure, no student) and
   /// returns the authoritative snapshot. Backend assigns the number + persists
   /// the immutable snapshot; Flutter renders the PDF. One intent key per form

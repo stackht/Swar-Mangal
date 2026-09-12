@@ -1235,3 +1235,30 @@ class TimetablePolicy {
 
   static bool canEdit({required bool staff}) => !staff;
 }
+
+/// Result of `api_syncChanges`: current server revisions + change markers.
+/// The client compares against its known set and reloads ONLY changed
+/// entities. Sync is a READ/INVALIDATION operation — it never writes.
+class SyncSnapshot {
+  SyncSnapshot({required this.revisions, required this.changes, required this.ok});
+  factory SyncSnapshot.fromApi(Map<String, dynamic> b) {
+    final revs = <String, int>{};
+    final raw = b['revisions'];
+    if (raw is Map) {
+      raw.forEach((k, v) {
+        final n = (v as num?)?.toInt();
+        if (n != null) revs['$k'] = n;
+      });
+    }
+    return SyncSnapshot(
+      ok: b['ok'] == true,
+      revisions: revs,
+      changes: ((b['changes'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
+    );
+  }
+  final bool ok;
+  final Map<String, int> revisions;
+  final List<Map<String, dynamic>> changes;
+}

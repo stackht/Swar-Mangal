@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -17,7 +18,12 @@ class TimetableScreen extends StatefulWidget {
   State<TimetableScreen> createState() => _TimetableScreenState();
 }
 
-class _TimetableScreenState extends State<TimetableScreen> {
+class _TimetableScreenState extends State<TimetableScreen> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'timetable' };
+
+  @override
+  Future<void> reloadFromSync() => _load; {
   List<TimetableEntry> _rows = [];
   List<Teacher> _teachers = [];
   String? _error;

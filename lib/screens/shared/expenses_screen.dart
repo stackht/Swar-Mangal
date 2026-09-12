@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -54,7 +55,17 @@ class _ExpenseForm extends StatefulWidget {
   State<_ExpenseForm> createState() => _ExpenseFormState();
 }
 
-class _ExpenseFormState extends State<_ExpenseForm> {
+class _ExpenseFormState extends State<_ExpenseForm> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'expenses' };
+
+  @override
+  Future<void> reloadFromSync() => Future.value(); with SyncAware
+  @override
+  Set<String> get syncEntities => { 'expenses' };
+
+  @override
+  Future<void> reloadFromSync() => Future.value(); {
   final _formKey = GlobalKey<FormState>();
   final _amount = TextEditingController();
   final _category = TextEditingController();

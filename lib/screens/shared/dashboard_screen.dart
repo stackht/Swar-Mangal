@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../../core/api.dart';
 import '../../../core/theme.dart';
@@ -42,7 +43,17 @@ class _Body extends StatefulWidget {
   State<_Body> createState() => _BodyState();
 }
 
-class _BodyState extends State<_Body> {
+class _BodyState extends State<_Body> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'dashboard', 'receipts', 'students' };
+
+  @override
+  Future<void> reloadFromSync() => _fetch; with SyncAware
+  @override
+  Set<String> get syncEntities => { 'dashboard', 'receipts', 'students' };
+
+  @override
+  Future<void> reloadFromSync() => _fetch; {
   DashboardMetrics? _metrics;
   DueReminders? _dues;
   String? _error;

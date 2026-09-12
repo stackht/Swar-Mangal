@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -18,7 +19,17 @@ class SchoolInvoiceScreen extends StatefulWidget {
   State<SchoolInvoiceScreen> createState() => _SchoolInvoiceScreenState();
 }
 
-class _SchoolInvoiceScreenState extends State<SchoolInvoiceScreen> {
+class _SchoolInvoiceScreenState extends State<SchoolInvoiceScreen> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'invoices' };
+
+  @override
+  Future<void> reloadFromSync() => _load; with SyncAware
+  @override
+  Set<String> get syncEntities => { 'invoices' };
+
+  @override
+  Future<void> reloadFromSync() => _load; {
   List<InvoiceSummary> _rows = [];
   String? _error;
   bool _busy = true;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -16,7 +17,17 @@ class ApprovalsScreen extends StatefulWidget {
   State<ApprovalsScreen> createState() => _ApprovalsScreenState();
 }
 
-class _ApprovalsScreenState extends State<ApprovalsScreen> {
+class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'approvals', 'payments', 'students' };
+
+  @override
+  Future<void> reloadFromSync() => _load; with SyncAware
+  @override
+  Set<String> get syncEntities => { 'approvals', 'payments', 'students' };
+
+  @override
+  Future<void> reloadFromSync() => _load; {
   ApprovalsData? _data;
   List<PaymentDraftRow> _queue = [];
   String? _error;

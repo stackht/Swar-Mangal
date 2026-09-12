@@ -16,12 +16,68 @@ class DemoApiClient extends ApiClient {
 
   final String branch;
 
-  /// In-memory timetable. Seeded once from the Kandivali seed on the first
-  /// `timetableList`; founder edits afterwards are never reseeded or
-  /// overwritten (mirrors the backend's idempotent seed contract).
+  /// In-memory timetable, SHARED across all DemoApiClient instances in this
+  /// process (simulates multiple sessions/devices seeing each other's edits).
+  /// Seeded once from the Kandivali seed; founder edits are never reseeded.
   List<TimetableEntry>? _timetable;
-  List<TimetableEntry> get _tt =>
-      _timetable ??= kandivaliTimetableSeed.map((e) => e).toList();
+  static List<TimetableEntry>? _sharedTimetable;
+
+  List<TimetableEntry> get _tt {
+    _sharedTimetable ??= kandivaliTimetableSeed.map((e) => _clone(e)).toList();
+    return _sharedTimetable!;
+  }
+
+  static TimetableEntry _clone(TimetableEntry e) => TimetableEntry(
+        id: e.id,
+        branch: e.branch,
+        dayOfWeek: e.dayOfWeek,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        className: e.className,
+        teacherId: e.teacherId,
+        teacherName: e.teacherName,
+        status: e.status,
+      );
+
+  /// Server revisions, SHARED across sessions. Each successful write bumps
+  /// the relevant entity revision (never bumped for failed writes).
+  static final Map<String, int> revisions = <String, int>{
+    'students': 1, 'teachers': 1, 'payments': 1, 'receipts': 1, 'expenses': 1,
+    'invoices': 1, 'timetable': 1, 'attendance': 1, 'inquiries': 1,
+    'approvals': 1, 'sessions': 1, 'dashboard': 1, 'tasks': 1, 'payouts': 1,
+  };
+
+  static void _bump(Iterable<String> entities) {
+    revisions.updateAll((k, v) => entities.contains(k) ? v + 1 : v);
+  }
+
+  /// Which entity revisions a successful write bumps (single source; never
+  /// bumped for a failed write since bumping lives in `call()` post-success).
+  static const Map<String, Set<String>> _revisionByApi = {
+    'api_addFeePayment': {'payments', 'receipts', 'dashboard', 'students'},
+    'api_staff_prepareReceiptDraft': {'payments', 'approvals', 'dashboard', 'students'},
+    'api_founder_finalisePaymentDraft': {'payments', 'receipts', 'dashboard', 'students'},
+    'api_staff_finalisePaymentDraft': {'payments', 'receipts', 'dashboard', 'students'},
+    'api_founder_paymentDraftApprove': {'approvals', 'payments', 'students'},
+    'api_founder_paymentDraftReject': {'approvals', 'payments', 'students'},
+    'api_addStudent': {'students', 'dashboard'},
+    'api_staff_saveStudentDraft': {'students', 'dashboard'},
+    'api_addExpenseEntry': {'expenses', 'dashboard'},
+    'api_staff_submitExpenseDraft': {'expenses', 'dashboard'},
+    'api_staff_inquiryQuickAdd': {'inquiries'},
+    'api_staff_inquiryTransition': {'inquiries'},
+    'api_staff_markAttendance': {'attendance', 'dashboard', 'sessions'},
+    'api_staff_resolveTodaysClass': {'attendance', 'sessions', 'dashboard'},
+    'api_staff_scheduleSession': {'sessions', 'dashboard'},
+    'api_founder_setStudentStatus': {'students', 'dashboard'},
+    'api_updateTeacherStatus': {'teachers'},
+    'api_founder_mergeStudentDraft': {'students', 'dashboard'},
+    'api_updateTeacherCompensation': {'teachers', 'payouts'},
+    'api_generateSchoolInvoice': {'invoices'},
+    'api_timetableCreate': {'timetable'},
+    'api_timetableUpdate': {'timetable'},
+    'api_timetableDelete': {'timetable'},
+  };
 
   /// Write endpoints that must carry DEMO provenance (no real write happens).
   static const _writes = <String>{
@@ -59,6 +115,8 @@ class DemoApiClient extends ApiClient {
     if (_writes.contains(api) && data is Map<String, dynamic>) {
       data['demo'] = true;
       data['demoNote'] = 'DEMO — no real backend write. Not persisted.';
+      final bump = _revisionByApi[api];
+      if (bump != null) _bump(bump); // success only — post-_route, never on throw
     }
     return data;
   }
@@ -161,6 +219,8 @@ class DemoApiClient extends ApiClient {
         return _timetableUpdate(a);
       case 'api_timetableDelete':
         return _timetableDelete(a);
+      case 'api_syncChanges':
+        return _syncChanges(a);
       case 'api_staff_studentHub':
         return _staffStudentHub(a);
       case 'api_teacherProfile':
@@ -1250,6 +1310,17 @@ class DemoApiClient extends ApiClient {
   }
 
   Map<String, dynamic> _timetableUpdate(Map<String, dynamic> a) {
+    // Conflict detection: mutable admin records carry expectedVersion. If it
+    // no longer matches the timetable revision, refuse rather than overwrite
+    // another user's change. Demo simulates the held backend contract.
+    final expected = a['expectedVersion'];
+    if (expected != null && (expected as num).toInt() != revisions['timetable']) {
+      return {
+        'ok': false,
+        'code': 'CONFLICT',
+        'error': 'This item was changed by another user. Reload the latest version before saving.',
+      };
+    }
     final id = _s(a['id']);
     final idx = _tt.indexWhere((e) => e.id == id);
     if (idx < 0) return {'ok': false, 'code': 'TT_ENTRY_NOT_FOUND', 'error': 'Entry not found.'};
@@ -1277,6 +1348,23 @@ class DemoApiClient extends ApiClient {
       'ok': true,
       'deleted': before != _tt.length,
       'note': 'demo timetable entry deleted',
+    };
+  }
+
+  Map<String, dynamic> _syncChanges(Map<String, dynamic> a) {
+    final known = a['knownRevisions'] is Map
+        ? (a['knownRevisions'] as Map).map<String, int>((k, v) => MapEntry<String, int>('$k', (v as num).toInt()))
+        : <String, int>{};
+    final changes = <Map<String, dynamic>>[];
+    revisions.forEach((entity, ver) {
+      if (known[entity] != ver) {
+        changes.add({'entity': entity.toUpperCase(), 'operation': 'UPDATED', 'id': ''});
+      }
+    });
+    return {
+      'ok': true,
+      'revisions': Map<String, int>.from(revisions),
+      'changes': changes,
     };
   }
 

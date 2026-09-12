@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -17,7 +18,17 @@ class MyRequestsScreen extends StatefulWidget {
   State<MyRequestsScreen> createState() => _MyRequestsScreenState();
 }
 
-class _MyRequestsScreenState extends State<MyRequestsScreen> {
+class _MyRequestsScreenState extends State<MyRequestsScreen> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'approvals', 'payments', 'expenses' };
+
+  @override
+  Future<void> reloadFromSync() => _load; with SyncAware
+  @override
+  Set<String> get syncEntities => { 'approvals', 'payments', 'expenses' };
+
+  @override
+  Future<void> reloadFromSync() => _load; {
   List<ApprovalRequestRow> _rows = [];
   String? _error;
   bool _busy = true;

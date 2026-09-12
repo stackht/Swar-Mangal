@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../state/sync_manager.dart';
 
 import '../../core/api.dart';
 import '../../core/theme.dart';
@@ -15,7 +16,17 @@ class InquiriesScreen extends StatefulWidget {
   State<InquiriesScreen> createState() => _InquiriesScreenState();
 }
 
-class _InquiriesScreenState extends State<InquiriesScreen> {
+class _InquiriesScreenState extends State<InquiriesScreen> with SyncAware
+  @override
+  Set<String> get syncEntities => { 'inquiries' };
+
+  @override
+  Future<void> reloadFromSync() => _load; with SyncAware
+  @override
+  Set<String> get syncEntities => { 'inquiries' };
+
+  @override
+  Future<void> reloadFromSync() => _load; {
   List<Inquiry> _rows = [];
   String? _error;
   bool _busy = true;

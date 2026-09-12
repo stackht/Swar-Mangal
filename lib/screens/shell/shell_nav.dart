@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme.dart';
 import '../../state/auth_provider.dart';
+import '../../state/sync_manager.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
 
@@ -95,6 +96,7 @@ class _DrawerShellState extends State<DrawerShell> {
         ]),
         actions: [
           if (widget.headerTrailing != null) widget.headerTrailing!,
+          Consumer<SyncManager>(builder: (context, sync, _) => _SyncChip(sync: sync)),
           Consumer<ThemeController>(
             builder: (context, theme, _) => IconButton(
               tooltip: theme.isDark ? 'Light mode' : 'Dark mode',
@@ -351,6 +353,48 @@ class AboutScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+/// Subtle global sync state indicator in the shell AppBar.
+class _SyncChip extends StatelessWidget {
+  const _SyncChip({required this.sync});
+  final SyncManager sync;
+
+@override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    String label;
+    Color dot;
+    switch (sync.state) {
+      case SyncState.syncing:
+        label = 'Syncing…';
+        dot = scheme.primary;
+        break;
+      case SyncState.offline:
+        label = 'Offline';
+        dot = AppColors.blockFg;
+        break;
+      case SyncState.syncError:
+        label = 'Sync error';
+        dot = AppColors.blockFg;
+        break;
+      case SyncState.synced:
+      case SyncState.online:
+        label = 'Synced just now';
+        dot = AppColors.okFg;
+        break;
+    }
+    return Tooltip(
+      message: 'Last synced ${sync.lastSyncedAt != null ? sync.lastSyncedAt!.toString() : '�'}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+        ]),
+      ),
     );
   }
 }

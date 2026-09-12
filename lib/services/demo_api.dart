@@ -36,6 +36,7 @@ class DemoApiClient extends ApiClient {
     'api_staff_finalisePaymentDraft',
     'api_founder_mergeStudentDraft',
     'api_updateTeacherCompensation',
+    'api_generateSchoolInvoice',
   };
 
   @override
@@ -134,6 +135,12 @@ class DemoApiClient extends ApiClient {
           'newStatus': a['newStatus'],
           'message': 'demo teacher status updated',
         };
+      case 'api_generateSchoolInvoice':
+        return _schoolInvoice(a);
+      case 'api_listStudentInvoices':
+        return _schoolInvoicesList(a);
+      case 'api_getStudentInvoice':
+        return _schoolInvoiceDetail(a);
       case 'api_staff_studentHub':
         return _staffStudentHub(a);
       case 'api_teacherProfile':
@@ -1138,6 +1145,71 @@ class DemoApiClient extends ApiClient {
       'receipts': _receiptRows().take(3).toList(),
       'attendance': [],
     };
+  }
+
+  Map<String, dynamic> _schoolInvoice(Map<String, dynamic> a) {
+    final sid = _s(a['studentId'] ?? '');
+    final rows = _studentRows();
+    final s = sid.isEmpty
+        ? rows.first
+        : rows.where((r) => r['studentId'] == sid).isNotEmpty
+            ? rows.firstWhere((r) => r['studentId'] == sid)
+            : rows.first;
+    final no = 'INV-DEMO-${98000 + (a['amount'] as num).toInt()}';
+    return {
+      'ok': true,
+      'invoiceId': 'SINV-DEMO-${DateTime.now().microsecondsSinceEpoch}',
+      'invoiceNo': no,
+      'invoiceDate': a['invoiceDate'] ?? '2026-09-12',
+      'studentId': s['studentId'],
+      'studentName': s['studentName'],
+      'className': s['className'],
+      'course': s['instrument'],
+      'teacherName': s['teacher'],
+      'branch': s['location'],
+      'amount': a['amount'] ?? 0,
+      'tenure': a['tenure'] ?? '6 Months',
+      'owner1': {'name': 'Sharvil Vaidya', 'id': 'OWNER-1', 'signatureUrl': '', 'title': 'Owner 1'},
+      'owner2': {'name': 'Piyush Kashyap', 'id': 'OWNER-2', 'signatureUrl': '', 'title': 'Owner 2'},
+      'pdfUrl': '',
+    };
+  }
+
+  Map<String, dynamic> _schoolInvoicesList(Map<String, dynamic> a) {
+    return {
+      'ok': true,
+      'invoices': [
+        {
+          'invoiceNo': 'INV-DEMO-98000',
+          'invoiceDate': '2026-09-12',
+          'tenure': '6 Months',
+          'amount': 18000,
+          'invoiceId': 'SINV-DEMO-1',
+        },
+        {
+          'invoiceNo': 'INV-DEMO-97887',
+          'invoiceDate': '2026-06-10',
+          'tenure': '3 Months',
+          'amount': 9000,
+          'invoiceId': 'SINV-DEMO-2',
+        },
+      ],
+    };
+  }
+
+  Map<String, dynamic> _schoolInvoiceDetail(Map<String, dynamic> a) {
+    final idIn = _s(a['invoiceId'] ?? '');
+    final map = _schoolInvoice({'studentId': '', 'amount': 18000, 'tenure': '6 Months', 'invoiceDate': '2026-09-12'});
+    map['invoiceId'] = idIn == 'SINV-DEMO-2' ? 'SINV-DEMO-2' : 'SINV-DEMO-1';
+    map['invoiceNo'] = idIn == 'SINV-DEMO-2' ? 'INV-DEMO-97887' : 'INV-DEMO-98000';
+    if (idIn == 'SINV-DEMO-2') {
+      map['amount'] = 9000;
+      map['tenure'] = '3 Months';
+      map['invoiceDate'] = '2026-06-10';
+      map['studentId'] = 'STU-55DCD622';
+      map['studentName'] = 'Aarav Mehta';
+    }
+    return {'ok': true, 'invoice': map};
   }
 
   Map<String, dynamic> _todaysTasks() =>

@@ -1032,3 +1032,121 @@ class ProfilePolicy {
 
   static bool canEditCompensation({required bool staff}) => !staff;
 }
+
+/// Authorised signatory (owner) of a school invoice.
+class InvoiceOwner {
+  InvoiceOwner({required this.name, required this.id, required this.signatureUrl, this.title = ''});
+  factory InvoiceOwner.fromApi(Map<String, dynamic> b) => InvoiceOwner(
+        name: _s(b['name'] ?? b['ownerName']),
+        id: _s(b['id'] ?? b['ownerId']),
+        signatureUrl: _s(b['signatureUrl'] ?? b['signature']),
+        title: _s(b['title']),
+      );
+  final String name;
+  final String id;
+  final String signatureUrl;
+  final String title;
+}
+
+/// Authoritative school-invoice snapshot (never reconstructed from student data).
+class SchoolInvoice {
+  SchoolInvoice({
+    required this.invoiceId,
+    required this.invoiceNo,
+    required this.invoiceDate,
+    required this.studentId,
+    required this.studentName,
+    required this.className,
+    required this.course,
+    required this.teacherName,
+    required this.branch,
+    required this.amount,
+    required this.tenure,
+    required this.owner1,
+    required this.owner2,
+    this.pdfUrl = '',
+    this.demo = false,
+  });
+  factory SchoolInvoice.fromApi(Map<String, dynamic> b) {
+    final o1 = b['owner1'] is Map<String, dynamic>
+        ? InvoiceOwner.fromApi(b['owner1'] as Map<String, dynamic>)
+        : InvoiceOwner(name: _s(b['owner1Name']), id: '', signatureUrl: _s(b['owner1SignatureUrl']));
+    final o2 = b['owner2'] is Map<String, dynamic>
+        ? InvoiceOwner.fromApi(b['owner2'] as Map<String, dynamic>)
+        : InvoiceOwner(name: _s(b['owner2Name']), id: '', signatureUrl: _s(b['owner2SignatureUrl']));
+    return SchoolInvoice(
+      invoiceId: _s(b['invoiceId']),
+      invoiceNo: _s(b['invoiceNo']),
+      invoiceDate: _s(b['invoiceDate']),
+      studentId: _s(b['studentId']),
+      studentName: _s(b['studentName']),
+      className: _s(b['className']),
+      course: _s(b['course'] ?? b['instrument']),
+      teacherName: _s(b['teacherName'] ?? b['teacher']),
+      branch: _s(b['branch']),
+      amount: _n(b['amount']),
+      tenure: _s(b['tenure']),
+      pdfUrl: _s(b['pdfUrl']),
+      demo: b['demo'] == true,
+      owner1: o1,
+      owner2: o2,
+    );
+  }
+  final String invoiceId;
+  final String invoiceNo;
+  final String invoiceDate;
+  final String studentId;
+  final String studentName;
+  final String className;
+  final String course;
+  final String teacherName;
+  final String branch;
+  final num amount;
+  final String tenure;
+  final String pdfUrl;
+  final bool demo;
+  final InvoiceOwner owner1;
+  final InvoiceOwner owner2;
+
+  /// Class name resolution — className, else course, else '—' (never fabricated).
+  String get displayClassName =>
+      className.isNotEmpty ? className : (course.isNotEmpty ? course : '—');
+}
+
+/// Invoice list row (history).
+class InvoiceSummary {
+  InvoiceSummary({
+    required this.invoiceNo,
+    required this.invoiceDate,
+    required this.tenure,
+    required this.amount,
+    required this.invoiceId,
+  });
+  factory InvoiceSummary.fromApi(Map<String, dynamic> b) => InvoiceSummary(
+        invoiceNo: _s(b['invoiceNo']),
+        invoiceDate: _s(b['invoiceDate']),
+        tenure: _s(b['tenure']),
+        amount: _n(b['amount']),
+        invoiceId: _s(b['invoiceId']),
+      );
+  final String invoiceNo;
+  final String invoiceDate;
+  final String tenure;
+  final num amount;
+  final String invoiceId;
+}
+
+/// Invoice input validation — amount numeric > 0, tenure non-empty.
+class InvoiceValidator {
+  InvoiceValidator._();
+
+  static ({bool ok, String? error, num? amount}) amount(String raw) {
+    final v = num.tryParse(raw.trim().replaceAll(',', ''));
+    if (v == null) return (ok: false, error: 'Enter a valid amount (INR).', amount: null);
+    if (v <= 0) return (ok: false, error: 'Amount must be greater than zero.', amount: v);
+    return (ok: true, error: null, amount: v);
+  }
+
+  static String? tenure(String raw) =>
+      raw.trim().isEmpty ? 'Pick a tenure.' : null;
+}

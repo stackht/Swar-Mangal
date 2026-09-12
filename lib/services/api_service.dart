@@ -114,7 +114,47 @@ class ApiService {
             overdue: [], gmcActive: 0, kmcActive: 0);
   }
 
-  // -------------------------------------------------------------- teachers
+  // ---------------------------------------------------------- school invoices
+  /// Generates a school invoice for a student and returns the authoritative
+  /// snapshot. Backend assigns the number + records the snapshot; Flutter
+  /// renders the PDF. Intent key stays stable per attempt (no duplicates).
+  Future<SchoolInvoice> generateSchoolInvoice({
+    required String studentId,
+    required num amount,
+    required String tenure,
+    String invoiceDate = '',
+    String branch = 'ALL',
+    required String intentKey,
+  }) async {
+    final b = await _api.call('api_generateSchoolInvoice', {
+      'studentId': studentId,
+      'amount': amount,
+      'tenure': tenure,
+      if (invoiceDate.isNotEmpty) 'invoiceDate': invoiceDate,
+      'branch': branch,
+      'clientIntentKey': intentKey,
+    });
+    return SchoolInvoice.fromApi(b as Map<String, dynamic>);
+  }
+
+  /// Invoice history for a student (snapshot rows — never current-profile data).
+  Future<List<InvoiceSummary>> listStudentInvoices(String studentId, {String branch = 'ALL'}) async {
+    final b = await _api.call('api_listStudentInvoices', {'studentId': studentId, 'branch': branch});
+    return ((b as Map)['invoices'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(InvoiceSummary.fromApi)
+            .toList() ??
+        [];
+  }
+
+  /// Open one stored invoice snapshot (historical data — never rebuilt from
+  /// the student's current profile).
+  Future<SchoolInvoice> getStudentInvoice(String invoiceId, {String branch = 'ALL'}) async {
+    final b = await _api.call('api_getStudentInvoice', {'invoiceId': invoiceId, 'branch': branch});
+    return SchoolInvoice.fromApi((b as Map)['invoice'] as Map<String, dynamic>);
+  }
+
+// -------------------------------------------------------------- teachers
   Future<List<Teacher>> listTeachers() async {
     final b = await _api.call('api_listTeachers');
     return ((b as Map)['teachers'] as List?)

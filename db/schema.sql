@@ -168,7 +168,7 @@ create index if not exists idx_attendance_student on attendance(student_id, date
 -- ============ PRACTICE ============
 create table if not exists practice_sessions (
   id text primary key,
-  student_id text references students(id) on delete cascade not null,
+  student_id text not null,
   instrument text,
   activity text not null,
   minutes int not null,
@@ -177,6 +177,9 @@ create table if not exists practice_sessions (
   goal_met boolean default false,
   created_at timestamptz not null default now()
 );
+
+-- drop legacy FK so real AcademyOS student ids (students_acad) can be referenced
+alter table practice_sessions drop constraint if exists practice_sessions_student_id_fkey;
 
 create index if not exists idx_practice_student_date on practice_sessions(student_id, date desc);
 

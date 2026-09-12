@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "prestart": "node db/apply.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
   },

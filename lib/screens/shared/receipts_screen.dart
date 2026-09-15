@@ -18,17 +18,13 @@ class ReceiptsScreen extends StatefulWidget {
   State<ReceiptsScreen> createState() => _ReceiptsScreenState();
 }
 
-class _ReceiptsScreenState extends State<ReceiptsScreen> with SyncAware
+class _ReceiptsScreenState extends State<ReceiptsScreen> with SyncAware {
   @override
-  Set<String> get syncEntities => { 'receipts', 'payments' };
+  Set<String> get syncEntities => const {'receipts', 'payments'};
 
   @override
-  Future<void> reloadFromSync() => _load; with SyncAware
-  @override
-  Set<String> get syncEntities => { 'receipts', 'payments' };
+  Future<void> reloadFromSync() => _search(_q.text);
 
-  @override
-  Future<void> reloadFromSync() => _load; {
   final _q = TextEditingController();
   List<ReceiptRow> _rows = [];
   bool _busy = false;
@@ -129,9 +125,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with SyncAware
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(r.receiptNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-              Text('${r.student} · ${r.date}',
+              Text('${r.student} Â· ${r.date}',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-              Text(r.mode.isNotEmpty ? r.mode : '—',
+              Text(r.mode.isNotEmpty ? r.mode : 'â€”',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
             ]),
           ),

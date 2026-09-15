@@ -3,8 +3,19 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// Thrown for any non-`ok` response from the Apps Script backend,
-/// or transport failure. Keeps the [code] from the server for UI hints.
+/// Classification codes surfaced to the login screen so the user knows what
+/// to fix instead of a raw "could not reach server".
+const kErrInvalidConfig = 'INVALID_CONFIG';
+const kErrNetworkUnreachable = 'NETWORK_UNREACHABLE';
+const kErrHttpError = 'HTTP_ERROR';
+const kErrWrongBackend = 'WRONG_BACKEND';
+const kErrAuthFailed = 'AUTH_FAILED';
+const kErrRoleForbidden = 'ROLE_FORBIDDEN';
+const kErrBranchForbidden = 'BRANCH_FORBIDDEN';
+const kErrBackend = 'BACKEND_ERROR';
+
+/// Thrown for any non-`ok` response from the gateway backend, or transport
+/// failure. Keeps a classification [code] for UI hints.
 class ApiException implements Exception {
   ApiException(this.message, {this.code, this.payload});
 
@@ -16,10 +27,11 @@ class ApiException implements Exception {
   String toString() => code == null ? message : '$message [$code]';
 }
 
-/// Transport failure (offline, unreachable, timeout).
+/// Transport failure (offline, unreachable, timeout, DNS).
 class ApiUnreachable implements Exception {
-  ApiUnreachable(this.message);
+  ApiUnreachable(this.message, {this.code = kErrNetworkUnreachable});
   final String message;
+  final String code;
   @override
   String toString() => message;
 }
@@ -37,7 +49,7 @@ class ApiClient {
   final String token;
   late final http.Client _http;
 
-  /// Posts `function=<api>` + `arg=<json>` to the web app and returns the
+  /// Posts `function=<api>` + `arg=<json>` to the gateway and returns the
   /// server body decoded. Non-{ok:true} responses throw [ApiException].
   Future<dynamic> call(String api, [Object? arg]) async {
     final body = <String, String>{
@@ -55,11 +67,11 @@ class ApiClient {
     } on TimeoutException {
       throw ApiUnreachable('Server timed out. Check your connection and retry.');
     } catch (e) {
-      throw ApiUnreachable('Could not reach server. $e');
+      throw ApiUnreachable('Could not reach server. Check your connection and that the gateway URL is correct.');
     }
     if (resp.statusCode != 200) {
       throw ApiException('Server returned HTTP ${resp.statusCode}.',
-          code: 'HTTP_${resp.statusCode}');
+          code: kErrHttpError);
     }
     dynamic data;
     try {
@@ -68,16 +80,33 @@ class ApiClient {
       throw ApiException(
           'Server answered in an unexpected format. Wrong backend URL '
           '(${execUrl.replaceFirst(RegExp(r'https?://'), '')})?',
-          code: 'BAD_BODY');
+          code: kErrWrongBackend);
     }
     if (data is! Map<String, dynamic>) {
-      throw ApiException('Unexpected server payload.', code: 'BAD_SHAPE');
+      throw ApiException('Unexpected server payload.', code: kErrWrongBackend);
     }
     if (data['ok'] == true) return data;
-    throw ApiException(
-        (data['error'] ?? (data['reason'] ?? 'Request failed.')).toString(),
-        code: (data['code'] ?? data['reason'] ?? '').toString(),
-        payload: data);
+    // Classify the backend refusal.
+    final code = (data['code'] ?? data['reason'] ?? '').toString();
+    final msg = (data['error'] ?? 'Request failed.').toString();
+    throw ApiException(msg, code: _classify(code), payload: data);
+  }
+
+  String _classify(String code) {
+    final upper = code.toUpperCase();
+    if (upper.contains('UNAUTHORIZED') || upper.contains('INVALID_TOKEN') || upper.contains('AUTH_FAILED')) {
+      return kErrAuthFailed;
+    }
+    if (upper.contains('ROLE') || upper.contains('FORBIDDEN') && upper.contains('FOUNDER')) {
+      return kErrRoleForbidden;
+    }
+    if (upper.contains('BRANCH') || upper.contains('BRANCH_FORBIDDEN')) {
+      return kErrBranchForbidden;
+    }
+    if (upper.contains('BAD_BODY') || upper.contains('BAD_SHAPE') || upper.contains('WRONG_BACKEND')) {
+      return kErrWrongBackend;
+    }
+    return kErrBackend;
   }
 
   void dispose() => _http.close();

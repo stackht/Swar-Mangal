@@ -17,17 +17,13 @@ class ApprovalsScreen extends StatefulWidget {
   State<ApprovalsScreen> createState() => _ApprovalsScreenState();
 }
 
-class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware
+class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
   @override
-  Set<String> get syncEntities => { 'approvals', 'payments', 'students' };
+  Set<String> get syncEntities => const {'approvals', 'payments', 'students'};
 
   @override
-  Future<void> reloadFromSync() => _load; with SyncAware
-  @override
-  Set<String> get syncEntities => { 'approvals', 'payments', 'students' };
+  Future<void> reloadFromSync() => _load();
 
-  @override
-  Future<void> reloadFromSync() => _load; {
   ApprovalsData? _data;
   List<PaymentDraftRow> _queue = [];
   String? _error;

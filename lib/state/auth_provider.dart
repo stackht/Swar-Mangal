@@ -71,11 +71,11 @@ class AuthProvider extends ChangeNotifier {
           boot = (await api.call('api_bootstrap')) as Map<String, dynamic>;
         }
       } on ApiException catch (e) {
-        if (e.code == 'BAD_BODY' || e.code == 'HTTP_404') {
+        if (e.code == kErrWrongBackend) {
           throw ApiException(
             'Backend did not answer as a Swar Mangal app. $execUrl looks like '
             'the wrong deployment URL.',
-            code: 'WRONG_BACKEND',
+            code: kErrWrongBackend,
           );
         }
         rethrow;

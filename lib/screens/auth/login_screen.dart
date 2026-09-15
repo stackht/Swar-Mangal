@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../config.dart';
 import '../../core/theme.dart';
+import '../../core/url_config.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
 import '../../widgets/music_mark.dart';
@@ -39,14 +40,19 @@ class _LoginScreenState extends State<LoginScreen> {
       _toast('Enter your device token first.');
       return;
     }
-    final url = _customUrl?.trim().isNotEmpty == true
-        ? _customUrl!.trim()
-        : (_endpoint == 'staff' ? AppConfig.staffExecUrl : AppConfig.founderExecUrl);
+    // Persisted custom URL only if it passes validation; otherwise fall back
+    // to the configured production gateway. Never silently use a placeholder.
+    final url = resolveEffectiveUrl(persistedUrl: _customUrl, staff: _endpoint == 'staff');
+    final v = ExecUrlValidator.validate(url);
+    if (!v.ok) {
+      _toast(v.error ?? 'Invalid API URL.');
+      return;
+    }
     final provider = context.read<AuthProvider>();
     await provider.login(
           endpoint: _endpoint,
           token: _token.text.trim(),
-          execUrl: url,
+          execUrl: v.url!,
         );
     if (!mounted) return;
     if (provider.error != null) {

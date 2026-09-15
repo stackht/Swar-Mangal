@@ -43,17 +43,13 @@ class _Body extends StatefulWidget {
   State<_Body> createState() => _BodyState();
 }
 
-class _BodyState extends State<_Body> with SyncAware
+class _BodyState extends State<_Body> with SyncAware {
   @override
-  Set<String> get syncEntities => { 'dashboard', 'receipts', 'students' };
+  Set<String> get syncEntities => const {'dashboard', 'receipts', 'students'};
 
   @override
-  Future<void> reloadFromSync() => _fetch; with SyncAware
-  @override
-  Set<String> get syncEntities => { 'dashboard', 'receipts', 'students' };
+  Future<void> reloadFromSync() => _fetch();
 
-  @override
-  Future<void> reloadFromSync() => _fetch; {
   DashboardMetrics? _metrics;
   DueReminders? _dues;
   String? _error;
@@ -234,7 +230,7 @@ class _BodyState extends State<_Body> with SyncAware
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               ),
               title: Text(it.studentName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: Text('${it.classCode} · ${it.phone}', style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+              subtitle: Text('${it.classCode} Â· ${it.phone}', style: const TextStyle(fontSize: 12, color: AppColors.muted)),
               trailing: Text(it.nextDueDate, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
             ),
       ]),
@@ -248,8 +244,8 @@ class _BodyState extends State<_Body> with SyncAware
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: 0),
         leading: const Icon(Icons.receipt_outlined, color: AppColors.muted),
-        title: Text('${r.receiptNo} · ${r.student}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-        subtitle: Text('${r.date} · ${r.mode}', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        title: Text('${r.receiptNo} Â· ${r.student}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        subtitle: Text('${r.date} Â· ${r.mode}', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         trailing: AmountText(r.amount),
       ),
     );

@@ -16,17 +16,13 @@ class InquiriesScreen extends StatefulWidget {
   State<InquiriesScreen> createState() => _InquiriesScreenState();
 }
 
-class _InquiriesScreenState extends State<InquiriesScreen> with SyncAware
+class _InquiriesScreenState extends State<InquiriesScreen> with SyncAware {
   @override
-  Set<String> get syncEntities => { 'inquiries' };
+  Set<String> get syncEntities => const {'inquiries'};
 
   @override
-  Future<void> reloadFromSync() => _load; with SyncAware
-  @override
-  Set<String> get syncEntities => { 'inquiries' };
+  Future<void> reloadFromSync() => _load();
 
-  @override
-  Future<void> reloadFromSync() => _load; {
   List<Inquiry> _rows = [];
   String? _error;
   bool _busy = true;
@@ -179,7 +175,7 @@ class _InquiriesScreenState extends State<InquiriesScreen> with SyncAware
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(q.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 Text(
-                    [q.course, q.phone, q.branch].where((e) => e.isNotEmpty).join(' · '),
+                    [q.course, q.phone, q.branch].where((e) => e.isNotEmpty).join(' Â· '),
                     style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                 if (q.followUpDate.isNotEmpty)
                   Text('Follow up: ${q.followUpDate}', style: const TextStyle(fontSize: 11, color: AppColors.focus)),

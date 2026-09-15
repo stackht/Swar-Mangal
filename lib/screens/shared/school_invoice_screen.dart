@@ -19,17 +19,13 @@ class SchoolInvoiceScreen extends StatefulWidget {
   State<SchoolInvoiceScreen> createState() => _SchoolInvoiceScreenState();
 }
 
-class _SchoolInvoiceScreenState extends State<SchoolInvoiceScreen> with SyncAware
+class _SchoolInvoiceScreenState extends State<SchoolInvoiceScreen> with SyncAware {
   @override
-  Set<String> get syncEntities => { 'invoices' };
+  Set<String> get syncEntities => const {'invoices'};
 
   @override
-  Future<void> reloadFromSync() => _load; with SyncAware
-  @override
-  Set<String> get syncEntities => { 'invoices' };
+  Future<void> reloadFromSync() => _load();
 
-  @override
-  Future<void> reloadFromSync() => _load; {
   List<InvoiceSummary> _rows = [];
   String? _error;
   bool _busy = true;
@@ -113,7 +109,7 @@ class _SchoolInvoiceScreenState extends State<SchoolInvoiceScreen> with SyncAwar
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(s.invoiceNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-              Text('${s.className.isNotEmpty ? s.className : '—'} · ${s.tenure}',
+              Text('${s.className.isNotEmpty ? s.className : 'â€”'} Â· ${s.tenure}',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
               Text(s.invoiceDate, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
             ]),

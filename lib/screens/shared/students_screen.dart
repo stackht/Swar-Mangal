@@ -20,17 +20,13 @@ class StudentsScreen extends StatefulWidget {
   State<StudentsScreen> createState() => _StudentsScreenState();
 }
 
-class _StudentsScreenState extends State<StudentsScreen> with SyncAware
+class _StudentsScreenState extends State<StudentsScreen> with SyncAware {
   @override
-  Set<String> get syncEntities => { 'students' };
+  Set<String> get syncEntities => const {'students'};
 
   @override
-  Future<void> reloadFromSync() => _search; with SyncAware
-  @override
-  Set<String> get syncEntities => { 'students' };
+  Future<void> reloadFromSync() => _search();
 
-  @override
-  Future<void> reloadFromSync() => _search; {
   final _q = TextEditingController();
   List<Student> _rows = [];
   bool _busy = false;
@@ -190,7 +186,7 @@ class _StudentsScreenState extends State<StudentsScreen> with SyncAware
               Text(s.studentName,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
               const SizedBox(height: 2),
-              Text('${s.classCode.isNotEmpty ? s.classCode : '—'} · ${s.instrument.isNotEmpty ? s.instrument : s.studentId} · ${s.phone}',
+              Text('${s.classCode.isNotEmpty ? s.classCode : 'â€”'} Â· ${s.instrument.isNotEmpty ? s.instrument : s.studentId} Â· ${s.phone}',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
               const SizedBox(height: 4),
               Wrap(spacing: AppSpace.s2, children: [

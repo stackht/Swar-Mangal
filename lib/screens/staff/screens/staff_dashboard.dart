@@ -29,17 +29,13 @@ class _Body extends StatefulWidget {
   State<_Body> createState() => _BodyState();
 }
 
-class _BodyState extends State<_Body> with SyncAware
+class _BodyState extends State<_Body> with SyncAware {
   @override
-  Set<String> get syncEntities => { 'tasks', 'dashboard', 'attendance' };
+  Set<String> get syncEntities => const {'tasks', 'dashboard', 'attendance'};
 
   @override
-  Future<void> reloadFromSync() => _fetch; with SyncAware
-  @override
-  Set<String> get syncEntities => { 'tasks', 'dashboard', 'attendance' };
+  Future<void> reloadFromSync() => _fetch();
 
-  @override
-  Future<void> reloadFromSync() => _fetch; {
   List<TaskCard>? _cards;
   String? _error;
   bool _busy = true;

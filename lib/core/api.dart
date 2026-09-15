@@ -67,7 +67,13 @@ class ApiClient {
     } on TimeoutException {
       throw ApiUnreachable('Server timed out. Check your connection and retry.');
     } catch (e) {
-      throw ApiUnreachable('Could not reach server. Check your connection and that the gateway URL is correct.');
+      // Keep the underlying detail (DNS/socket/TLS) so the login screen can
+      // tell the user exactly which host/port failed. Safety: the exception
+      // text never contains the device token.
+      throw ApiUnreachable(
+        'Could not reach server. Check your connection and that the gateway '
+        'URL is correct.\nDetail: $e',
+      );
     }
     if (resp.statusCode != 200) {
       throw ApiException('Server returned HTTP ${resp.statusCode}.',

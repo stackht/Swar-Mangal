@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateToken } from "@/lib/rpc/auth";
 import { rpcDispatch } from "@/lib/rpc/handlers";
 import { dispatch2 } from "@/lib/rpc/handlers2";
+import { authorizeRpc, authorizeBranch } from "@/lib/rpc/authorization";
 import { isDbConfigured } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -15,9 +16,17 @@ const sheetOkResponse = (body: Record<string, unknown>) => {
   });
 };
 
+const rpcError = (code: string, message: string) =>
+  sheetOkResponse({ ok: false, code, error: message });
+
+function logDeny(sessionEmail: string, role: string, fn: string, code: string, branch: string) {
+  // SAFE logging: no token, no password, no payload, no PII.
+  console.warn(`[rpc-deny] ts=${new Date().toISOString()} role=${role} email=${sessionEmail} fn=${fn} code=${code} branch=${branch || "none"}`);
+}
+
 export async function POST(req: NextRequest) {
   if (!isDbConfigured) {
-    return sheetOkResponse({ ok: false, code: "NO_DB", error: "Database not configured" });
+    return rpcError("NO_DB", "Database not configured");
   }
 
   let functionName = "";
@@ -43,15 +52,34 @@ export async function POST(req: NextRequest) {
       token = String(j?.token ?? "");
       argMap = typeof j?.arg === "object" && j?.arg !== null ? j.arg : {};
     } catch {
-      return sheetOkResponse({ ok: false, code: "BAD_BODY", error: "Expected form (function/token/arg) or JSON body" });
+      return rpcError("BAD_BODY", "Expected form (function/token/arg) or JSON body");
     }
   }
 
-  if (!functionName) return sheetOkResponse({ ok: false, code: "UNKNOWN_API", error: "No function given" });
+  if (!functionName) {
+    return rpcError("UNKNOWN_API", "No function given");
+  }
 
+  // ---- authenticate ----
   const session = authenticateToken(token);
-  if (!session) return sheetOkResponse({ ok: false, code: "UNAUTHORIZED", error: "Invalid or missing token" });
+  if (!session) {
+    return rpcError("AUTH_FAILED", "Invalid or missing token");
+  }
 
+  // ---- authorize (fail-closed, BEFORE handler execution) ----
+  const roleCheck = authorizeRpc(session, functionName);
+  if (!roleCheck.ok) {
+    logDeny(session.email, session.role, functionName, roleCheck.code, "");
+    return rpcError(roleCheck.code, roleCheck.message || "Not authorised");
+  }
+
+  const branchCheck = authorizeBranch(session, argMap);
+  if (!branchCheck.ok) {
+    logDeny(session.email, session.role, functionName, branchCheck.code, "");
+    return rpcError(branchCheck.code, branchCheck.message || "Branch not authorised");
+  }
+
+  // ---- execute handler (only after authz) ----
   const inHandlers1 = [
     "api_bootstrap", "api_staff_boot",
     "api_searchStudent", "api_staff_searchStudents", "api_staff_getStudentProfile", "api_studentProfile",
@@ -60,12 +88,11 @@ export async function POST(req: NextRequest) {
     "api_founder_listPaymentDrafts", "api_founder_paymentDraftApprove", "api_founder_paymentDraftReject",
     "api_founder_finalisePaymentDraft", "api_staff_finalisePaymentDraft",
   ];
-
   try {
     const handler = inHandlers1.includes(functionName) ? rpcDispatch : dispatch2;
     const result = await handler(session.role, functionName, argMap);
     return sheetOkResponse(result);
   } catch (e) {
-    return sheetOkResponse({ ok: false, code: "SERVER_ERROR", error: e instanceof Error ? e.message : String(e) });
+    return rpcError("SERVER_ERROR", "Backend error");
   }
 }

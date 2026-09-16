@@ -137,7 +137,7 @@ export default function AdminFeesPage() {
                     {i.status !== "paid" ? (
                       <Button size="sm" variant="secondary" onClick={() => markPaid(i.id)}>Mark paid</Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Ã¢â‚¬â€</span>
+                      <span className="text-xs text-muted-foreground"></span>
                     )}
                   </td>
                 </motion.tr>
@@ -181,7 +181,7 @@ export default function AdminFeesPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium">{p.student_name}</p>
-                <p className="text-xs text-muted-foreground">{p.method} Ã‚Â· {new Date(p.date).toLocaleDateString()}</p>
+                <p className="text-xs text-muted-foreground">{p.method} � {new Date(p.date).toLocaleDateString()}</p>
               </div>
               <span className="font-bold text-mint-700 dark:text-mint-300">+${p.amount}</span>
             </motion.div>

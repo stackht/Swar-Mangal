@@ -45,7 +45,7 @@ export default function StudentPaymentsPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{inv.description}</p>
                 <p className="text-xs text-muted-foreground">
-                  Issued {new Date(inv.issued_date).toLocaleDateString()} Ãƒâ€šÃ‚Â· Due {new Date(inv.due_date).toLocaleDateString()}
+                  Issued {new Date(inv.issued_date).toLocaleDateString()} � Due {new Date(inv.due_date).toLocaleDateString()}
                 </p>
               </div>
               <span className="text-lg font-bold">${inv.amount}</span>

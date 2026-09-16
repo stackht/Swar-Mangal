@@ -55,7 +55,7 @@ export default function StudentAssignmentsPage() {
       <SectionHeader title={`In progress (${pending.length})`} />
       <div className="space-y-4">
         {pending.length === 0 && (
-          <p className="rounded-3xl border bg-card p-10 text-center text-sm text-muted-foreground">No pending assignments ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all caught up!</p>
+          <p className="rounded-3xl border bg-card p-10 text-center text-sm text-muted-foreground">No pending assignments · all caught up!</p>
         )}
         {pending.map((a, i) => (
           <motion.div
@@ -83,7 +83,7 @@ export default function StudentAssignmentsPage() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{a.description}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      by {a.teacher_name} Ãƒâ€šÃ‚Â· expected {a.expected_minutes} min Ãƒâ€šÃ‚Â· due{" "}
+                      by {a.teacher_name} · expected {a.expected_minutes} min · due{" "}
                       {new Date(a.due_date).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                     </p>
                   </div>

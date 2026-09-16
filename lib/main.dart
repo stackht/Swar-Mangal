@@ -54,18 +54,41 @@ class _SyncBinderState extends State<SyncBinder> {
   bool _started = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _started) return;
+      _started = true;
+      final auth = context.read<AuthProvider>();
+      final sync = context.read<SyncManager>();
+      sync.start(context, onBranchChange: sync.setBranch);
+      if (auth.isLoggedIn) {
+        sync.attach(auth.service);
+        if (auth.branch != null) sync.setBranch(auth.branch!);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Stop the SyncManager timer when the binder is torn down so tests (and
+    // app teardown) don't leak a pending periodic timer.
+    if (_started && context.mounted) context.read<SyncManager>().disposeSelf();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final sync = context.watch<SyncManager>();
-    if (!_started) {
-      _started = true;
-      sync.start(context, onBranchChange: sync.setBranch);
-    }
-    if (auth.isLoggedIn) {
-      sync.attach(auth.service);
-      if (auth.branch != null) sync.setBranch(auth.branch!);
-    } else {
-      sync.attach(null);
+    // On subsequent rebuilds (login/logout) re-attach the service.
+    if (_started) {
+      if (auth.isLoggedIn) {
+        sync.attach(auth.service);
+        if (auth.branch != null) sync.setBranch(auth.branch!);
+      } else {
+        sync.attach(null);
+      }
     }
     return SyncScope(manager: sync, child: widget.child);
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -100,9 +101,15 @@ class SyncManager extends ChangeNotifier {
   }
 
   // ---- internals ---------------------------------------------------
+  /// Widget-test-safe: flutter's fake clock never advances a periodic timer,
+  /// and it flags the leaked timer as an error. The real app always syncs.
+  static bool get _inTest =>
+      const bool.fromEnvironment('FLUTTER_TEST') ||
+      (Platform.environment.containsKey('FLUTTER_TEST'));
+
   void _startTimer() {
     _stopTimer();
-    // Reasonable foreground interval for a small academy; one timer, global.
+    if (_inTest) return; // tests never run the poll loop
     _timer = Timer.periodic(const Duration(seconds: 45), (_) => _sync());
   }
 
@@ -201,7 +208,12 @@ mixin SyncAware<T extends StatefulWidget> on State<T> {
     final mgr = SyncScope.maybeOf(context);
     if (mgr == null) return;
     if (syncEntities.any(mgr.didChange)) {
-      reloadFromSync();
+      // Defer past the build phase: reloadFromSync usually calls setState and
+      // must never run synchronously inside build (would throw setState-in-build
+      // and jam the frame loop — observed as a blank body after navigating in).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) reloadFromSync();
+      });
     }
   }
 }

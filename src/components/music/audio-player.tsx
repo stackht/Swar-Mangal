@@ -136,7 +136,7 @@ export function AudioPlayer({
             onClick={cycleSpeed}
             className="min-w-[32px] rounded-lg bg-secondary px-1.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
           >
-            {speed}×
+            {speed}�
           </button>
         </div>
       </div>

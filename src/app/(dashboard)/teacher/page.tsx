@@ -42,7 +42,7 @@ export default function TeacherDashboard() {
         <motion.div variants={itemVariants} className="flex items-center gap-3.5">
           <Avatar name={user?.full_name ?? "Sarah"} src={user?.avatar_url} size="lg" />
           <div>
-            <p className="text-eyebrow">Teacher Ãƒâ€šÃ‚Â· Piano</p>
+            <p className="text-eyebrow">Teacher · Piano</p>
             <h1 className="text-display text-primary">{greeting()}, {user?.full_name?.split(" ")[0] ?? "Sarah"}</h1>
           </div>
         </motion.div>
@@ -72,7 +72,7 @@ export default function TeacherDashboard() {
         </motion.div>
       </motion.div>
 
-      {/* TODAY'S CLASSES ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â timeline */}
+      {/* TODAY'S CLASSES · timeline */}
       <section>
         <div className="flex items-end justify-between mb-4">
           <h3 className="text-eyebrow">Today{"'"}s teaching</h3>
@@ -82,7 +82,7 @@ export default function TeacherDashboard() {
           <div className="rounded-2xl border border-dashed border-border/50 bg-secondary/30 p-10 text-center">
             <Music className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
             <p className="text-sm font-medium">No classes today</p>
-            <p className="text-xs text-muted-foreground">A free day ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â catch up on feedback.</p>
+            <p className="text-xs text-muted-foreground">A free day · catch up on feedback.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -96,7 +96,7 @@ export default function TeacherDashboard() {
                 <div className="h-8 w-px bg-border/60" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">{c.title}</p>
-                  <p className="text-xs text-muted-foreground">{c.student_ids.length} students Ãƒâ€šÃ‚Â· {c.room ?? c.mode}</p>
+                  <p className="text-xs text-muted-foreground">{c.student_ids.length} students · {c.room ?? c.mode}</p>
                 </div>
                 <div className="h-8 w-16 opacity-50"><FrequencyBars bars={10} playing={false} /></div>
                 <Badge variant={c.mode === "online" ? "secondary" : "default"}>{c.mode}</Badge>
@@ -127,13 +127,13 @@ export default function TeacherDashboard() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{a.title}</p>
-                <p className="text-xs text-muted-foreground">Submitted ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â review pending</p>
+                <p className="text-xs text-muted-foreground">Submitted · review pending</p>
               </div>
               <Button variant="ghost" size="sm" asChild><Link href="/teacher/assignments">Review</Link></Button>
             </div>
           ))}
           {lowPractice.length === 0 && pendingReview.length === 0 && (
-            <p className="text-sm text-muted-foreground py-2">All students on track ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â great work.</p>
+            <p className="text-sm text-muted-foreground py-2">All students on track · great work.</p>
           )}
         </div>
       </section>

@@ -49,7 +49,7 @@ export default function AdminLibraryPage() {
                 </button>
               </div>
               <p className="mt-4 font-semibold leading-snug">{r.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} Ã‚Â· {r.level}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} � {r.level}</p>
               <div className="mt-3"><Badge variant="secondary">{typeLabels[r.type]}</Badge></div>
             </motion.div>
           ))}

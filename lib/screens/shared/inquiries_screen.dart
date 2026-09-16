@@ -175,7 +175,7 @@ class _InquiriesScreenState extends State<InquiriesScreen> with SyncAware {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(q.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 Text(
-                    [q.course, q.phone, q.branch].where((e) => e.isNotEmpty).join(' Â· '),
+                    [q.course, q.phone, q.branch].where((e) => e.isNotEmpty).join(' · '),
                     style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                 if (q.followUpDate.isNotEmpty)
                   Text('Follow up: ${q.followUpDate}', style: const TextStyle(fontSize: 11, color: AppColors.focus)),

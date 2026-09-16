@@ -75,7 +75,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Part 3: migrate any legacy SharedPreferences token Ã¢â€ â€™ secure storage.
+      // Part 3: migrate any legacy SharedPreferences token → secure storage.
       final legacyToken = await SessionStorage.migrateLegacyToken();
       if (legacyToken != null && legacyToken.isNotEmpty) {
         // migrated; secure storage now holds it
@@ -121,7 +121,7 @@ class AuthProvider extends ChangeNotifier {
       if (isAuthFail) {
         await SessionStorage.deleteToken();
         await SessionStorage.deleteEndpoint();
-        _error = 'Invalid token Ã¢â‚¬â€ credentials cleared.';
+        _error = 'Invalid token — credentials cleared.';
       } else {
         _error = 'Unable to connect. Please check your network and retry.';
       }
@@ -206,7 +206,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // -------------------------------------------------------------- demo (Part 9)
-  /// Offline demo session Ã¢â‚¬â€ memory only. Never persisted.
+  /// Offline demo session — memory only. Never persisted.
   Future<void> demoLogin({required bool founder}) async {
     if (_busy || _restoring) return;
     final api = DemoApiClient();

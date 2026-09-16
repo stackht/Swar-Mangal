@@ -20,9 +20,9 @@ import { EASE } from "@/lib/motion";
 import { cn } from "@/lib/utils/cn";
 
 const notes: string[] = [
-  "Focus on dynamics Ã¢â‚¬â€ piano vs forte contrast in section A.",
+  "Focus on dynamics  piano vs forte contrast in section A.",
   "Metronome at 72 bpm; increase once consistent.",
-  "Review bar 12Ã¢â‚¬â€œ16 left hand voicing.",
+  "Review bar 12—16 left hand voicing.",
   "Record a practice take for Friday's review.",
 ];
 
@@ -61,11 +61,11 @@ export default function ClassDetailPage() {
                   <InstrumentBadge instrument={cls.instrument} color={color} size="lg" />
                   <div>
                     <h1 className="text-h1">{cls.title}</h1>
-                    <p className="mt-1 text-body-sm text-muted-foreground">{cls.instrument} Ã‚Â· {cls.mode}</p>
+                    <p className="mt-1 text-body-sm text-muted-foreground">{cls.instrument} · {cls.mode}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <InfoChip icon={<Clock className="h-4 w-4" />} label="Time" value={`${formatTime(cls.start_time)} Ã¢â‚¬â€œ ${formatTime(cls.end_time)}`} />
+                  <InfoChip icon={<Clock className="h-4 w-4" />} label="Time" value={`${formatTime(cls.start_time)} — ${formatTime(cls.end_time)}`} />
                   <InfoChip icon={<Clock className="h-4 w-4" />} label="Duration" value={`${cls.duration_min} min`} />
                   <InfoChip icon={cls.mode === "online" ? <Video className="h-4 w-4" /> : <MapPin className="h-4 w-4" />} label="Location" value={cls.room ?? cls.mode} />
                   <InfoChip icon={<Users className="h-4 w-4" />} label="Students" value={`${roster.length}`} />
@@ -90,7 +90,7 @@ export default function ClassDetailPage() {
             <Card>
               <CardContent className="p-5">
                 <ul className="space-y-2.5 text-sm text-muted-foreground">
-                  {["Warm-up scales Ã¢â‚¬â€ 5 min", "Review last week assignments", "New piece walkthrough Ã¢â‚¬â€ Section A", "Rhythm drills (eighth & quarter notes)", "Sight-reading exercise"].map((n, i) => (
+                  {["Warm-up scales  5 min", "Review last week assignments", "New piece walkthrough  Section A", "Rhythm drills (eighth & quarter notes)", "Sight-reading exercise"].map((n, i) => (
                     <li key={i} className="flex items-start gap-2">
                       <CheckIcon className={cn("mt-0.5 h-4 w-4 shrink-0", i < 2 ? "text-mint-500" : "text-lavender-400")} />
                       {n}
@@ -123,7 +123,7 @@ export default function ClassDetailPage() {
                     <Target className="h-5 w-5 shrink-0 text-peach-500" />
                     <div className="flex-1">
                       <p className="text-sm font-semibold">{a.title}</p>
-                      <p className="text-xs text-muted-foreground">Due {new Date(a.due_date).toLocaleDateString()} Ã‚Â· {a.expected_minutes} min expected</p>
+                      <p className="text-xs text-muted-foreground">Due {new Date(a.due_date).toLocaleDateString()} · {a.expected_minutes} min expected</p>
                     </div>
                     <Badge variant={a.status === "submitted" ? "mint" : "peach"}>{a.status}</Badge>
                   </CardContent>
@@ -146,7 +146,7 @@ export default function ClassDetailPage() {
                       <Avatar name={s.full_name} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{s.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{s.instrument} Ã‚Â· {s.level}</p>
+                        <p className="text-xs text-muted-foreground">{s.instrument} · {s.level}</p>
                       </div>
                       <Badge variant={s.fee_status === "paid" ? "mint" : s.fee_status === "pending" ? "lavender" : "peach"}>{s.fee_status}</Badge>
                     </div>

@@ -49,7 +49,7 @@ export default function AdminInstrumentsPage() {
             <div>
               <p className="font-semibold">{inst.name}</p>
               <p className="text-xs text-muted-foreground">
-                {inst.id === "inst-6" || inst.id === "inst-7" ? "In use" : "In use"} Ã‚Â· {inst.name}
+                {inst.id === "inst-6" || inst.id === "inst-7" ? "In use" : "In use"} � {inst.name}
               </p>
             </div>
           </motion.div>

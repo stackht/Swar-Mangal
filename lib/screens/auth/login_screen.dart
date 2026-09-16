@@ -6,6 +6,7 @@ import '../../core/session_storage.dart';
 import '../../core/theme.dart';
 import '../../core/url_config.dart';
 import '../../state/auth_provider.dart';
+import '../../widgets/atmosphere.dart';
 import '../../widgets/atoms.dart';
 import '../../widgets/music_mark.dart';
 
@@ -26,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     // Load only NON-sensitive settings (API URL + endpoint). The token is
-    // never loaded into the visible field Ã¢â‚¬â€ session restoration is silent.
+    // never loaded into the visible field — session restoration is silent.
     AuthProvider.loadSettings().then((s) {
       if (!mounted) return;
       setState(() {
@@ -78,8 +79,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthProvider>();
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
+      backgroundColor: Colors.transparent,
+      body: Atmosphere(
+        child: SafeArea(
+          child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpace.s5),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -120,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: scheme.onSurface,
                   )),
               const SizedBox(height: AppSpace.s2),
-              Text('Goregaon  Ã‚Â·  Kandivali',
+              Text('Goregaon  ·  Kandivali',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               const SizedBox(height: AppSpace.s6),
@@ -184,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : () => context
                                     .read<AuthProvider>()
                                     .demoLogin(founder: true),
-                            child: const Text('Demo Ã‚Â· Founder',
+                            child: const Text('Demo · Founder',
                                 style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ),
@@ -201,7 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : () => context
                                     .read<AuthProvider>()
                                     .demoLogin(founder: false),
-                            child: const Text('Demo Ã‚Â· Staff',
+                            child: const Text('Demo · Staff',
                                 style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ),
@@ -217,8 +220,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       Align(
                         child: Text(
-                            'v${AppConfig.appVersion} Ã‚Â· ${AppConfig.appBuild}'
-                            '${auth.isDemo ? ' Ã‚Â· demo mode' : ''}',
+                            'v${AppConfig.appVersion} · ${AppConfig.appBuild}'
+                            '${auth.isDemo ? ' · demo mode' : ''}',
                             style: const TextStyle(fontSize: 11, color: AppColors.muted)),
                       ),
                     ],
@@ -227,9 +230,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
+        ),  // SingleChildScrollView
+        ),  // SafeArea
+      ),  // Atmosphere
+    );  // Scaffold
   }
 
   void _showServerSheet() {

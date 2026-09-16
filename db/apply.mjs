@@ -87,7 +87,9 @@ async function main() {
         `delete from payment_drafts where student_name ilike '%Bipin%' or student_name ilike '%QA RETEST%';
          delete from receipts where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
          delete from money_ledger where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
-         delete from practice_sessions where activity = 'Kanak practice' or activity = 'Chord Practice';`,
+         delete from practice_sessions where activity = 'Kanak practice' or activity = 'Chord Practice';
+         -- stale uniform 17:00–18:00 auto-seeded timetable rows (re-seeded with real slots)
+         delete from timetable where start_time = '17:00' and end_time = '18:00' and id like 'TT-%';`,
       );
       console.log("qa cleanup applied");
     } catch {

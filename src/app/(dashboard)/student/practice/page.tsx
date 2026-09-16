@@ -137,7 +137,7 @@ export default function StudentPracticePage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{s.activity}</p>
                 <p className="text-xs text-muted-foreground">
-                  {s.instrument} Ãƒâ€šÃ‚Â· {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                  {s.instrument} � {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
                 </p>
               </div>
               <span className="text-sm font-semibold tabular-nums">{s.minutes} min</span>

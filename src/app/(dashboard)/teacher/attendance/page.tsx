@@ -98,13 +98,13 @@ export default function TeacherAttendancePage() {
               <div>
                 <p className="font-semibold">{current.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  {current.student_ids.length} students Ãƒâ€šÃ‚Â· {new Date(current.start_time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                  {current.student_ids.length} students · {new Date(current.start_time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={reset}>Reset</Button>
                 <Button variant="secondary" size="sm" onClick={() => markAll("present")}>All present</Button>
-                <Button size="sm" onClick={save}>{savedFor === activeClass ? "Saved ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : "Save attendance"}</Button>
+                <Button size="sm" onClick={save}>{savedFor === activeClass ? "Saved ✓" : "Save attendance"}</Button>
               </div>
             </div>
 
@@ -120,7 +120,7 @@ export default function TeacherAttendancePage() {
                   <Avatar name={s.full_name} size="md" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{s.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{s.instrument} Ãƒâ€šÃ‚Â· {s.level}</p>
+                    <p className="text-xs text-muted-foreground">{s.instrument} · {s.level}</p>
                   </div>
                   <div className="flex gap-1.5">
                     {statuses.map((st) => (

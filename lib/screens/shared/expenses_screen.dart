@@ -79,7 +79,7 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
   @override
   void initState() {
     super.initState();
-    // ONE idempotency key per form instance â€” reused across network retries so
+    // ONE idempotency key per form instance — reused across network retries so
     // a retry can never create a duplicate expense on the server.
     _idemKey = 'EXP-${DateTime.now().microsecondsSinceEpoch}';
   }
@@ -104,7 +104,7 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
       final amount = num.tryParse(_amount.text.trim()) ?? 0;
       final today = _today();
       // Backend EXPENSE_ENTRY_TYPES are specific (DAILY_EXPENSE/RENT/...).
-      // Map the category to a valid server type â€” never the invalid 'EXPENSE'.
+      // Map the category to a valid server type — never the invalid 'EXPENSE'.
       final entryType = _category.text.trim().toUpperCase() == 'RENT'
           ? 'RENT'
           : 'DAILY_EXPENSE';
@@ -146,9 +146,9 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
         _result = m['ok'] == true
             ? (widget.staff
                 ? 'Expense draft saved for founder approval.'
-                : 'Expense recorded (${m['entryId'] ?? 'â€”'}).')
+                : 'Expense recorded (${m['entryId'] ?? '—'}).')
             : (m['error'] ?? 'Could not save.').toString();
-        if (demo && _ok) _result = '$_result (DEMO â€” not persisted)';
+        if (demo && _ok) _result = '$_result (DEMO — not persisted)';
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -192,7 +192,7 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
                 TextFormField(
                   controller: _amount,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Amount (â‚¹)', prefixIcon: Icon(Icons.currency_rupee)),
+                  decoration: const InputDecoration(labelText: 'Amount (₹)', prefixIcon: Icon(Icons.currency_rupee)),
                   validator: (v) {
                     final n = num.tryParse(v ?? '');
                     return (n == null || n <= 0) ? 'Enter a valid amount' : null;
@@ -352,9 +352,9 @@ class _CashbookViewState extends State<_CashbookView> {
                       const SizedBox(width: AppSpace.s3),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('${_rows[i].category} Â· ${_rows[i].description}',
+                          Text('${_rows[i].category} · ${_rows[i].description}',
                               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                          Text('${_rows[i].date} Â· ${_rows[i].mode}',
+                          Text('${_rows[i].date} · ${_rows[i].mode}',
                               style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                         ]),
                       ),

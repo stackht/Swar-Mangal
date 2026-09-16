@@ -108,7 +108,7 @@ export default function StudentLibraryPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{r.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{r.author ?? r.instrument} Ã‚Â· {r.level}</p>
+                      <p className="truncate text-xs text-muted-foreground">{r.author ?? r.instrument} � {r.level}</p>
                     </div>
                   </div>
                   <FavHeart id={r.id} />
@@ -139,7 +139,7 @@ export default function StudentLibraryPage() {
             </div>
             <p className="mt-4 font-semibold leading-snug">{r.title}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {r.instrument} Ã‚Â· {r.level}
+              {r.instrument} � {r.level}
             </p>
             <div className="mt-3 flex items-center justify-between">
               <Badge variant="secondary">{typeLabels[r.type]}</Badge>

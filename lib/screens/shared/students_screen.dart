@@ -186,7 +186,7 @@ class _StudentsScreenState extends State<StudentsScreen> with SyncAware {
               Text(s.studentName,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
               const SizedBox(height: 2),
-              Text('${s.classCode.isNotEmpty ? s.classCode : 'â€”'} Â· ${s.instrument.isNotEmpty ? s.instrument : s.studentId} Â· ${s.phone}',
+              Text('${s.classCode.isNotEmpty ? s.classCode : '—'} · ${s.instrument.isNotEmpty ? s.instrument : s.studentId} · ${s.phone}',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
               const SizedBox(height: 4),
               Wrap(spacing: AppSpace.s2, children: [

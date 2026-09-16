@@ -125,9 +125,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with SyncAware {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(r.receiptNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-              Text('${r.student} Â· ${r.date}',
+              Text('${r.student} · ${r.date}',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-              Text(r.mode.isNotEmpty ? r.mode : 'â€”',
+              Text(r.mode.isNotEmpty ? r.mode : '—',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
             ]),
           ),

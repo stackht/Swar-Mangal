@@ -34,7 +34,7 @@ class RpcUrlValidator {
       return (ok: false, url: null, error: 'URL must start with https://');
     }
     if (lower.contains(' ')) {
-      return (ok: false, url: null, error: 'URL contains spaces Ã¢â‚¬â€ trim it.');
+      return (ok: false, url: null, error: 'URL contains spaces — trim it.');
     }
     if (!RegExp(r'https://[a-z0-9.\-]+(/[a-z0-9/_.\-]*)?$').hasMatch(lower)) {
       return (ok: false, url: null, error: 'URL looks malformed.');

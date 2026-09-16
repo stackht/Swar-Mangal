@@ -35,7 +35,7 @@ export default function TeacherProfilePage() {
             <p className="text-sm text-muted-foreground">{email}</p>
             <div className="mt-2 flex gap-2">
               <Badge variant="lavender">{t.instrument}</Badge>
-              <Badge variant="mint">Ã¢Ëœâ€¦ {t.rating}</Badge>
+              <Badge variant="mint">'—· {t.rating}</Badge>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={logout}><LogOut className="h-4 w-4" /> Sign out</Button>

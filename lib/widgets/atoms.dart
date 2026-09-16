@@ -30,6 +30,12 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: Theme.of(context).colorScheme.surface,
+      shadowColor: AppShadows.card.color,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(AppSpace.s4),
         child: Column(
@@ -37,8 +43,15 @@ class StatTile extends StatelessWidget {
           children: [
             Row(children: [
               if (icon != null) ...[
-                Icon(icon, size: 16, color: accent),
-                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: .10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 15, color: accent),
+                ),
+                const SizedBox(width: 8),
               ],
               Expanded(
                 child: Text(label.toUpperCase(),
@@ -49,7 +62,7 @@ class StatTile extends StatelessWidget {
             const SizedBox(height: AppSpace.s2),
             Text(value,
                 style: TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w800, color: accent)),
+                    fontSize: 22, fontWeight: FontWeight.w800, color: accent)),
           ],
         ),
       ),
@@ -174,9 +187,10 @@ class AmountText extends StatelessWidget {
 }
 
 class EmptyState extends StatelessWidget {
-  const EmptyState(this.message, {super.key, this.icon = Icons.inbox_outlined});
+  const EmptyState(this.message, {super.key, this.icon = Icons.inbox_outlined, this.action});
   final String message;
   final IconData icon;
+  final Widget? action;
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -184,11 +198,19 @@ class EmptyState extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpace.s6),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 42, color: scheme.onSurfaceVariant.withValues(alpha: .5)),
-          const SizedBox(height: AppSpace.s3),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.lavenderSoft.withValues(alpha: .7),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 30, color: AppColors.primary),
+          ),
+          const SizedBox(height: AppSpace.s4),
           Text(message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurfaceVariant)),
+              style: AppType.body.copyWith(color: scheme.onSurfaceVariant)),
+          if (action != null) ...[const SizedBox(height: AppSpace.s4), action!],
         ]),
       ),
     );
@@ -236,24 +258,28 @@ class LoadingButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+    final isPrimary = !secondary && !destructive;
     final bg = destructive
         ? AppColors.blockFg
         : secondary
-            ? Theme.of(context).colorScheme.surface
+            ? scheme.surface
             : AppColors.primary;
     final fg = secondary
-        ? Theme.of(context).colorScheme.onSurface.withValues(alpha: .85)
+        ? scheme.onSurface.withValues(alpha: .85)
         : Colors.white;
     final border = secondary ? BorderSide(color: AppColors.line) : BorderSide.none;
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton(
+    return LayoutBuilder(builder: (context, c) {
+      final btn = OutlinedButton(
         style: OutlinedButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: fg,
           side: border,
           minimumSize: const Size(0, AppSpace.s7),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.button)),
+          disabledBackgroundColor: bg.withValues(alpha: .5),
+          elevation: 0,
         ),
         onPressed: (busy || onPressed == null) ? null : onPressed,
         child: busy
@@ -264,8 +290,21 @@ class LoadingButton extends StatelessWidget {
                 if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: AppSpace.s2)],
                 Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
               ]),
-      ),
-    );
+      );
+      if (!isPrimary) return SizedBox(width: double.infinity, child: btn);
+      // Primary: subtle accent gradient fill.
+      final grad = dark ? AppGradients.primaryStrong : AppGradients.primary;
+      return SizedBox(
+        width: double.infinity,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: grad,
+            borderRadius: BorderRadius.circular(AppRadius.button),
+          ),
+          child: btn,
+        ),
+      );
+    });
   }
 }
 

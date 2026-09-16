@@ -109,7 +109,7 @@ class _SchoolInvoiceScreenState extends State<SchoolInvoiceScreen> with SyncAwar
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(s.invoiceNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-              Text('${s.className.isNotEmpty ? s.className : 'â€”'} Â· ${s.tenure}',
+              Text('${s.className.isNotEmpty ? s.className : '—'} · ${s.tenure}',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted)),
               Text(s.invoiceDate, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
             ]),

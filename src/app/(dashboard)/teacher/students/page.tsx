@@ -57,7 +57,7 @@ const { students, practice, progress: skillProgress, feedback, classes, currentT
                 <Avatar name={s.full_name} size="lg" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{s.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{s.instrument} Ã‚Â· {s.level}</p>
+                  <p className="text-xs text-muted-foreground">{s.instrument} � {s.level}</p>
                 </div>
                 <Badge variant={s.fee_status === "paid" ? "mint" : s.fee_status === "pending" ? "lavender" : "peach"}>{s.fee_status}</Badge>
               </div>

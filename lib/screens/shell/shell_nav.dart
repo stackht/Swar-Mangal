@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../state/auth_provider.dart';
 import '../../state/sync_manager.dart';
+import '../../widgets/atmosphere.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
 
@@ -51,6 +52,7 @@ class DrawerShell extends StatefulWidget {
 
 class _DrawerShellState extends State<DrawerShell> {
   String _current = '';
+  final List<String> _history = [];
 
   @override
   void initState() {
@@ -58,9 +60,25 @@ class _DrawerShellState extends State<DrawerShell> {
     _current = widget.navItems.first.key;
   }
 
+  /// Switch to [key], recording the previous tab so Android back can return
+  /// to it. Does NOT pop — the caller decides whether to close the drawer.
   void _go(String key) {
-    setState(() => _current = key);
-    Navigator.pop(context);
+    if (key == _current) return;
+    setState(() {
+      _history.add(_current);
+      _current = key;
+    });
+  }
+
+  /// Android system back: go to the previously opened tab. If already on the
+  /// home (today) tab, this is the last tab — allow PopScope canPop to close
+  /// the app.
+  bool get _isHome => _current == widget.navItems.first.key;
+
+  Future<void> _onBack() async {
+    if (_history.isNotEmpty) {
+      setState(() => _current = _history.removeLast());
+    }
   }
 
   @override
@@ -69,7 +87,12 @@ class _DrawerShellState extends State<DrawerShell> {
     final scheme = Theme.of(context).colorScheme;
     final current = widget.navItems.firstWhere(
         (n) => n.key == _current, orElse: () => widget.navItems.first);
-    return Scaffold(
+    return PopScope(
+      canPop: _isHome && _history.isEmpty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Row(children: [
           Expanded(child: Text(current.label)),
@@ -112,35 +135,36 @@ class _DrawerShellState extends State<DrawerShell> {
         ],
       ),
       drawer: _drawer(context, auth),
-      body: ViewSwitch(
-        child: ShellNavigator(
-          go: _go,
-          child: KeyedSubtree(
-            key: ValueKey<String>(_current),
-            child: widget.buildBody(context, _current),
+body: Atmosphere(
+        child: ViewSwitch(
+          child: ShellNavigator(
+            go: _go,
+            child: KeyedSubtree(
+              key: ValueKey<String>(_current),
+              child: widget.buildBody(context, _current),
+            ),
           ),
         ),
+      ),
       ),
     );
   }
 
-  Widget _drawer(BuildContext context, AuthProvider auth) {
+Widget _drawer(BuildContext context, AuthProvider auth) {
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final navBg = dark ? AppColors.dSurface : AppColors.navy;
+    final navText = AppColors.dMuted;
     return Drawer(
-      backgroundColor: dark ? AppColors.dSurface : AppColors.surface,
+      backgroundColor: navBg,
       child: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            right: BorderSide(color: scheme.outlineVariant.withValues(alpha: .6)),
-          ),
-        ),
+        decoration: BoxDecoration(color: navBg),
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
             // Brand lockup — quiet monogram + two-line wordmark + descriptor.
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpace.s4, AppSpace.s6, AppSpace.s4, AppSpace.s4),
+              padding: const EdgeInsets.fromLTRB(AppSpace.s5, AppSpace.s6, AppSpace.s5, AppSpace.s4),
               child: Row(children: [
                 Container(
                   width: 44,
@@ -148,33 +172,24 @@ class _DrawerShellState extends State<DrawerShell> {
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: .35),
-                        blurRadius: 14,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
+                    boxShadow: const [AppShadows.subtle],
                   ),
                   child: const Icon(Icons.music_note, color: Colors.white, size: 22),
                 ),
                 const SizedBox(width: AppSpace.s3),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('SWAR',
+                  Text('SWAR MANGAL',
                       style: AppType.title.copyWith(
-                          color: scheme.onSurface, letterSpacing: 3, fontSize: 16)),
-                  Text('MANGAL',
-                      style: AppType.title.copyWith(
-                          color: scheme.onSurface, letterSpacing: 3, fontSize: 16)),
+                          color: Colors.white, letterSpacing: 2, fontSize: 15)),
                   Text('Music Academy',
-                      style: AppType.eyebrow.copyWith(
-                          color: scheme.onSurfaceVariant, fontSize: 10)),
+                      style: AppType.caption.copyWith(
+                          color: navText, fontSize: 10)),
                 ]),
               ]),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpace.s4),
-              child: Divider(color: scheme.outlineVariant, height: 1),
+              child: Divider(color: AppColors.dLine, height: 1),
             ),
             const SizedBox(height: AppSpace.s2),
             // Grouped navigation with quiet section labels.
@@ -182,9 +197,9 @@ class _DrawerShellState extends State<DrawerShell> {
               if (group.label.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(AppSpace.s5, AppSpace.s3, AppSpace.s5, AppSpace.s2),
-                  child: Text(group.label.toUpperCase(),
+child: Text(group.label.toUpperCase(),
                       style: AppType.eyebrow.copyWith(
-                        color: scheme.onSurfaceVariant.withValues(alpha: .75),
+                        color: AppColors.dMuted.withValues(alpha: .75),
                         fontSize: 10,
                       )),
                 ),
@@ -214,35 +229,41 @@ class _DrawerShellState extends State<DrawerShell> {
       ColorScheme scheme, bool dark) {
     final selected = _current == item.key;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3 + 2, vertical: 1),
+padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3 + 2, vertical: 1),
       child: Material(
         color: Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.s),
         child: InkWell(
-          onTap: () => _go(item.key),
-          borderRadius: BorderRadius.circular(AppRadius.m),
+          onTap: () {
+            _go(item.key);
+            // Close the drawer explicitly (it's a pushed modal route; the
+            // home route itself is guarded by PopScope, so this is safe).
+            Navigator.of(context).pop();
+          },
+          borderRadius: BorderRadius.circular(AppRadius.s),
           child: Container(
             height: 42,
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3),
             decoration: BoxDecoration(
               color: selected
-                  ? scheme.primary.withValues(alpha: dark ? .18 : .10)
+                  ? AppColors.primary.withValues(alpha: dark ? .16 : .13)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.m),
+              borderRadius: BorderRadius.circular(AppRadius.s),
             ),
             child: Row(children: [
               Icon(
-                selected ? item.icon : item.icon,
+                item.icon,
                 size: 18,
-                color: selected ? AppColors.primary : scheme.onSurfaceVariant,
+                color: selected ? Colors.white : AppColors.dMuted,
               ),
               const SizedBox(width: AppSpace.s3),
               Expanded(
                 child: Text(
                   item.label,
                   style: TextStyle(
-                    color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                    fontSize: 14,
+                    color: selected ? Colors.white : AppColors.dMuted,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 13.5,
                   ),
                 ),
               ),

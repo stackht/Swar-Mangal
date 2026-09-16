@@ -9,7 +9,7 @@ import '../../state/auth_provider.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
 
-/// Branch timetable â€” day selector + per-day class cards, weekly view.
+/// Branch timetable — day selector + per-day class cards, weekly view.
 /// Founder edits (add/edit/enable-disable/delete); staff read-only.
 class TimetableScreen extends StatefulWidget {
   const TimetableScreen({super.key, required this.staff});
@@ -215,7 +215,7 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${e.timeLabelStart} â€” ${e.timeLabelEnd}',
+              Text('${e.timeLabelStart} — ${e.timeLabelEnd}',
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
               Text(e.className, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               Text(e.teacherName.isNotEmpty ? e.teacherName : 'No teacher assigned',
@@ -257,7 +257,7 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete class?'),
-        content: Text('${e.className} ${e.timeLabelStart}â€“${e.timeLabelEnd}'),
+        content: Text('${e.className} ${e.timeLabelStart}—${e.timeLabelEnd}'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
@@ -452,7 +452,7 @@ class _TimetableFormState extends State<_TimetableForm> {
             DropdownButtonFormField<String>(
               value: _teacherId == '' && widget.teachers.isNotEmpty ? null : _teacherId,
               decoration: const InputDecoration(labelText: 'Teacher'),
-              hint: const Text('Select teacherâ€¦'),
+              hint: const Text('Select teacher…'),
               items: [
                 for (final t in widget.teachers)
                   DropdownMenuItem(value: t.teacherId, child: Text(t.teacherName)),

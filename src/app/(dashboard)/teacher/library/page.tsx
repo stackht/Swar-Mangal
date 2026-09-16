@@ -86,7 +86,7 @@ export default function TeacherLibraryPage() {
                 </button>
               </div>
               <p className="mt-4 font-semibold leading-snug">{r.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} Ã‚Â· {r.level}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{r.instrument} � {r.level}</p>
               <div className="mt-3 flex items-center gap-2">
                 <Badge variant="secondary">{typeLabels[r.type]}</Badge>
                 {r.author && <span className="text-xs text-muted-foreground">by {r.author}</span>}

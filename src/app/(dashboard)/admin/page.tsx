@@ -136,7 +136,7 @@ export default function AdminDashboard() {
               <div className="h-8 w-px bg-border/60" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold">{c.title}</p>
-                <p className="text-xs text-muted-foreground">{c.teacher_name} · {c.student_ids.length} students</p>
+                <p className="text-xs text-muted-foreground">{c.teacher_name} � {c.student_ids.length} students</p>
               </div>
               <Badge variant={c.mode === "online" ? "secondary" : "default"}>{c.mode}</Badge>
             </motion.div>

@@ -8,9 +8,9 @@ import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
 
-/// Staff "My Requests" â€” shows submitted drafts + status per the reference
+/// Staff "My Requests" — shows submitted drafts + status per the reference
 /// (api_staff_listMyApprovals). Approval is founder-only.
-/// Business rule #5: staff proposal â†’ submitted â†’ founder decides. This
+/// Business rule #5: staff proposal → submitted → founder decides. This
 /// screen is read-only status for the operator.
 class MyRequestsScreen extends StatefulWidget {
   const MyRequestsScreen({super.key});
@@ -89,7 +89,7 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> with SyncAware {
             child: Padding(
               padding: EdgeInsets.all(AppSpace.s3),
               child: Text(
-                  'Approval is founder-only. These are your submitted drafts â€” '
+                  'Approval is founder-only. These are your submitted drafts — '
                   'their status reflects the current queue. No edits are possible here.',
                   style: TextStyle(fontSize: 12, color: AppColors.infoFg)),
             ),
@@ -113,12 +113,12 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> with SyncAware {
                     Padding(
                       padding: const EdgeInsets.only(top: AppSpace.s2),
                       child: Text(
-                          [row.student, row.category].where((e) => e.isNotEmpty).join(' Â· '),
+                          [row.student, row.category].where((e) => e.isNotEmpty).join(' · '),
                           style: const TextStyle(fontSize: 12, color: AppColors.muted)),
                     ),
                   Row(children: [
                     if (row.amount.isNotEmpty)
-                      Text('â‚¹${row.amount}',
+                      Text('₹${row.amount}',
                           style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
                     const Spacer(),
                     if (row.backdated)

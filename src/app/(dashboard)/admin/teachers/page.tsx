@@ -38,7 +38,7 @@ export default function AdminTeachersPage() {
                 <p className="text-sm font-semibold">{t.full_name}</p>
                 <p className="text-xs text-muted-foreground">{t.instrument}</p>
               </div>
-              <Badge variant="mint">Ã¢Ëœâ€¦ {t.rating}</Badge>
+              <Badge variant="mint">'—· {t.rating}</Badge>
             </div>
             <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
               <p className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /> {t.email}</p>

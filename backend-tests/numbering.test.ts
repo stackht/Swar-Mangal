@@ -1,0 +1,33 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { financialYearLabel, formatDocNo, receiptSeries, schoolInvoiceSeries } from "../src/lib/rpc/numbering.ts";
+
+test("financial year runs April to March (IST)", () => {
+  assert.equal(financialYearLabel(new Date("2026-04-01T00:00:00+05:30")), "26-27");
+  assert.equal(financialYearLabel(new Date("2026-09-16T12:00:00+05:30")), "26-27");
+  assert.equal(financialYearLabel(new Date("2027-03-31T23:59:00+05:30")), "26-27");
+  assert.equal(financialYearLabel(new Date("2027-04-01T00:30:00+05:30")), "27-28");
+});
+
+test("financial year uses IST, not UTC, around midnight", () => {
+  // 2026-03-31 20:00 UTC is 2026-04-01 01:30 IST — already the new year.
+  assert.equal(financialYearLabel(new Date("2026-03-31T20:00:00Z")), "26-27");
+});
+
+test("document numbers keep three digits and grow past 999", () => {
+  assert.equal(formatDocNo("SMR-26-27", 7), "SMR-26-27-007");
+  assert.equal(formatDocNo("SMR-26-27", 142), "SMR-26-27-142");
+  assert.equal(formatDocNo("SMR-26-27", 1000), "SMR-26-27-1000");
+  assert.equal(formatDocNo("SMR-26-27", 1001), "SMR-26-27-1001");
+});
+
+test("a four-digit number stays distinct from the three-digit ones", () => {
+  // The old max(right(receipt_no, 3)) read "1000" as "000" and restarted.
+  assert.notEqual(formatDocNo("SMR-26-27", 1000), formatDocNo("SMR-26-27", 0));
+});
+
+test("series carry the financial year of the document date", () => {
+  assert.equal(receiptSeries(new Date("2026-09-16T12:00:00+05:30")), "SMR-26-27");
+  assert.equal(schoolInvoiceSeries(new Date("2027-05-02T12:00:00+05:30")), "SMI-27-28");
+});

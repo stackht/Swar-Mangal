@@ -1,17 +1,27 @@
-import { query, queryOne } from "@/lib/db";
+import { query, queryOne, withTransaction } from "@/lib/db";
 import { RpcRole } from "@/lib/rpc/auth";
-import { s, n, d, acadStudents, acadStudentById, acadTeachers, acadTeacherById, studentToRpc, teacherToRpc, classSummary } from "@/lib/rpc/shared";
+import { s, n, d, newId, nextDocNo, acadStudents, acadStudentById, acadTeachers, acadTeacherById, studentToRpc, teacherToRpc, classSummary } from "@/lib/rpc/shared";
+import { schoolInvoiceSeries } from "@/lib/rpc/numbering";
+import {
+  branchForbidden,
+  defaultBranch,
+  inScope,
+  matchesRequestedBranch,
+  moneyInScope,
+  recordBranch,
+  type BranchScope,
+} from "@/lib/rpc/scope";
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 
-export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   switch (fn) {
     case "api_dashboard":
-      return dashboard(arg);
+      return dashboard(arg, scope);
     case "api_dueReminders":
-      return dueReminders();
+      return dueReminders(scope);
     case "api_cashbookReport":
-      return cashbook(arg);
+      return cashbook(arg, scope);
     case "api_addExpenseEntry":
       return addExpense(arg);
     case "api_staff_submitExpenseDraft":
@@ -21,7 +31,7 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_addTeacher":
       return addTeacher(arg);
     case "api_teacherProfile":
-      return teacherProfile(arg);
+      return teacherProfile(arg, scope);
     case "api_updateTeacherStatus":
       return updateTeacherStatus(arg);
     case "api_updateTeacherCompensation":
@@ -29,46 +39,46 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_teacherPayoutPreview":
       return payoutPreview(arg);
     case "api_generateSchoolInvoice":
-      return generateSchoolInvoice(arg);
+      return generateSchoolInvoice(arg, scope);
     case "api_listSchoolInvoices":
-      return listSchoolInvoices();
+      return listSchoolInvoices(scope);
     case "api_getSchoolInvoice":
-      return getSchoolInvoice(arg);
+      return getSchoolInvoice(arg, scope);
     case "api_timetableList":
-      return timetableList(arg);
+      return timetableList(arg, scope);
     case "api_timetableCreate":
-      return timetableCreate(arg);
+      return timetableCreate(arg, scope);
     case "api_timetableUpdate":
-      return timetableUpdate(arg);
+      return timetableUpdate(arg, scope);
     case "api_timetableDelete":
-      return timetableDelete(arg);
+      return timetableDelete(arg, scope);
     case "api_staff_attendanceRoster":
-      return attendanceRoster(arg);
+      return attendanceRoster(arg, scope);
     case "api_staff_markAttendance":
-      return markAttendance(arg);
+      return markAttendance(arg, scope);
     case "api_staff_todaysTasks":
     case "api_staff_doToday":
-      return todaysTasks(arg);
+      return todaysTasks(arg, scope);
     case "api_staff_todaysClasses":
-      return todaysClasses(arg);
+      return todaysClasses(arg, scope);
     case "api_staff_resolveTodaysClass":
-      return resolveTodaysClass(arg);
+      return resolveTodaysClass(arg, scope);
     case "api_staff_scheduleSession":
       return scheduleSession(arg);
     case "api_staff_sessionRoster":
-      return sessionRoster(arg);
+      return sessionRoster(arg, scope);
     case "api_staff_feeDueList":
-      return feeDueList();
+      return feeDueList(scope);
     case "api_staff_inquiryQueue":
-      return inquiryQueue(arg);
+      return inquiryQueue(arg, scope);
     case "api_staff_inquiryQuickAdd":
-      return inquiryQuickAdd(arg);
+      return inquiryQuickAdd(arg, scope);
     case "api_staff_inquiryTransition":
-      return inquiryTransition(arg);
+      return inquiryTransition(arg, scope);
     case "api_founder_approvalsList":
       return founderApprovals();
     case "api_staff_listMyApprovals":
-      return staffMyRequests();
+      return staffMyRequests(scope);
     case "api_staff_commGenerate":
       return commGenerate(arg);
     case "api_syncChanges":
@@ -79,33 +89,37 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
 }
 
 // -------------------------------------------------------------- dashboard
-async function dashboard(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const [led, receipts, st] = await Promise.all([
-    query<{ inflow: string; amount: string; entry_date: string; payment_mode: string; party_name: string }>(
-      `select inflow, amount, entry_date::text, payment_mode, party_name from money_ledger order by entry_date desc limit 100`,
+async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const today = new Date().toISOString().slice(0, 10);
+  const [ledAll, receiptsAll] = await Promise.all([
+    query<{ inflow: string; amount: string; entry_date: string; payment_mode: string; party_name: string; branch: string }>(
+      `select inflow, amount, entry_date::text, payment_mode, party_name, branch from money_ledger
+       where entry_date >= date_trunc('month', current_date) order by entry_date desc`,
     ),
-    query<{ receipt_no: string; amount: string; payment_mode: string; status: string; party_name: string }>(
-      `select receipt_no, amount, payment_mode, status, party_name from receipts order by id desc limit 12`,
+    query<{ receipt_no: string; amount: string; payment_mode: string; status: string; party_name: string; branch: string }>(
+      `select receipt_no, amount, payment_mode, status, party_name, branch from receipts order by id desc limit 100`,
     ),
-    acadStudents(),
   ]);
+  const led = ledAll.filter((r) => moneyInScope(scope, r.branch));
+  const receipts = receiptsAll.filter((r) => moneyInScope(scope, r.branch)).slice(0, 12);
 
-  const monthCollection = led.reduce((a, r) => a + n(r.amount), 0);
-  const todayCollection = led
-    .filter((r) => d(r.entry_date) === new Date().toISOString().slice(0, 10))
-    .reduce((a, r) => a + n(r.amount), 0);
-  const onlineToday = led
-    .filter((r) => d(r.entry_date) === new Date().toISOString().slice(0, 10) && s(r.payment_mode).toUpperCase() !== "CASH")
-    .reduce((a, r) => a + n(r.amount), 0);
+  // Money in only: expenses share this table as outflow rows.
+  const inflowOf = (r: { inflow: string }) => (n(r.inflow) > 0 ? n(r.inflow) : 0);
+  const monthCollection = led.reduce((a, r) => a + inflowOf(r), 0);
+  const todayRows = led.filter((r) => d(r.entry_date) === today);
+  const todayCollection = todayRows.reduce((a, r) => a + inflowOf(r), 0);
+  const onlineToday = todayRows
+    .filter((r) => s(r.payment_mode).toUpperCase() !== "CASH")
+    .reduce((a, r) => a + inflowOf(r), 0);
   const cashToday = todayCollection - onlineToday;
-  const due = await dueReminders();
+  const due = await dueReminders(scope);
   const counts = (due["overdue"] as unknown[]).length + 1; // small derived count
 
   return ok({
     todayCollection,
     monthCollection,
     todayCount: receipts.length,
-    monthCount: led.length,
+    monthCount: led.filter((r) => inflowOf(r) > 0).length,
     cashToday,
     onlineToday,
     scope: s(arg["scope"] ?? "ALL"),
@@ -124,7 +138,7 @@ async function dashboard(arg: Record<string, unknown>): Promise<Record<string, u
       mode: s(r.payment_mode),
       paymentMode: s(r.payment_mode),
       status: s(r.status).toUpperCase(),
-      entityId: "ENT-KANDIVALI",
+      entityId: recordBranch(r.branch) === "GOREGAON" ? "ENT-GOREGAON" : "ENT-KANDIVALI",
       pdfUrl: "",
       excluded: false,
       feePeriodFrom: "",
@@ -134,8 +148,8 @@ async function dashboard(arg: Record<string, unknown>): Promise<Record<string, u
   });
 }
 
-async function dueReminders(): Promise<Record<string, unknown>> {
-  const students = await acadStudents();
+async function dueReminders(scope: BranchScope): Promise<Record<string, unknown>> {
+  const students = (await acadStudents()).filter((x) => inScope(scope, x.branch));
   const active = students.filter((x) => s(x.status).toUpperCase() === "ACTIVE");
   const cls = await classSummary();
   return ok({
@@ -166,7 +180,7 @@ async function listTeachers(): Promise<Record<string, unknown>> {
 async function addTeacher(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
   const name = s(arg["name"] ?? arg["teacherName"]).trim();
   if (!name) return { ok: false, code: "NO_NAME", error: "Teacher name required" };
-  const id = `TCH-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  const id = newId("TCH");
   await query(
     `insert into teachers_acad (id, name, phone, email, instrument, status) values ($1,$2,$3,$4,$5,'ACTIVE') on conflict (id) do nothing`,
     [id, name, s(arg["phone"]), s(arg["email"]), s(arg["instrument"] ?? arg["primaryRole"]) || "Music"],
@@ -174,12 +188,12 @@ async function addTeacher(arg: Record<string, unknown>): Promise<Record<string, 
   return ok({ teacherId: id, teacherName: name, note: "teacher created" });
 }
 
-async function teacherProfile(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function teacherProfile(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const id = s(arg["teacherId"]);
   const t = id ? await acadTeacherById(id) : (await acadTeachers())[0];
   if (!t) return { ok: false, code: "NO_TEACHER", error: `No teacher ${id}` };
   const trpc = await teacherToRpc(t);
-  const students = await acadStudents();
+  const students = (await acadStudents()).filter((x) => inScope(scope, x.branch));
   const myStudents = (
     await Promise.all(
       students.map(async (x) => {
@@ -221,7 +235,7 @@ async function updateTeacherCompensation(arg: Record<string, unknown>): Promise<
   } else {
     await query(
       `insert into payout_rules (id, teacher_id, teacher_name, entity_id, course, payout_type, percentage) values ($1,$2,$3,'ENT-KANDIVALI','', 'PERCENTAGE',$4)`,
-      [`PRULE-${Date.now()}`, id, s(arg["teacherName"]), pct],
+      [newId("PRULE"), id, s(arg["teacherName"]), pct],
     );
   }
   return ok({ changed: true, teacherId: id, oldPercentage: "", newPercentage: String(pct), effectiveFrom: s(arg["effectiveFrom"]) || "2026-07-01", reason: s(arg["reason"]), auditWritten: true, note: "compensation updated" });
@@ -259,10 +273,12 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
 }
 
 // ------------------------------------------------------- cashbook / expenses
-async function cashbook(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const rows = await query<Record<string, unknown>>(
-    `select id as entry_id, entry_date::text, category, description, inflow, outflow, amount, payment_mode, status from money_ledger order by entry_date desc limit 200`,
-  );
+async function cashbook(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const rows = (
+    await query<Record<string, unknown>>(
+      `select id as entry_id, entry_date::text, category, description, inflow, outflow, amount, payment_mode, status, branch from money_ledger order by entry_date desc limit 200`,
+    )
+  ).filter((r) => moneyInScope(scope, r.branch));
   const entries = rows.map((r) => ({
     entryId: s(r.entry_id),
     date: d(r.entry_date),
@@ -281,40 +297,48 @@ async function addExpense(arg: Record<string, unknown>): Promise<Record<string, 
   const amount = n(arg["amount"]);
   const desc = s(arg["description"] ?? arg["narrative"]);
   if (amount <= 0 || !desc) return { ok: false, code: "BAD_EXPENSE", error: "valid amount + description required" };
-  const id = `EXP-${Date.now()}`;
-  await query(
-    `insert into expenses (id, expense_date, category, vendor, description, amount, approval_status)
-     values ($1, now(), $2, $3, $4, $5, 'APPROVED')`,
-    [id, s(arg["category"]) || "General", s(arg["vendor"] ?? arg["payee"]), desc, amount],
-  );
-  await query(
-    `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, status)
-     values ($1, now(), $2, $3, $4, $5, $5, $6, 'ACTIVE')`,
-    [`LED-${Date.now()}`, s(arg["vendor"] ?? arg["payee"]) || "Office", s(arg["category"]) || "General", desc, amount, s(arg["paymentMode"] ?? "Cash")],
-  );
-  return ok({ entryId: id, expenseDraftId: `EDRAFT-${Date.now()}`, note: "expense recorded" });
+  const id = newId("EXP");
+  await withTransaction(async (tx) => {
+    await tx.query(
+      `insert into expenses (id, expense_date, category, vendor, description, amount, approval_status)
+       values ($1, now(), $2, $3, $4, $5, 'APPROVED')`,
+      [id, s(arg["category"]) || "General", s(arg["vendor"] ?? arg["payee"]), desc, amount],
+    );
+    await tx.query(
+      `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, status)
+       values ($1, now(), $2, $3, $4, $5, $5, $6, 'ACTIVE')`,
+      [newId("LED"), s(arg["vendor"] ?? arg["payee"]) || "Office", s(arg["category"]) || "General", desc, amount, s(arg["paymentMode"] ?? "Cash")],
+    );
+  });
+  return ok({ entryId: id, expenseDraftId: newId("EDRAFT"), note: "expense recorded" });
 }
 
 async function submitExpenseDraft(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return ok({ draftId: `EDRAFT-${Date.now()}`, persisted: true, note: "expense draft submitted" });
+  return ok({ draftId: newId("EDRAFT"), persisted: true, note: "expense draft submitted" });
 }
 
 // ------------------------------------------------------- school invoices
-async function generateSchoolInvoice(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function generateSchoolInvoice(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const amount = n(arg["amount"]);
   if (amount <= 0) return { ok: false, code: "BAD_AMOUNT", error: "amount required" };
-  const id = `SINV-${Date.now().toString(36).toUpperCase()}`;
-  const no = `SMI-26-27-${String((await invoiceCount()) + 1).padStart(3, "0")}`;
-  await query(
-    `insert into school_invoices_rpc (id, invoice_no, invoice_date, branch, class_name, amount, tenure, status)
-     values ($1,$2,$3,$4,$5,$6,$7,'FINAL')`,
-    [id, no, s(arg["invoiceDate"]) || new Date().toISOString().slice(0, 10), s(arg["branch"] ?? "KANDIVALI"), s(arg["className"]), amount, s(arg["tenure"])],
-  );
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
+  const id = newId("SINV");
+  const invoiceDate = s(arg["invoiceDate"]) || new Date().toISOString().slice(0, 10);
+  const no = await withTransaction(async (tx) => {
+    const docNo = await nextDocNo(tx, "schoolInvoice", schoolInvoiceSeries(new Date(invoiceDate)));
+    await tx.query(
+      `insert into school_invoices_rpc (id, invoice_no, invoice_date, branch, class_name, amount, tenure, status)
+       values ($1,$2,$3,$4,$5,$6,$7,'FINAL')`,
+      [id, docNo, invoiceDate, branch, s(arg["className"]), amount, s(arg["tenure"])],
+    );
+    return docNo;
+  });
   return ok({
     invoiceId: id,
     invoiceNo: no,
-    invoiceDate: s(arg["invoiceDate"]) || new Date().toISOString().slice(0, 10),
-    branch: s(arg["branch"] ?? "KANDIVALI"),
+    invoiceDate,
+    branch,
     className: s(arg["className"]),
     amount,
     tenure: s(arg["tenure"]),
@@ -324,13 +348,10 @@ async function generateSchoolInvoice(arg: Record<string, unknown>): Promise<Reco
   });
 }
 
-async function invoiceCount(): Promise<number> {
-  const r = await queryOne<{ c: string }>(`select count(*)::text as c from school_invoices_rpc`);
-  return Number(r?.c ?? 0);
-}
-
-async function listSchoolInvoices(): Promise<Record<string, unknown>> {
-  const rows = await query<Record<string, unknown>>(`select id, invoice_no, invoice_date, branch, class_name, amount, tenure, status from school_invoices_rpc order by id desc`);
+async function listSchoolInvoices(scope: BranchScope): Promise<Record<string, unknown>> {
+  const rows = (
+    await query<Record<string, unknown>>(`select id, invoice_no, invoice_date, branch, class_name, amount, tenure, status from school_invoices_rpc order by id desc`)
+  ).filter((r) => inScope(scope, r.branch));
   return ok({
     invoices: rows.map((r) => ({
       invoiceId: s(r.id),
@@ -345,10 +366,11 @@ async function listSchoolInvoices(): Promise<Record<string, unknown>> {
   });
 }
 
-async function getSchoolInvoice(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function getSchoolInvoice(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const id = s(arg["invoiceId"]);
   const r = await queryOne<Record<string, unknown>>(`select * from school_invoices_rpc where id = $1`, [id]);
   if (!r) return { ok: false, code: "NOT_FOUND", error: `No invoice ${id}` };
+  if (!inScope(scope, r.branch)) return branchForbidden(recordBranch(r.branch));
   return ok({
     invoice: {
       invoiceId: s(r.id),
@@ -374,12 +396,15 @@ function ttSlot(seed: string, day: number): { start: string; end: string } {
   return { start, end };
 }
 
-async function timetableList(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function timetableList(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const branch = s(arg["branch"] ?? "ALL").toUpperCase();
-  let rows = await query<Record<string, unknown>>(
-    `select id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status from timetable order by day_of_week, start_time`,
+  const visible = (rows: Record<string, unknown>[]) =>
+    rows.filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(branch, r.branch));
+  let rows = visible(
+    await query<Record<string, unknown>>(
+      `select id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status from timetable order by day_of_week, start_time`,
+    ),
   );
-  if (branch !== "ALL") rows = rows.filter((r) => s(r.branch).toUpperCase() === branch);
   if (!rows.length) {
     // seed from attendance-derived classes (real schedule)
     const cls = await query<Record<string, unknown>>(
@@ -409,8 +434,10 @@ async function timetableList(arg: Record<string, unknown>): Promise<Record<strin
         [e.id, e.branch, e.day_of_week, e.start_time, e.end_time, e.class_name, e.teacher_id, e.teacher_name, e.status],
       );
     }
-    rows = await query<Record<string, unknown>>(
-      `select id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status from timetable order by day_of_week, start_time`,
+    rows = visible(
+      await query<Record<string, unknown>>(
+        `select id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status from timetable order by day_of_week, start_time`,
+      ),
     );
   }
   return ok({
@@ -430,38 +457,47 @@ async function timetableList(arg: Record<string, unknown>): Promise<Record<strin
   });
 }
 
-async function timetableCreate(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const id = `TT-${Date.now().toString(36).toUpperCase()}`;
+async function timetableCreate(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
+  const id = newId("TT");
   await query(
     `insert into timetable (id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`,
-    [id, s(arg["branch"] ?? "KANDIVALI").toUpperCase(), n(arg["dayOfWeek"]), s(arg["startTime"]), s(arg["endTime"]), s(arg["className"]), s(arg["teacherId"]), s(arg["teacherName"]), s(arg["status"]).toUpperCase() || "ENABLED"],
+    [id, branch, n(arg["dayOfWeek"]), s(arg["startTime"]), s(arg["endTime"]), s(arg["className"]), s(arg["teacherId"]), s(arg["teacherName"]), s(arg["status"]).toUpperCase() || "ENABLED"],
   );
-  return ok({ entry: { id, branch: s(arg["branch"] ?? "KANDIVALI").toUpperCase(), dayOfWeek: n(arg["dayOfWeek"]), startTime: s(arg["startTime"]), endTime: s(arg["endTime"]), className: s(arg["className"]), teacherId: s(arg["teacherId"]), teacherName: s(arg["teacherName"]), status: s(arg["status"]).toUpperCase() || "ENABLED" }, note: "created" });
+  return ok({ entry: { id, branch, dayOfWeek: n(arg["dayOfWeek"]), startTime: s(arg["startTime"]), endTime: s(arg["endTime"]), className: s(arg["className"]), teacherId: s(arg["teacherId"]), teacherName: s(arg["teacherName"]), status: s(arg["status"]).toUpperCase() || "ENABLED" }, note: "created" });
 }
 
-async function timetableUpdate(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function timetableUpdate(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const id = s(arg["id"]);
   const cur = await queryOne<Record<string, unknown>>(`select * from timetable where id = $1`, [id]);
   if (!cur) return { ok: false, code: "TT_ENTRY_NOT_FOUND", error: "Entry not found." };
+  // Both the current branch and the requested one must be in scope.
+  if (!inScope(scope, cur.branch)) return branchForbidden(recordBranch(cur.branch));
+  const nextBranch = recordBranch(s(arg["branch"] ?? cur.branch));
+  if (!inScope(scope, nextBranch)) return branchForbidden(nextBranch);
   await query(
     `update timetable set branch=$2, day_of_week=$3, start_time=$4, end_time=$5, class_name=$6, teacher_id=$7, teacher_name=$8, status=$9 where id=$1`,
-    [id, s(arg["branch"] ?? cur.branch).toUpperCase(), n(arg["dayOfWeek"] ?? cur.day_of_week), s(arg["startTime"] ?? cur.start_time), s(arg["endTime"] ?? cur.end_time), s(arg["className"] ?? cur.class_name), s(arg["teacherId"] ?? cur.teacher_id), s(arg["teacherName"] ?? cur.teacher_name), s(arg["status"] ?? cur.status).toUpperCase()],
+    [id, nextBranch, n(arg["dayOfWeek"] ?? cur.day_of_week), s(arg["startTime"] ?? cur.start_time), s(arg["endTime"] ?? cur.end_time), s(arg["className"] ?? cur.class_name), s(arg["teacherId"] ?? cur.teacher_id), s(arg["teacherName"] ?? cur.teacher_name), s(arg["status"] ?? cur.status).toUpperCase()],
   );
   return ok({ entry: { ...cur, ...arg, id }, note: "updated" });
 }
 
-async function timetableDelete(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function timetableDelete(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const id = s(arg["id"]);
-  const before = await queryOne<{ id: string }>(`select id from timetable where id = $1`, [id]);
+  const before = await queryOne<{ id: string; branch: string }>(`select id, branch from timetable where id = $1`, [id]);
+  if (before && !inScope(scope, before.branch)) return branchForbidden(recordBranch(before.branch));
   if (before) await query(`delete from timetable where id = $1`, [id]);
   return ok({ deleted: before != null, note: "deleted" });
 }
 
 // -------------------------------------------------------- attendance / today
-async function attendanceRoster(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function attendanceRoster(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const instrument = s(arg["instrument"]).trim();
-  const students = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE");
+  const students = (await acadStudents()).filter(
+    (x) => s(x.status).toUpperCase() === "ACTIVE" && inScope(scope, x.branch) && matchesRequestedBranch(arg["branch"], x.branch),
+  );
   const rows = instrument ? students.filter((x) => s(x.instrument).toUpperCase() === instrument.toUpperCase()) : students;
   const instruments = Array.from(new Set(students.map((x) => s(x.instrument)).filter(Boolean)));
   return ok({
@@ -486,16 +522,25 @@ async function attendanceRoster(arg: Record<string, unknown>): Promise<Record<st
   });
 }
 
-async function markAttendance(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function markAttendance(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const rows = (arg["state"] ?? arg["marks"] ?? arg["rows"]) as Record<string, unknown> | undefined;
   const entries = Array.isArray(rows) ? rows : rows && typeof rows === "object" ? Object.entries(rows).map(([studentId, status]) => ({ studentId, status })) : [];
   const date = d(s(arg["workDate"] ?? arg["date"])) || new Date().toISOString().slice(0, 10);
+  if (!scope.unrestricted) {
+    // Reject the whole batch rather than writing part of another branch's roster.
+    for (const e of entries) {
+      const sid = s(e.studentId ?? e["studentId"]);
+      if (!sid) continue;
+      const student = await acadStudentById(sid);
+      if (!student || !inScope(scope, student.branch)) return branchForbidden(recordBranch(student?.branch));
+    }
+  }
   let count = 0;
   for (const e of entries) {
     const sid = s(e.studentId ?? e["studentId"]);
     const status = s(e.status ?? e["status"]);
     if (!sid || !status) continue;
-    const id = `ATT-${sid}-${date}-${Date.now().toString(36)}`;
+    const id = newId(`ATT-${sid}-${date}`);
     await query(
       `insert into attendance_acad (id, session_date, student_id, student_name, teacher_id, teacher_name, instrument, status)
        values ($1,$2,$3,$4,'','','', $5) on conflict (id) do nothing`,
@@ -503,13 +548,14 @@ async function markAttendance(arg: Record<string, unknown>): Promise<Record<stri
     );
     count++;
   }
-  return ok({ action: "CREATED", attendanceId: `ATT-${date}-${Date.now()}`, state: entries, workDate: date, marked: count });
+  return ok({ action: "CREATED", attendanceId: newId(`ATT-${date}`), state: entries, workDate: date, marked: count });
 }
 
-async function todaysTasks(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const active = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE");
+async function todaysTasks(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const active = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE" && inScope(scope, x.branch));
   const dueCount = active.filter((x) => s(x.fee_plan).toUpperCase().includes("MONTHLY")).length;
-  const [inqRows] = await Promise.all([query<{ c: string }>(`select count(*)::text as c from inquiries`)]);
+  const inquiries = (await query<{ branch: string }>(`select branch from inquiries`)).filter((r) => inScope(scope, r.branch));
+  const inqRows = [{ c: String(inquiries.length) }];
   const cards = [
     { key: "FEES_DUE_TODAY", title: "Fees Due Today", label: "Fees Due Today", priority: "HIGH", count: Math.max(0, dueCount - 2), state: "ATTENTION", targetView: "students", emptyText: "No fees due today", actionable: true, bucket: "DUE_TODAY" },
     { key: "FEES_DUE_SOON", title: "Fees Upcoming", label: "Fees Upcoming", priority: "MEDIUM", count: 2, state: "OPEN", targetView: "students", emptyText: "Nothing upcoming", actionable: true, bucket: "DUE_SOON" },
@@ -520,10 +566,10 @@ async function todaysTasks(arg: Record<string, unknown>): Promise<Record<string,
   return ok({ cards, mode: "COPY_ONLY", today: new Date().toISOString().slice(0, 10) });
 }
 
-async function todaysClasses(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function todaysClasses(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const date = d(s(arg["date"])) || new Date().toISOString().slice(0, 10);
   const branch = s(arg["branch"] ?? "ALL");
-  const tt = await query<Record<string, unknown>>(`select * from timetable where status = 'ENABLED'`);
+  const tt = (await query<Record<string, unknown>>(`select * from timetable where status = 'ENABLED'`)).filter((r) => inScope(scope, r.branch));
   const rows = tt.map((r, i) => ({
     eventId: `E-${date}-${i + 1}`,
     classDate: date,
@@ -551,30 +597,35 @@ async function todaysClasses(arg: Record<string, unknown>): Promise<Record<strin
   return ok({ date, count: filtered.length, unanswered: filtered.length, outcomes: ["HELD", "TEACHER_CANCELLED", "ACADEMY_CANCELLED", "SUBSTITUTE_DELIVERED", "RESCHEDULED"], rows: filtered, lateHours: 48 });
 }
 
-async function resolveTodaysClass(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function resolveTodaysClass(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const eventId = s(arg["eventId"]);
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
   const outcome = s(arg["outcome"]);
   const deliveredBy = s(arg["deliveredBy"]);
   const date = eventId.includes("-") && /^\d{4}-\d{2}-\d{2}$/.test(eventId.split("-")[1]) ? eventId.split("-")[1] : new Date().toISOString().slice(0, 10);
   await query(
     `insert into scheduled_sessions (id, session_date, start_time, teacher_id, teacher_name, branch, course, outcome, delivered_by, payee_teacher_id, recorded_by, evidence_class, evidence_reason, resolved, answerable)
-     values ($1, $2, $3, $4, $5, 'KANDIVALI', '', $6, $7, $7, $8, 'VERIFIED', $9, true, false)
+     values ($1, $2, $3, $4, $5, $10, '', $6, $7, $7, $8, 'VERIFIED', $9, true, false)
      on conflict (id) do update set outcome = excluded.outcome, delivered_by = excluded.delivered_by, evidence_class = 'VERIFIED', resolved = true`,
-    [eventId, date, s(arg["startTime"] ?? "17:00"), s(arg["teacherId"]), s(arg["teacherName"]), outcome, deliveredBy, s(arg["recordedBy"] ?? "latika@ops"), `outcome ${outcome} recorded`],
+    [eventId, date, s(arg["startTime"] ?? "17:00"), s(arg["teacherId"]), s(arg["teacherName"]), outcome, deliveredBy, s(arg["recordedBy"] ?? "latika@ops"), `outcome ${outcome} recorded`, branch],
   );
   return ok({ eventId, outcome, evidenceClass: "VERIFIED", payeeTeacherId: deliveredBy, note: "class resolved" });
 }
 
 async function scheduleSession(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const id = `SCSS-${Date.now().toString(36).toUpperCase()}`;
+  const id = newId("SCSS");
   return ok({ scheduledSessionId: id, status: "SCHEDULED", sessionDate: d(s(arg["sessionDate"])), sessionCredit: n(arg["sessionCredit"]) || 1, durationMinutes: n(arg["durationMinutes"]) || 60 });
 }
 
-async function sessionRoster(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const all = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE");
+async function sessionRoster(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const tts = await query<Record<string, unknown>>(`select * from scheduled_sessions where id = $1`, [s(arg["scheduledSessionId"])]);
   const session = tts[0];
   const branch = s(session?.branch ?? "KANDIVALI");
+  if (session && !inScope(scope, session.branch)) return branchForbidden(recordBranch(session.branch));
+  const all = (await acadStudents()).filter(
+    (x) => s(x.status).toUpperCase() === "ACTIVE" && inScope(scope, x.branch) && matchesRequestedBranch(branch, x.branch),
+  );
   const rows = await Promise.all(
     all.slice(0, 30).map(async (x) => {
       const st = await studentToRpc(x);
@@ -584,16 +635,16 @@ async function sessionRoster(arg: Record<string, unknown>): Promise<Record<strin
   return ok({ scheduledSessionId: s(arg["scheduledSessionId"]), status: "OPEN", closed: false, unanswered: true, sessionDate: s(session?.session_date) || new Date().toISOString().slice(0, 10), sessionCredit: 1, total: rows.length, present: 0, absent: 0, excused: 0, notMarked: rows.length, rows, note: "standalone roster" });
 }
 
-async function feeDueList(): Promise<Record<string, unknown>> {
-  const active = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE");
+async function feeDueList(scope: BranchScope): Promise<Record<string, unknown>> {
+  const active = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE" && inScope(scope, x.branch));
   return ok({ counts: { dueToday: 0, dueSoon: 0, paymentPending: active.length } });
 }
 
 // -------------------------------------------------------------- inquiries
-async function inquiryQueue(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function inquiryQueue(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const branch = s(arg["branch"] ?? "ALL");
   const rows = await query<Record<string, unknown>>(`select id, name, phone, instrument, branch, source, notes, status, created_at::text from inquiries order by id desc limit 100`);
-  const filtered = branch === "ALL" ? rows : rows.filter((r) => s(r.branch).toUpperCase() === branch.toUpperCase());
+  const filtered = rows.filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(branch, r.branch));
   return ok({
     rows: filtered.map((r) => ({
       inquiry_id: s(r.id),
@@ -608,20 +659,25 @@ async function inquiryQueue(arg: Record<string, unknown>): Promise<Record<string
   });
 }
 
-async function inquiryQuickAdd(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function inquiryQuickAdd(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const name = s(arg["name"]).trim();
   if (!name) return { ok: false, code: "NO_NAME", error: "name required" };
-  const id = `INQ-${Date.now()}`;
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
+  const id = newId("INQ");
   await query(
     `insert into inquiries (id, name, phone, instrument, branch, source, notes, status) values ($1,$2,$3,$4,$5,$6,$7,'NEW') on conflict (id) do nothing`,
-    [id, name, s(arg["phone"]), s(arg["instrument"] ?? arg["course"]), s(arg["branch"] ?? "KANDIVALI"), s(arg["source"] ?? "Walk-in"), s(arg["notes"])],
+    [id, name, s(arg["phone"]), s(arg["instrument"] ?? arg["course"]), branch, s(arg["source"] ?? "Walk-in"), s(arg["notes"])],
   );
   return ok({ inquiryId: id, idempotent: false, note: "inquiry captured" });
 }
 
-async function inquiryTransition(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function inquiryTransition(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const id = s(arg["inquiryId"]);
   const action = s(arg["action"]);
+  const cur = await queryOne<{ branch: string }>("select branch from inquiries where id = $1", [id]);
+  if (!cur) return { ok: false, code: "NOT_FOUND", error: `No inquiry ${id}` };
+  if (!inScope(scope, cur.branch)) return branchForbidden(recordBranch(cur.branch));
   await query("update inquiries set status = $1 where id = $2", [action === "LOG_CONTACT" ? "CONTACTED" : action === "SCHEDULE_TRIAL" ? "TRIAL_SCHEDULED" : action, id]);
   return ok({ inquiryId: id, action, after: { status: action === "LOG_CONTACT" ? "CONTACTED" : action === "SCHEDULE_TRIAL" ? "TRIAL_SCHEDULED" : action }, readBack: { ok: true }, auditWritten: true, note: "inquiry moved" });
 }
@@ -651,8 +707,10 @@ async function founderApprovals(): Promise<Record<string, unknown>> {
   return ok({ build: "RC3.85-standalone", branch: "CONSOLIDATED", count: paymentItems.length, counts: { total: paymentItems.length, WAITING_ON_TERMS: 0, PAYMENT_DRAFT: paymentItems.length, STUDENT_DRAFT: 0, SCHOOL_MASTER: 0, WAIVER: 0, UNKNOWN_STATUS: 0 }, empty: paymentItems.length === 0, items: paymentItems, groups, note: "standalone approvals" });
 }
 
-async function staffMyRequests(): Promise<Record<string, unknown>> {
-  const rows = await query<Record<string, unknown>>(`select id, status, student_name, amount, branch, submitted_at::text from payment_drafts where status in ('SUBMITTED','APPROVED') order by submitted_at`);
+async function staffMyRequests(scope: BranchScope): Promise<Record<string, unknown>> {
+  const rows = (
+    await query<Record<string, unknown>>(`select id, status, student_name, amount, branch, submitted_at::text from payment_drafts where status in ('SUBMITTED','APPROVED') order by submitted_at`)
+  ).filter((r) => inScope(scope, r.branch));
   return ok({
     branch: "ALL",
     count: rows.length,

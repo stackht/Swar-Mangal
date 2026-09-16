@@ -1,16 +1,28 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { createHash, randomBytes, scryptSync } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 
 const { Client } = pg;
 const here = dirname(fileURLToPath(import.meta.url));
 
+const MIN_PASSWORD_LENGTH = 12;
+// Passwords that older versions of this script used as fallbacks.
+const LEGACY_DEFAULT_PASSWORDS = ["Admin@123", "Staff@123"];
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 64).toString("hex");
   return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  const [salt, hash] = String(stored ?? "").split(":");
+  if (!salt || !hash) return false;
+  const candidate = scryptSync(password, salt, 64);
+  const known = Buffer.from(hash, "hex");
+  return candidate.length === known.length && timingSafeEqual(candidate, known);
 }
 
 async function ensureUser(client, { email, password, role, fullName }) {
@@ -28,6 +40,124 @@ async function ensureUser(client, { email, password, role, fullName }) {
     [userId, email, fullName, role],
   );
   return userId;
+}
+
+// Web login users. Passwords come only from env; there is no fallback.
+// If the env var is missing, an existing account still on a legacy default
+// password is locked (its hash is replaced with one no password can match).
+async function syncLoginUser(client, { envVar, email, role, fullName }) {
+  const password = process.env[envVar];
+  if (password && password.length >= MIN_PASSWORD_LENGTH) {
+    await ensureUser(client, { email, password, role, fullName });
+    console.log(`user ${email} ensured (password from ${envVar})`);
+    return;
+  }
+  if (password) {
+    console.warn(`user ${email} NOT updated: ${envVar} is shorter than ${MIN_PASSWORD_LENGTH} characters`);
+  } else {
+    console.warn(`user ${email} not managed: ${envVar} is not set`);
+  }
+  const existing = await client.query("select id, password_hash from users where email = $1", [email]);
+  const row = existing.rows[0];
+  if (row && LEGACY_DEFAULT_PASSWORDS.some((p) => verifyPassword(p, row.password_hash))) {
+    await client.query("update users set password_hash = 'locked' where id = $1", [row.id]);
+    await client.query("delete from user_sessions where user_id = $1", [row.id]);
+    console.warn(`user ${email} LOCKED: it was still using a default password`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// One-time data migrations. Each runs in its own transaction and is recorded
+// in schema_migrations, so it never runs twice. Add new entries at the end;
+// never edit or reorder an entry that has shipped.
+// A migration may throw SkipMigration to leave itself pending for next boot.
+// ---------------------------------------------------------------------------
+class SkipMigration extends Error {}
+
+const MIGRATIONS = [
+  {
+    // Formerly ran on every boot. The timetable delete is intentionally gone:
+    // it matched staff-created entries (TT-<id>) as well as seeded ones.
+    id: "2026-09-16-qa-smoke-test-cleanup",
+    run: (c) =>
+      c.query(
+        `delete from payment_drafts where student_name ilike '%Bipin%' or student_name ilike '%QA RETEST%';
+         delete from receipts where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
+         delete from money_ledger where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
+         delete from practice_sessions where activity = 'Kanak practice' or activity = 'Chord Practice';`,
+      ),
+  },
+  {
+    // Link legacy receipts/ledger rows to a student + branch. Only exact,
+    // unambiguous name matches are linked; the rest stay unassigned (visible
+    // to founder, hidden from branch-restricted staff).
+    id: "2026-09-16-backfill-receipt-branch",
+    run: async (c) => {
+      await c.query(
+        `update receipts r set student_id = s.id
+         from (select name, min(id) as id, count(*) as c from students_acad group by name) s
+         where r.student_id is null and r.party_name = s.name and s.c = 1`,
+      );
+      await c.query(
+        `update receipts r
+         set branch = case when upper(coalesce(sa.branch, '')) like '%GOR%' then 'GOREGAON' else 'KANDIVALI' end
+         from students_acad sa
+         where r.branch is null and r.student_id = sa.id`,
+      );
+      await c.query(
+        `update money_ledger l set branch = r.branch
+         from receipts r
+         where l.branch is null and r.record_id = l.id and r.branch is not null`,
+      );
+    },
+  },
+  {
+    id: "2026-09-16-unique-document-numbers",
+    run: async (c) => {
+      const dupReceipts = await c.query(
+        `select receipt_no, count(*)::int as n from receipts
+         where coalesce(receipt_no, '') <> '' group by receipt_no having count(*) > 1`,
+      );
+      const dupInvoices = await c.query(
+        `select invoice_no, count(*)::int as n from school_invoices_rpc
+         where coalesce(invoice_no, '') <> '' group by invoice_no having count(*) > 1`,
+      );
+      if (dupReceipts.rows.length || dupInvoices.rows.length) {
+        const list = [...dupReceipts.rows.map((r) => r.receipt_no), ...dupInvoices.rows.map((r) => r.invoice_no)];
+        throw new SkipMigration(`duplicate document numbers must be fixed by hand first: ${list.join(", ")}`);
+      }
+      await c.query(
+        `create unique index if not exists receipts_receipt_no_unique on receipts (receipt_no)
+         where coalesce(receipt_no, '') <> ''`,
+      );
+      await c.query(
+        `create unique index if not exists school_invoices_invoice_no_unique on school_invoices_rpc (invoice_no)
+         where coalesce(invoice_no, '') <> ''`,
+      );
+    },
+  },
+];
+
+async function runMigrations(client) {
+  const done = new Set((await client.query("select id from schema_migrations")).rows.map((r) => r.id));
+  for (const m of MIGRATIONS) {
+    if (done.has(m.id)) continue;
+    try {
+      await client.query("begin");
+      await m.run(client);
+      await client.query("insert into schema_migrations (id) values ($1)", [m.id]);
+      await client.query("commit");
+      console.log(`migration applied: ${m.id}`);
+    } catch (err) {
+      await client.query("rollback").catch(() => {});
+      if (err instanceof SkipMigration) {
+        console.warn(`migration PENDING: ${m.id} — ${err.message}`);
+        continue;
+      }
+      console.error(`migration FAILED: ${m.id} — ${err.message}`);
+      throw err;
+    }
+  }
 }
 
 async function main() {
@@ -74,26 +204,13 @@ async function main() {
       throw err;
     }
 
-    // Login users — passwords from env (APPLY auto-creates/updates on each boot).
-    const adminPw = process.env.ADMIN_PASSWORD || "Admin@123";
-    const staffPw = process.env.STAFF_PASSWORD || "Staff@123";
-    await ensureUser(client, { email: "admin@maestro.app", password: adminPw, role: "admin", fullName: "Academy Admin" });
-    await ensureUser(client, { email: "staff@maestro.app", password: staffPw, role: "teacher", fullName: "Academy Staff" });
-    console.log("users ensured (admin/staff, passwords from env)");
+    await syncLoginUser(client, { envVar: "ADMIN_PASSWORD", email: "admin@maestro.app", role: "admin", fullName: "Academy Admin" });
+    await syncLoginUser(client, { envVar: "STAFF_PASSWORD", email: "staff@maestro.app", role: "teacher", fullName: "Academy Staff" });
 
-    // One-time QA cleanup: gateway endpoint smoke-test rows (Bipin Sanghavi)
-    try {
-      const cleaned = await client.query(
-        `delete from payment_drafts where student_name ilike '%Bipin%' or student_name ilike '%QA RETEST%';
-         delete from receipts where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
-         delete from money_ledger where party_name ilike '%Bipin%' or party_name ilike '%QA RETEST%';
-         delete from practice_sessions where activity = 'Kanak practice' or activity = 'Chord Practice';
-         -- stale auto-seeded timetable rows (re-seeded with varied 10:00–19:00 slots)
-         delete from timetable where id like 'TT-%';`,
-      );
-      console.log("qa cleanup applied");
-    } catch {
-      console.log("qa cleanup skipped (fresh db)");
+    await runMigrations(client);
+
+    if (!process.env.RPC_STAFF_BRANCHES) {
+      console.warn("RPC_STAFF_BRANCHES is not set — the staff app will see no branch data until it is (e.g. KANDIVALI)");
     }
 
     const r = await client.query(

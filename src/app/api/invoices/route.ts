@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { query, queryOne, isDbConfigured } from "@/lib/db";
+import { query, queryOne } from "@/lib/db";
+import { requireUser } from "@/lib/api-auth";
 
 export async function POST(request: Request) {
-  if (!isDbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  const guard = await requireUser(["admin"]);
+  if (guard.denied) return guard.denied;
   const { student_id, amount, description } = await request.json();
   if (!student_id || !amount) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 
@@ -17,7 +19,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!isDbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  const guard = await requireUser(["admin"]);
+  if (guard.denied) return guard.denied;
   const { id, status } = await request.json();
   if (!id || !status) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   await query("update invoices set status = $1, updated_at = now() where id = $2", [status, id]);

@@ -1,4 +1,5 @@
 import type { RpcRole, RpcSession } from "@/lib/rpc/auth";
+import { makeScope, type BranchScope } from "./scope.ts";
 
 // ============================================================
 // CENTRALIZED RPC AUTHORIZATION (fail-closed)
@@ -169,10 +170,19 @@ export function authorizeRpc(session: RpcSession, functionName: string): AuthzRe
 // for isolation — they are checked against the session's allowed branches.
 // ============================================================
 
+/**
+ * Staff branches come only from RPC_STAFF_BRANCHES (e.g. "KANDIVALI" or
+ * "GOREGAON,KANDIVALI"). Unset means NO branches — fail closed.
+ */
 export function roleAllowedBranches(role: RpcRole): string[] {
   if (role === "FOUNDER_ADMIN") return ["GOREGAON", "KANDIVALI"];
-  const env = process.env.RPC_STAFF_BRANCHES || "GOREGAON,KANDIVALI";
+  const env = process.env.RPC_STAFF_BRANCHES || "";
   return env.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+}
+
+/** Record-level scope handed to handlers (see scope.ts). */
+export function scopeForSession(session: RpcSession): BranchScope {
+  return makeScope(roleAllowedBranches(session.role));
 }
 
 /**

@@ -17,6 +17,8 @@ Premium music class management platform for students, teachers, and academies.
 - **Database**: PostgreSQL (managed by Railway).
 - **RPC**: `POST /api/rpc` — `function`, `token`, `arg` form fields, JSON response.
 - **Auth**: Founder/Staff device tokens; backend-authoritative.
+- **Branch isolation**: staff see only the branches in `RPC_STAFF_BRANCHES`
+  (unset = nothing); every handler checks the branch stored on the record.
 - **Zero Google Apps Script**: no `script.google.com`, no `/exec`, no Google Sheets.
 
 Deployment URL: `https://swarmangal-app-production.up.railway.app/api/rpc`.
@@ -78,5 +80,5 @@ flutter build apk --release
 
 ```bash
 flutter test
-node --experimental-strip-types --test test/rpc_authorization.test.ts
+node --experimental-strip-types --test backend-tests/*.test.ts
 ```

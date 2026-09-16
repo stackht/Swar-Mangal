@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { query, isDbConfigured } from "@/lib/db";
+import { query } from "@/lib/db";
+import { requireUser } from "@/lib/api-auth";
 
 export async function POST(request: Request) {
-  if (!isDbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  const guard = await requireUser(["teacher", "admin"]);
+  if (guard.denied) return guard.denied;
   const { class_id, student_id, status, date, marked_by } = await request.json();
   if (!class_id || !student_id || !status) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
 

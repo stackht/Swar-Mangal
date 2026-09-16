@@ -21,8 +21,11 @@ No Google Apps Script. No Google Sheets. No `clasp`. No `/exec`. No `MobileApiGa
 - **Authorization**: Centralized fail-closed policy — every RPC function lists its
   minimum role (`FOUNDER` / `STAFF`); unknown functions and wrong-role calls are
   rejected before the handler runs (see `src/lib/rpc/authorization.ts`).
-- **Branch isolation**: staff sessions are scoped to allowed branches; founder
-  sees all. Client-supplied branch/entity values are never trusted.
+- **Branch isolation**: two layers. `authorization.ts` rejects a request whose
+  *arguments* name a branch outside `RPC_STAFF_BRANCHES`; handlers then check
+  the branch *stored on each record*, so a lookup by id cannot cross branches.
+  Client-supplied branch/entity values are never trusted, and staff branches
+  fail closed when the env var is missing.
 
 ## RPC contract
 
@@ -55,15 +58,18 @@ Errors use machine-readable codes:
 | `DATABASE_URL` | PostgreSQL connection string |
 | `RPC_FOUNDER_TOKEN` | Founder device token (`FOUNDER_ADMIN` role) |
 | `RPC_STAFF_TOKEN` | Staff device token (`OPS_USER` role) |
-| `RPC_STAFF_BRANCHES` | Optional staff branch allow-list (`GOREGAON,KANDIVALI`) |
+| `RPC_STAFF_BRANCHES` | **Required** staff branch allow-list (`GOREGAON,KANDIVALI`). Unset = staff see no branch data |
 | `NEXT_PUBLIC_AUTH_ENABLED` | Web-app auth flag |
 | `SESSION_SECRET` | Web-app session signing |
+| `ADMIN_PASSWORD` / `STAFF_PASSWORD` | Legacy web logins, min 12 chars. There is no default: unset leaves the account unmanaged, and an account still on an old default password is locked on boot |
 
 ## Database (`DATABASE_URL`)
 
 Schema lives in `db/schema.sql`; seed data in `db/seed.sql`; one-time real-data
 import in `db/academyos_import.sql`. `db/apply.mjs` applies all three idempotently
-on boot (`prestart`). Manual run against a fresh database:
+on boot (`prestart`), then runs the one-time data migrations in its `MIGRATIONS`
+list (recorded in `schema_migrations`, never re-run). Add cleanups there rather
+than as boot-time deletes. Manual run against a fresh database:
 
 ```
 psql "$DATABASE_URL" -f db/schema.sql
@@ -91,8 +97,16 @@ flutter build apk --release
 npm install
 npm run typecheck
 npm run build
-node --experimental-strip-types --test test/rpc_authorization.test.ts
+node --experimental-strip-types --test backend-tests/*.test.ts
 ```
+
+## Document numbering
+
+Receipt numbers (`SMR-<fy>-NNN`) and school invoice numbers (`SMI-<fy>-NNN`)
+come from the `doc_counters` table, incremented inside the same transaction
+that writes the document, with a unique index on the number. The financial
+year comes from the document date (April–March, IST), so the series rolls over
+on its own. Numbers past 999 simply get a fourth digit.
 
 ## Security model
 

@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { query, isDbConfigured } from "@/lib/db";
+import { query } from "@/lib/db";
+import { requireUser } from "@/lib/api-auth";
 
 export async function POST(request: Request) {
-  if (!isDbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  const guard = await requireUser(["admin"]);
+  if (guard.denied) return guard.denied;
   const { full_name, instrument, email, level } = await request.json();
   if (!full_name) return NextResponse.json({ error: "Missing name" }, { status: 400 });
 
@@ -16,7 +18,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!isDbConfigured) return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  const guard = await requireUser(["admin"]);
+  if (guard.denied) return guard.denied;
   const { id } = await request.json();
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
   await query("delete from students where id = $1", [id]);

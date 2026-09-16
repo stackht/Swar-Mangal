@@ -1,4 +1,6 @@
-import { query, queryOne } from "@/lib/db";
+import { randomBytes } from "crypto";
+import { query, queryOne, type Tx } from "@/lib/db";
+import { formatDocNo } from "@/lib/rpc/numbering";
 
 const s = (v: unknown): string => (v == null ? "" : String(v));
 const n = (v: unknown): number => {
@@ -11,6 +13,35 @@ const d = (v: unknown): string => {
 };
 
 export { s, n, d };
+
+/** Unique, time-ordered id: PREFIX-<ms>-<random>. */
+export function newId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+// Existing documents a series continues from, when its counter row is new.
+const DOC_SOURCES = {
+  receipt: { table: "receipts", column: "receipt_no" },
+  schoolInvoice: { table: "school_invoices_rpc", column: "invoice_no" },
+} as const;
+
+/**
+ * Next number in a series (e.g. SMR-26-27). Must run inside the transaction
+ * that writes the document: the counter row stays locked until commit, so
+ * concurrent writers queue instead of getting the same number.
+ */
+export async function nextDocNo(tx: Tx, kind: keyof typeof DOC_SOURCES, series: string): Promise<string> {
+  const { table, column } = DOC_SOURCES[kind];
+  const row = await tx.queryOne<{ last_no: number }>(
+    `insert into doc_counters (series, last_no)
+     values ($1, coalesce((select max(substring(${column} from '-([0-9]+)$')::int)
+                           from ${table} where ${column} like $1 || '-%'), 0) + 1)
+     on conflict (series) do update set last_no = doc_counters.last_no + 1
+     returning last_no`,
+    [series],
+  );
+  return formatDocNo(series, Number(row!.last_no));
+}
 
 export interface AcadStudent {
   id: string;
@@ -97,9 +128,13 @@ export async function studentToRpc(x: AcadStudent): Promise<StudentRpc> {
     [x.id],
   );
   if (g.length) teacherName = g[0].teacher_name;
+  // Prefer the linked student id; fall back to the name only for legacy,
+  // unlinked rows (two students sharing a name must not share receipts).
   const last = await queryOne<{ receipt_no: string; amount: string }>(
-    `select receipt_no, amount from receipts where party_name = $1 order by id desc limit 1`,
-    [x.name],
+    `select receipt_no, amount from receipts
+     where student_id = $1 or (student_id is null and party_name = $2)
+     order by id desc limit 1`,
+    [x.id, x.name],
   );
   const status = s(x.status).toUpperCase();
   return {

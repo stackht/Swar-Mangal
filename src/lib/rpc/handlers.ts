@@ -1,6 +1,17 @@
-import { query, queryOne } from "@/lib/db";
+import { query, queryOne, withTransaction, type Tx } from "@/lib/db";
 import { RpcRole } from "@/lib/rpc/auth";
-import { s, n, d, acadStudents, acadStudentById, acadTeachers, acadTeacherById, studentToRpc, teacherToRpc, classSummary } from "@/lib/rpc/shared";
+import { s, n, d, newId, nextDocNo, acadStudents, acadStudentById, studentToRpc, classSummary } from "@/lib/rpc/shared";
+import { receiptSeries } from "@/lib/rpc/numbering";
+import {
+  ALL_BRANCHES,
+  branchForbidden,
+  defaultBranch,
+  inScope,
+  matchesRequestedBranch,
+  moneyInScope,
+  recordBranch,
+  type BranchScope,
+} from "@/lib/rpc/scope";
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 
@@ -8,29 +19,29 @@ const PAYMENT_MODES = ["Cash", "UPI", "Bank Transfer", "Cheque"];
 const ACCOUNTS = ["Kotak UPI", "HDFC", "Cash Box", "Sharvil Service Account"];
 const PLAN_TYPES = ["Monthly", "3 Months", "6 Months", "Yearly"];
 const CLASS_CODES = ["GMC", "KMC"];
-const BRANCHES = ["GOREGAON", "KANDIVALI"];
+const BRANCHES = [...ALL_BRANCHES];
 
-export async function rpcDispatch(role: RpcRole, fn: string, arg: Record<string, unknown>) {
+export async function rpcDispatch(role: RpcRole, fn: string, arg: Record<string, unknown>, scope: BranchScope) {
   switch (fn) {
     // ------------------------------------------------------------ boot
     case "api_bootstrap":
       return ok(bootstrapPayload(role));
     case "api_staff_boot":
-      return ok(staffBootPayload());
+      return ok(staffBootPayload(scope));
 
     // ---------------------------------------------------------- students
     case "api_searchStudent":
     case "api_staff_searchStudents":
-      return studentsSearch(arg);
+      return studentsSearch(arg, scope);
     case "api_staff_getStudentProfile":
     case "api_studentProfile":
-      return studentProfile(arg);
+      return studentProfile(arg, scope);
     case "api_staff_studentHub":
-      return staffStudentHub(arg);
+      return staffStudentHub(arg, scope);
     case "api_addStudent":
-      return addStudent(arg);
+      return addStudent(arg, scope);
     case "api_staff_saveStudentDraft":
-      return saveStudentDraft(arg);
+      return saveStudentDraft(arg, scope);
     case "api_founder_setStudentStatus":
       return setStudentStatus(arg);
     case "api_founder_mergeStudentDraft":
@@ -38,13 +49,13 @@ export async function rpcDispatch(role: RpcRole, fn: string, arg: Record<string,
 
     // -------------------------------------------------- receipts / money
     case "api_searchReceipt":
-      return searchReceipts(arg);
+      return searchReceipts(arg, scope);
     case "api_receiptPreflight":
       return receiptPreflight(arg, role);
     case "api_addFeePayment":
       return addFeePayment(arg);
     case "api_staff_prepareReceiptDraft":
-      return prepareReceiptDraft(arg);
+      return prepareReceiptDraft(arg, scope);
     case "api_founder_listPaymentDrafts":
       return listPaymentDrafts(arg);
     case "api_founder_paymentDraftApprove":
@@ -52,9 +63,9 @@ export async function rpcDispatch(role: RpcRole, fn: string, arg: Record<string,
     case "api_founder_paymentDraftReject":
       return paymentDraftReject(arg);
     case "api_founder_finalisePaymentDraft":
-      return finalisePaymentDraft(arg, role);
+      return finalisePaymentDraft(arg, role, scope);
     case "api_staff_finalisePaymentDraft":
-      return finalisePaymentDraft(arg, role);
+      return finalisePaymentDraft(arg, role, scope);
 
     default:
       return { ok: false, code: "UNKNOWN_API", error: `No gateway handler for ${fn}` };
@@ -79,13 +90,14 @@ function bootstrapPayload(role: RpcRole): Record<string, unknown> {
   };
 }
 
-function staffBootPayload(): Record<string, unknown> {
+function staffBootPayload(scope: BranchScope): Record<string, unknown> {
   return {
     app: "STAFF_APP",
     actor: "STAFF_APP",
     email: "smmahavirnagar@gmail.com",
     isOpsAccount: true,
-    branches: BRANCHES,
+    // Only the branches this staff token may open.
+    branches: scope.unrestricted ? BRANCHES : scope.branches,
     paymentModes: PAYMENT_MODES,
     accounts: ACCOUNTS,
     planTypes: PLAN_TYPES,
@@ -95,17 +107,18 @@ function staffBootPayload(): Record<string, unknown> {
 }
 
 // ---------------------------------------------------------------- students
-async function studentsSearch(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function studentsSearch(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const q = s(arg["q"] ?? arg["query"] ?? "");
   const branch = s(arg["branch"] ?? "ALL");
   const cc = s(arg["classCode"] ?? "ALL").toUpperCase();
   const all = await acadStudents(q);
   const rows: Record<string, unknown>[] = [];
   for (const x of all) {
-    if (branch !== "ALL" && s(x.branch).toUpperCase() !== branch) continue;
+    if (!inScope(scope, x.branch)) continue;
+    if (!matchesRequestedBranch(branch, x.branch)) continue;
     if (cc !== "ALL") {
-      const isGmc = cc === "GMC" && s(x.branch).toUpperCase().includes("GOR");
-      const isKmc = cc === "KMC" && (!s(x.branch).toUpperCase().includes("GOR"));
+      const isGmc = cc === "GMC" && recordBranch(x.branch) === "GOREGAON";
+      const isKmc = cc === "KMC" && recordBranch(x.branch) !== "GOREGAON";
       if (!isGmc && !isKmc) continue;
     }
     rows.push((await studentToRpc(x)) as unknown as Record<string, unknown>);
@@ -113,11 +126,12 @@ async function studentsSearch(arg: Record<string, unknown>): Promise<Record<stri
   return ok({ results: rows, rows, count: rows.length });
 }
 
-async function studentProfile(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function studentProfile(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const id = s(arg["studentId"]);
   if (!id) return { ok: false, code: "NO_STUDENT", error: "studentId required" };
   const x = await acadStudentById(id);
   if (!x) return { ok: false, code: "STUDENT_NOT_FOUND", error: `No student ${id}` };
+  if (!inScope(scope, x.branch)) return branchForbidden(recordBranch(x.branch));
   const st = await studentToRpc(x);
   const receipts = await recentReceipts(id, x.name);
   return ok({
@@ -128,10 +142,11 @@ async function studentProfile(arg: Record<string, unknown>): Promise<Record<stri
   });
 }
 
-async function staffStudentHub(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function staffStudentHub(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const id = s(arg["studentId"]);
   const x = await acadStudentById(id);
   if (!x) return { ok: false, code: "STUDENT_NOT_FOUND", error: `No student ${id}` };
+  if (!inScope(scope, x.branch)) return branchForbidden(recordBranch(x.branch));
   const st = await studentToRpc(x);
   const drafts = await query<Record<string, unknown>>(
     `select id as draft_id, amount, payment_date, approval_authority, approved_by, repair_required, status
@@ -161,18 +176,13 @@ async function staffStudentHub(arg: Record<string, unknown>): Promise<Record<str
   });
 }
 
-async function addStudent(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function addStudent(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const name = s(arg["name"] ?? arg["studentName"]).trim();
   if (!name) return { ok: false, code: "NO_NAME", error: "Student name required" };
   const phone = s(arg["phone"]);
-  const id = `STU-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-  const tables = await query<{ table_name: string }>(
-    "select table_name from information_schema.tables where table_name in ('students_acad')",
-  );
-  if (!tables.length) return { ok: false, code: "NO_TABLE", error: "students_acad missing" };
-  if (s(arg["branch"]) === "GOREAON") {
-    // tolerate typo used by old forms
-  }
+  const id = newId("STU");
+  const branch = defaultBranch(scope, arg["branch"] ?? arg["location"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
   await query(
     `insert into students_acad (id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
@@ -184,7 +194,7 @@ async function addStudent(arg: Record<string, unknown>): Promise<Record<string, 
       phone,
       s(arg["email"]),
       s(arg["instrument"] ?? arg["course"]) || "Music",
-      s(arg["branch"] ?? arg["location"]) || "KANDIVALI",
+      branch,
       s(arg["batch"]),
       s(arg["feeCycleType"] ?? arg["planType"]),
       "ACTIVE",
@@ -194,15 +204,17 @@ async function addStudent(arg: Record<string, unknown>): Promise<Record<string, 
   return ok({ studentId: id, studentName: name, duplicateWarning: { hasDuplicates: false }, note: "student created" });
 }
 
-async function saveStudentDraft(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function saveStudentDraft(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const name = s(arg["name"] ?? arg["studentName"]).trim();
   if (!name) return { ok: false, code: "NO_NAME", error: "Student name required" };
-  const id = `STU-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  const id = newId("STU");
+  const branch = defaultBranch(scope, arg["branch"] ?? arg["location"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
   await query(
     `insert into students_acad (id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE',$10)
      on conflict (id) do nothing`,
-    [id, name, s(arg["parentName"] ?? arg["guardianName"]), s(arg["phone"]), s(arg["email"]), s(arg["instrument"] ?? arg["course"]) || "Music", s(arg["branch"] ?? arg["location"]) || "KANDIVALI", s(arg["batch"]), s(arg["feeCycleType"] ?? arg["planType"]), s(arg["notes"])],
+    [id, name, s(arg["parentName"] ?? arg["guardianName"]), s(arg["phone"]), s(arg["email"]), s(arg["instrument"] ?? arg["course"]) || "Music", branch, s(arg["batch"]), s(arg["feeCycleType"] ?? arg["planType"]), s(arg["notes"])],
   );
   return ok({ studentId: id, studentName: name, duplicateWarning: { hasDuplicates: false }, note: "student draft saved→active" });
 }
@@ -230,7 +242,7 @@ async function setStudentStatus(arg: Record<string, unknown>): Promise<Record<st
 async function mergeStudentDraft(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
   const draftId = s(arg["draftId"]);
   const st = await queryOne<{ id: string; name: string }>("select id, name from students_acad where id = $1", [draftId]);
-  return ok({ created: !st ? true : false, draftId, studentId: st?.id ?? `STU-${Date.now()}`, note: "draft merged (idempotent)" });
+  return ok({ created: !st ? true : false, draftId, studentId: st?.id ?? newId("STU"), note: "draft merged (idempotent)" });
 }
 
 // -------------------------------------------------------------- receipts
@@ -241,10 +253,12 @@ const RECEIPT_GUARD: Record<string, string> = {
   APPROVED: "APPROVED",
 };
 
+const entityOf = (branch: unknown) => (recordBranch(branch) === "GOREGAON" ? "ENT-GOREGAON" : "ENT-KANDIVALI");
+
 async function recentReceipts(studentId: string, name: string): Promise<Record<string, unknown>[]> {
   const rows = await query<Record<string, unknown>>(
-    `select receipt_no, amount, status, payment_mode, linked_url from receipts
-     where student_id = $1 or party_name = $2 order by id desc limit 20`,
+    `select id, receipt_no, amount, status, payment_mode, linked_url, branch from receipts
+     where student_id = $1 or (student_id is null and party_name = $2) order by id desc limit 20`,
     [studentId, name],
   );
   return rows.map((r) => ({
@@ -255,7 +269,7 @@ async function recentReceipts(studentId: string, name: string): Promise<Record<s
     mode: s(r.payment_mode),
     paymentMode: s(r.payment_mode),
     status: s(r.status).toUpperCase() in RECEIPT_GUARD ? RECEIPT_GUARD[s(r.status).toUpperCase()] : s(r.status).toUpperCase(),
-    entityId: "ENT-KANDIVALI",
+    entityId: entityOf(r.branch),
     pdfUrl: s(r.linked_url),
     excluded: false,
     feePeriodFrom: "",
@@ -264,16 +278,16 @@ async function recentReceipts(studentId: string, name: string): Promise<Record<s
   }));
 }
 
-async function searchReceipts(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function searchReceipts(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const q = s(arg["q"] ?? arg["studentName"] ?? arg["receiptNo"] ?? "");
   const status = s(arg["status"]);
-  let sql = `select id, receipt_no, party_name, amount, payment_mode, linked_url, status from receipts where 1=1`;
+  let sql = `select id, receipt_no, party_name, amount, payment_mode, linked_url, status, branch from receipts where 1=1`;
   const params: unknown[] = [];
   if (status) {
     params.push(status);
     sql += ` and status ilike $${params.length}`;
   }
-  const rows = await query<Record<string, unknown>>(sql, params);
+  const rows = (await query<Record<string, unknown>>(sql, params)).filter((r) => moneyInScope(scope, r.branch));
   let filtered = rows.map((r) => ({
     receiptNo: s(r.receipt_no),
     date: d(r.id),
@@ -283,7 +297,7 @@ async function searchReceipts(arg: Record<string, unknown>): Promise<Record<stri
     mode: s(r.payment_mode),
     paymentMode: s(r.payment_mode),
     status: s(r.status).toUpperCase() in RECEIPT_GUARD ? RECEIPT_GUARD[s(r.status).toUpperCase()] : s(r.status).toUpperCase(),
-    entityId: "ENT-KANDIVALI",
+    entityId: entityOf(r.branch),
     pdfUrl: s(r.linked_url),
     excluded: false,
     feePeriodFrom: "",
@@ -312,43 +326,59 @@ async function receiptPreflight(arg: Record<string, unknown>, role: RpcRole): Pr
   });
 }
 
+/** Receipt + matching ledger inflow, written in the caller's transaction. */
+async function writeReceipt(
+  tx: Tx,
+  p: { studentId: string; studentName: string; amount: number; mode: string; branch: string; description: (receiptNo: string) => string },
+): Promise<string> {
+  const receiptNo = await nextDocNo(tx, "receipt", receiptSeries());
+  const ledgerId = newId("LED");
+  await tx.query(
+    `insert into money_ledger (id, entry_date, party_name, category, description, inflow, amount, payment_mode, status, branch)
+     values ($1, now(), $2, 'Student Fees', $3, $4, $4, $5, 'ACTIVE', $6)`,
+    [ledgerId, p.studentName, p.description(receiptNo), p.amount, p.mode, p.branch || null],
+  );
+  await tx.query(
+    `insert into receipts (id, receipt_no, party_name, amount, payment_mode, status, record_id, student_id, branch)
+     values ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8)`,
+    [newId("REC"), receiptNo, p.studentName, p.amount, p.mode, ledgerId, p.studentId || null, p.branch || null],
+  );
+  return receiptNo;
+}
+
 async function addFeePayment(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
   const amount = n(arg["amount"]);
   const studentName = s(arg["studentName"] ?? arg["name"]);
   if (amount <= 0 || !studentName) return { ok: false, code: "BAD_PAYMENT", error: "Valid amount + student required" };
-  const id = `LED-${Date.now()}`;
-  const receiptId = `REC-${Date.now()}`;
-  const receiptNo = `SMR-26-27-${String((await nextReceiptNumber())).padStart(3, "0")}`;
-  await query(
-    `insert into money_ledger (id, entry_date, party_name, category, description, inflow, amount, payment_mode, status)
-     values ($1, now(), $2, 'Student Fees', $3, $4, $4, $5, 'ACTIVE')`,
-    [id, studentName, `Fee receipt ${receiptNo}`, amount, s(arg["paymentMode"] ?? "UPI")],
-  );
-  await query(
-    `insert into receipts (id, receipt_no, party_name, amount, payment_mode, status, record_id)
-     values ($1, $2, $3, $4, $5, 'ACTIVE', $6)`,
-    [receiptId, receiptNo, studentName, amount, s(arg["paymentMode"] ?? "UPI"), id],
+  const studentId = s(arg["studentId"]);
+  const student = studentId ? await acadStudentById(studentId) : null;
+  const receiptNo = await withTransaction((tx) =>
+    writeReceipt(tx, {
+      studentId: student?.id ?? "",
+      studentName,
+      amount,
+      mode: s(arg["paymentMode"] ?? "UPI"),
+      branch: student ? recordBranch(student.branch) : "",
+      description: (no) => `Fee receipt ${no}`,
+    }),
   );
   return ok({ ok: true, receiptNo, note: "receipt created" });
 }
 
-async function nextReceiptNumber(): Promise<number> {
-  const row = await queryOne<{ m: string }>(
-    `select max(right(receipt_no, 3)::int)::text as m from receipts where receipt_no ~ 'SMR-26-27-[0-9]+$'`,
-  );
-  return (Number(row?.m) || 0) + 1;
-}
-
-async function prepareReceiptDraft(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const draftId = `PDRAFT-${Date.now()}`;
+async function prepareReceiptDraft(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const amount = n(arg["amount"]);
   const studentName = s(arg["studentName"] ?? arg["name"]);
   const studentId = s(arg["studentId"]);
-  const sid = studentId || (studentName ? (await acadStudents(studentName))[0]?.id ?? "" : "");
+  const sid = studentId || (studentName ? (await acadStudents(studentName)).find((x) => inScope(scope, x.branch))?.id ?? "" : "");
+  const student = sid ? await acadStudentById(sid) : null;
+  // A linked student's stored branch wins over whatever the client sent.
+  const branch = student ? recordBranch(student.branch) : defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
+  const draftId = newId("PDRAFT");
   await query(
     `insert into payment_drafts (id, status, student_id, student_name, amount, payment_mode, branch, terms_status, repair_required)
      values ($1, 'SUBMITTED', $2, $3, $4, $5, $6, '', false)`,
-    [draftId, sid, studentName, amount, s(arg["paymentMode"] ?? "UPI"), s(arg["branch"] ?? "KANDIVALI")],
+    [draftId, sid, studentName, amount, s(arg["paymentMode"] ?? "UPI"), branch],
   );
   return ok({
     draftId,
@@ -397,50 +427,47 @@ async function paymentDraftReject(arg: Record<string, unknown>): Promise<Record<
   return ok({ ok: true, changed: true, draftId, rejected: true, note: comment || "rejected" });
 }
 
-async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole): Promise<Record<string, unknown>> {
+async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole, scope: BranchScope): Promise<Record<string, unknown>> {
   const draftId = s(arg["draftId"]);
   if (!draftId) return { ok: false, code: "NO_DRAFT", error: "draftId required" };
-  const draft = await queryOne<Record<string, unknown>>(`select * from payment_drafts where id = $1`, [draftId]);
-  if (!draft) return { ok: false, code: "NOT_FOUND", error: `No draft ${draftId}` };
-  if (s(draft.status) === "FINALISED" && s(draft.finalised_receipt_no)) {
-    return ok({ changed: false, draftId, status: "FINALISED", receiptNo: s(draft.finalised_receipt_no), finalisedBy: s(draft.approved_by), idempotent: true, financialWrites: false, note: "already finalised (idempotent revisit)" });
-  }
-  if (s(draft.status) !== "APPROVED") {
-    return { ok: false, code: "NOT_APPROVED", error: `Draft status ${s(draft.status)} — only APPROVED drafts can finalise` };
-  }
-  const amount = n(draft.amount);
-  const studentName = s(draft.student_name);
-  const studentId = s(draft.student_id);
-  const receiptNo = `SMR-26-27-${String(await nextReceiptNumber()).padStart(3, "0")}`;
-  const receiptId = `REC-${Date.now()}`;
-  const ledgerId = `LED-${Date.now()}`;
-  await query(
-    `insert into receipts (id, receipt_no, party_name, amount, payment_mode, status, record_id)
-     values ($1,$2,$3,$4,$5,'ACTIVE',$6)`,
-    [receiptId, receiptNo, studentName, amount, s(draft.payment_mode) || "UPI", ledgerId],
-  );
-  await query(
-    `insert into money_ledger (id, entry_date, party_name, category, description, inflow, amount, payment_mode, status)
-     values ($1, now(), $2, 'Student Fees', $3, $4, $4, $5, 'ACTIVE')`,
-    [ledgerId, studentName, `Receipt ${receiptNo} finalised from draft ${draftId}`, amount, s(draft.payment_mode) || "UPI"],
-  );
-  await query(
-    "update payment_drafts set status = 'FINALISED', finalised_receipt_no = $2, finalised_at = now() where id = $1",
-    [draftId, receiptNo],
-  );
-  if (studentId) {
-    await query("update students_acad set status = 'ACTIVE' where id = $1", [studentId]);
-  }
-  return ok({
-    changed: true,
-    draftId,
-    status: "FINALISED",
-    receiptNo,
-    pdfUrl: "",
-    idempotent: false,
-    financialWrites: true,
-    finalisedBy: role === "FOUNDER_ADMIN" ? "sharvil@founder" : "latika@ops",
-    note: "receipt + ledger written; due date advanced",
+  return withTransaction(async (tx) => {
+    // Row lock: a second finalise of the same draft waits, then sees FINALISED.
+    const draft = await tx.queryOne<Record<string, unknown>>(`select * from payment_drafts where id = $1 for update`, [draftId]);
+    if (!draft) return { ok: false, code: "NOT_FOUND", error: `No draft ${draftId}` };
+    if (!inScope(scope, draft.branch)) return branchForbidden(recordBranch(draft.branch));
+    if (s(draft.status) === "FINALISED" && s(draft.finalised_receipt_no)) {
+      return ok({ changed: false, draftId, status: "FINALISED", receiptNo: s(draft.finalised_receipt_no), finalisedBy: s(draft.approved_by), idempotent: true, financialWrites: false, note: "already finalised (idempotent revisit)" });
+    }
+    if (s(draft.status) !== "APPROVED") {
+      return { ok: false, code: "NOT_APPROVED", error: `Draft status ${s(draft.status)} — only APPROVED drafts can finalise` };
+    }
+    const studentId = s(draft.student_id);
+    const receiptNo = await writeReceipt(tx, {
+      studentId,
+      studentName: s(draft.student_name),
+      amount: n(draft.amount),
+      mode: s(draft.payment_mode) || "UPI",
+      branch: recordBranch(draft.branch),
+      description: (no) => `Receipt ${no} finalised from draft ${draftId}`,
+    });
+    await tx.query(
+      "update payment_drafts set status = 'FINALISED', finalised_receipt_no = $2, finalised_at = now() where id = $1",
+      [draftId, receiptNo],
+    );
+    if (studentId) {
+      await tx.query("update students_acad set status = 'ACTIVE' where id = $1", [studentId]);
+    }
+    return ok({
+      changed: true,
+      draftId,
+      status: "FINALISED",
+      receiptNo,
+      pdfUrl: "",
+      idempotent: false,
+      financialWrites: true,
+      finalisedBy: role === "FOUNDER_ADMIN" ? "sharvil@founder" : "latika@ops",
+      note: "receipt + ledger written; due date advanced",
+    });
   });
 }
 

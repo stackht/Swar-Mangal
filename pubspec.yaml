@@ -1,5 +1,5 @@
 name: swar_mangal
-description: "A new Flutter project."
+description: "Swar Mangal — music academy management app for founder and staff."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -47,19 +47,15 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_launcher_icons: ^0.14.1
+  # Lint rules used by analysis_options.yaml. This was previously nested
+  # under flutter_launcher_icons, so it was never actually installed.
+  flutter_lints: ^6.0.0
 
 flutter_launcher_icons:
   android: true
   image_path: "logo.png"
   adaptive_icon_background: "#FAF8F2"
   adaptive_icon_foreground: "logo.png"
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
-  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

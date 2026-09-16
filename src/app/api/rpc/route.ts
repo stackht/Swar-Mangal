@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateToken } from "@/lib/rpc/auth";
 import { rpcDispatch } from "@/lib/rpc/handlers";
 import { dispatch2 } from "@/lib/rpc/handlers2";
-import { authorizeRpc, authorizeBranch } from "@/lib/rpc/authorization";
+import { authorizeRpc, authorizeBranch, scopeForSession } from "@/lib/rpc/authorization";
 import { isDbConfigured } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -90,9 +90,11 @@ export async function POST(req: NextRequest) {
   ];
   try {
     const handler = inHandlers1.includes(functionName) ? rpcDispatch : dispatch2;
-    const result = await handler(session.role, functionName, argMap);
+    const result = await handler(session.role, functionName, argMap, scopeForSession(session));
     return rpcOkResponse(result);
   } catch (e) {
+    // Log the failure type only: no payload, token or stack (may carry PII).
+    console.error(`[rpc-error] fn=${functionName} err=${e instanceof Error ? e.name + ": " + e.message.slice(0, 200) : "unknown"}`);
     return rpcError("SERVER_ERROR", "Backend error");
   }
 }

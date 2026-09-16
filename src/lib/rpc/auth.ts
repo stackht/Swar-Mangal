@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from "crypto";
+
 export type RpcRole = "FOUNDER_ADMIN" | "OPS_USER";
 
 export interface RpcSession {
@@ -9,12 +11,20 @@ export interface RpcSession {
 const FOUNDER_TOKEN = process.env.RPC_FOUNDER_TOKEN || "";
 const STAFF_TOKEN = process.env.RPC_STAFF_TOKEN || "";
 
+// Hash both sides so the comparison is constant-time and length-independent.
+function tokenMatches(given: string, expected: string): boolean {
+  if (!expected) return false;
+  const a = createHash("sha256").update(given).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
 export function authenticateToken(token?: string | null): RpcSession | null {
   if (!token) return null;
-  if (FOUNDER_TOKEN && token === FOUNDER_TOKEN) {
+  if (tokenMatches(token, FOUNDER_TOKEN)) {
     return { role: "FOUNDER_ADMIN", email: "sharvil87@gmail.com", name: "Sharvil Vaidya" };
   }
-  if (STAFF_TOKEN && token === STAFF_TOKEN) {
+  if (tokenMatches(token, STAFF_TOKEN)) {
     return { role: "OPS_USER", email: "smmahavirnagar@gmail.com", name: "Latika" };
   }
   return null;

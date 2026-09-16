@@ -555,3 +555,23 @@ create table if not exists school_invoices_rpc (
   status text default 'FINAL',
   created_at timestamptz not null default now()
 );
+-- ============ BRANCH OWNERSHIP + DOCUMENT NUMBERING ============
+
+-- Branch/student ownership on money rows so staff scope can be enforced
+-- from stored data (backfilled once by db/apply.mjs migrations).
+alter table receipts add column if not exists student_id text;
+alter table receipts add column if not exists branch text;
+alter table money_ledger add column if not exists branch text;
+
+-- One row per numbering series (e.g. SMR-26-27). Incremented inside the
+-- same transaction that writes the document, so numbers never repeat.
+create table if not exists doc_counters (
+  series text primary key,
+  last_no int not null
+);
+
+-- One-time data migrations applied by db/apply.mjs.
+create table if not exists schema_migrations (
+  id text primary key,
+  applied_at timestamptz not null default now()
+);

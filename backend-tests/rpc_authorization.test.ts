@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { authorizeRpc, authorizeBranch, RPC_POLICY } from "../src/lib/rpc/authorization.ts";
+// Staff branches are fail-closed: set the env the deployment uses before import.
+process.env.RPC_STAFF_BRANCHES = "GOREGAON,KANDIVALI";
+
+import { authorizeRpc, authorizeBranch, roleAllowedBranches, RPC_POLICY } from "../src/lib/rpc/authorization.ts";
+import type { RpcRole } from "../src/lib/rpc/auth.ts";
 
 const session = (role: RpcRole) =>
   ({ role, email: role === "FOUNDER_ADMIN" ? "sharvil87@gmail.com" : "smmahavirnagar@gmail.com", name: role }) as const;
@@ -135,4 +139,31 @@ test("authorizeBranch: scope ALL is not branch-gated", () => {
 test("authorizeBranch: founder bypasses branch allow-list entirely", () => {
   const r = authorizeBranch(founder, { branch: "SOME_OTHER" });
   assert.equal(r.ok, true);
+});
+test("roleAllowedBranches: staff comes from env, founder gets everything", () => {
+  assert.deepEqual(roleAllowedBranches("FOUNDER_ADMIN"), ["GOREGAON", "KANDIVALI"]);
+  process.env.RPC_STAFF_BRANCHES = "KANDIVALI";
+  assert.deepEqual(roleAllowedBranches("OPS_USER"), ["KANDIVALI"]);
+  process.env.RPC_STAFF_BRANCHES = "GOREGAON,KANDIVALI";
+});
+
+test("roleAllowedBranches: unset env means no staff branches (fail closed)", () => {
+  const saved = process.env.RPC_STAFF_BRANCHES;
+  delete process.env.RPC_STAFF_BRANCHES;
+  assert.deepEqual(roleAllowedBranches("OPS_USER"), []);
+  // Founder is unaffected.
+  assert.deepEqual(roleAllowedBranches("FOUNDER_ADMIN"), ["GOREGAON", "KANDIVALI"]);
+  process.env.RPC_STAFF_BRANCHES = saved;
+});
+
+test("authorizeBranch: staff restricted to one branch is denied the other", () => {
+  const saved = process.env.RPC_STAFF_BRANCHES;
+  process.env.RPC_STAFF_BRANCHES = "KANDIVALI";
+  const denied = authorizeBranch(staff, { branch: "GOREGAON" });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.code, "BRANCH_FORBIDDEN");
+  assert.equal(authorizeBranch(staff, { branch: "KANDIVALI" }).ok, true);
+  assert.equal(authorizeBranch(staff, { entityId: "ENT-GOREGAON" }).ok, false);
+  assert.equal(authorizeBranch(staff, { classCode: "GMC" }).ok, false);
+  process.env.RPC_STAFF_BRANCHES = saved;
 });

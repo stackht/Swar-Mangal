@@ -199,6 +199,24 @@ class DemoApiClient extends ApiClient {
         return _sessionRoster();
       case 'api_staff_inquiryTransition':
         return _inquiryTransition(a);
+      case 'api_founder_auditLog':
+        return {
+          'ok': true,
+          'rows': [
+            {
+              'at': '2026-09-16T10:12:00Z', 'actorRole': 'OPS_USER', 'actorEmail': 'demo@staff',
+              'device': 'demo', 'fn': 'api_staff_markAttendance', 'ok': true, 'code': '',
+              'branch': 'KANDIVALI', 'ref': 'id=ATT-DEMO-1',
+            },
+            {
+              'at': '2026-09-16T09:40:00Z', 'actorRole': 'FOUNDER_ADMIN', 'actorEmail': 'demo@founder',
+              'device': 'demo', 'fn': 'api_founder_finalisePaymentDraft', 'ok': true, 'code': '',
+              'branch': 'KANDIVALI', 'ref': 'receiptNo=SMR-DEMO-007',
+            },
+          ],
+          'count': 2,
+          'note': 'demo trail',
+        };
       case 'api_founder_approvalsList':
         return _approvalsList();
       case 'api_founder_listPaymentDrafts':

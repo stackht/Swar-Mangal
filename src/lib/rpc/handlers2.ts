@@ -85,6 +85,8 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
       return inquiryTransition(arg, scope);
     case "api_founder_approvalsList":
       return founderApprovals();
+    case "api_founder_auditLog":
+      return auditLog(arg);
     case "api_staff_listMyApprovals":
       return staffMyRequests(scope);
     case "api_staff_commGenerate":
@@ -1085,6 +1087,50 @@ async function founderApprovals(): Promise<Record<string, unknown>> {
   }));
   const groups = [{ type: "PAYMENT_DRAFT", label: "Payment drafts", items: paymentItems }];
   return ok({ build: "RC3.85-standalone", branch: "CONSOLIDATED", count: paymentItems.length, counts: { total: paymentItems.length, WAITING_ON_TERMS: 0, PAYMENT_DRAFT: paymentItems.length, STUDENT_DRAFT: 0, SCHOOL_MASTER: 0, WAIVER: 0, UNKNOWN_STATUS: 0 }, empty: paymentItems.length === 0, items: paymentItems, groups, note: "standalone approvals" });
+}
+
+/**
+ * The write trail: who did what, newest first. Optionally filtered to one
+ * function or to failures only. Rows hold ids, never names or amounts.
+ */
+async function auditLog(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const limit = Math.min(Math.max(n(arg["limit"]) || 100, 1), 500);
+  const where: string[] = [];
+  const params: unknown[] = [];
+  const fn = s(arg["fn"]);
+  if (fn) {
+    params.push(fn);
+    where.push(`fn = $${params.length}`);
+  }
+  if (arg["failuresOnly"] === true) where.push("ok = false");
+  const days = n(arg["days"]);
+  if (days > 0) {
+    params.push(Math.round(days));
+    where.push(`at >= now() - ($${params.length}::int * interval '1 day')`);
+  }
+  params.push(limit);
+
+  const rows = await query<Record<string, unknown>>(
+    `select at::text, actor_role, actor_email, device_label, fn, ok, code, branch, ref
+     from audit_log ${where.length ? `where ${where.join(" and ")}` : ""}
+     order by at desc limit $${params.length}`,
+    params,
+  );
+  return ok({
+    rows: rows.map((r) => ({
+      at: s(r.at),
+      actorRole: s(r.actor_role),
+      actorEmail: s(r.actor_email),
+      device: s(r.device_label),
+      fn: s(r.fn),
+      ok: r.ok === true,
+      code: s(r.code),
+      branch: s(r.branch),
+      ref: s(r.ref),
+    })),
+    count: rows.length,
+    note: "write trail — ids only, no names or amounts",
+  });
 }
 
 async function staffMyRequests(scope: BranchScope): Promise<Record<string, unknown>> {

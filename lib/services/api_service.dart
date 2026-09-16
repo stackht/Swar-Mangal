@@ -375,6 +375,20 @@ class ApiService {
     return PayoutPreview.fromApi(b as Map<String, dynamic>);
   }
 
+  /// Founder-only: the write trail (who changed what, newest first).
+  Future<List<AuditEntry>> founderAuditLog({int limit = 100, String fn = '', bool failuresOnly = false}) async {
+    final b = await _api.call('api_founder_auditLog', {
+      'limit': limit,
+      if (fn.isNotEmpty) 'fn': fn,
+      if (failuresOnly) 'failuresOnly': true,
+    });
+    return ((b as Map)['rows'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(AuditEntry.fromApi)
+            .toList() ??
+        [];
+  }
+
   /// Founder-only: decide how a shared student's fee splits between the
   /// teachers who taught them that month. Amounts must not exceed what the
   /// student paid; an empty list clears the decision.

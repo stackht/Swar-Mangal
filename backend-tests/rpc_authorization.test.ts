@@ -205,3 +205,11 @@ test("WRITE_FUNCTIONS covers every money-moving endpoint", () => {
   // Everything audited must exist in the policy.
   for (const fn of WRITE_FUNCTIONS) assert.ok(RPC_POLICY[fn], `${fn} missing from RPC_POLICY`);
 });
+
+test("the activity log is founder-only and read-only", () => {
+  assert.equal(RPC_POLICY["api_founder_auditLog"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_founder_auditLog").ok, false);
+  assert.equal(authorizeRpc(founder, "api_founder_auditLog").ok, true);
+  // Reading the trail is not itself an audited write.
+  assert.ok(!WRITE_FUNCTIONS.has("api_founder_auditLog"));
+});

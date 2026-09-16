@@ -297,6 +297,7 @@ const founderItems = <({String key, String label, IconData icon})>[
   (key: 'payouts', label: 'Teacher Payouts', icon: Icons.payments_outlined),
   (key: 'timetable', label: 'Timetable', icon: Icons.calendar_month_outlined),
   (key: 'schoolInvoice', label: 'School Invoice', icon: Icons.receipt_outlined),
+  (key: 'auditLog', label: 'Activity Log', icon: Icons.history_outlined),
   (key: 'about', label: 'About', icon: Icons.info_outline),
 ];
 

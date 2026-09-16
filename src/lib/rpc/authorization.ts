@@ -121,6 +121,8 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
 
   // -------------------------------------------------------------- approvals
   api_founder_approvalsList: FOUNDER, // founder approval centre
+  // Who did what: founder-only, read-only.
+  api_founder_auditLog: FOUNDER,
   api_staff_listMyApprovals: STAFF, // staff sees own requests only
 
   // -------------------------------------------------------------- comm

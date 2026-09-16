@@ -802,6 +802,51 @@ class PaymentDraftRow {
 
 /// A single founder teacher-payout preview row (server-computed payable).
 /// Never compute payouts on the device — display only.
+/// One recorded write from the backend audit trail (api_founder_auditLog).
+class AuditEntry {
+  AuditEntry({
+    required this.at,
+    required this.actorRole,
+    required this.actorEmail,
+    required this.device,
+    required this.fn,
+    required this.ok,
+    required this.code,
+    required this.branch,
+    required this.ref,
+  });
+  factory AuditEntry.fromApi(Map<String, dynamic> b) => AuditEntry(
+        at: _s(b['at']),
+        actorRole: _s(b['actorRole']),
+        actorEmail: _s(b['actorEmail']),
+        device: _s(b['device']),
+        fn: _s(b['fn']),
+        ok: b['ok'] == true,
+        code: _s(b['code']),
+        branch: _s(b['branch']),
+        ref: _s(b['ref']),
+      );
+  final String at;
+  final String actorRole;
+  final String actorEmail;
+  final String device;
+  final String fn;
+  final bool ok;
+  final String code;
+  final String branch;
+  final String ref;
+
+  /// "api_staff_markAttendance" -> "Mark attendance".
+  String get action {
+    var name = fn.replaceFirst('api_', '').replaceFirst('founder_', '').replaceFirst('staff_', '');
+    name = name.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}').toLowerCase();
+    return name.isEmpty ? fn : '${name[0].toUpperCase()}${name.substring(1)}';
+  }
+
+  /// "2026-09-16T18:04:11.123Z" -> "2026-09-16 18:04".
+  String get whenLabel => at.length >= 16 ? at.substring(0, 16).replaceFirst('T', ' ') : at;
+}
+
 /// A student taught by more than one teacher in a month. Their fee counts
 /// for nobody until the founder decides the split.
 class SharedStudentDecision {

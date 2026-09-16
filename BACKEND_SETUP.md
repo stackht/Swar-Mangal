@@ -106,8 +106,8 @@ node --experimental-strip-types --test backend-tests/*.test.ts
 each receipt counted once, attributed through the student id it was written
 with, times the percentage in `payout_rules`. It also reports what it cannot
 know — `unattributedReceipts` (receipts in the month with no student link),
-`sharedStudents` (taught by more than one teacher, so their fee counts for
-each) and `missingRule`.
+`awaitingDecision` (students taught by more than one teacher, see below) and
+`missingRule` (no payout percentage configured).
 
 ### Students taught by two teachers
 
@@ -152,6 +152,9 @@ numbers. A failed audit insert never fails the request.
 ```sql
 select at, device_label, fn, ok, code, ref from audit_log order by at desc limit 20;
 ```
+
+The founder app reads the same trail under **Activity Log** (api_founder_auditLog,
+founder-only, read-only), with a failures-only filter.
 
 ## Fee cycles and due dates
 

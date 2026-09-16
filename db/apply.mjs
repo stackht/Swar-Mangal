@@ -136,6 +136,12 @@ export const MIGRATIONS = [
       ),
   },
   {
+    // Fee plans, cycles and due dates for the students that had them in the
+    // Drive export. Students not covered keep null and read as "not set".
+    id: "2026-09-16-fee-plan-data",
+    run: (c) => c.query(readFileSync(join(here, "fee_data_import.sql"), "utf8")),
+  },
+  {
     id: "2026-09-16-unique-document-numbers",
     run: async (c) => {
       const dupReceipts = await c.query(

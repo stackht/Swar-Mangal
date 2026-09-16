@@ -1,7 +1,8 @@
 import { query, queryOne, withTransaction, type Tx } from "@/lib/db";
 import { RpcRole } from "@/lib/rpc/auth";
-import { s, n, d, newId, nextDocNo, bumpRevisions, acadStudents, acadStudentById, studentToRpc, studentsToRpc, classSummary } from "@/lib/rpc/shared";
+import { s, n, d, newId, nextDocNo, bumpRevisions, acadStudents, acadStudentById, studentToRpc, studentsToRpc } from "@/lib/rpc/shared";
 import { receiptSeries } from "@/lib/rpc/numbering";
+import { advanceCycle, todayIso, DEFAULT_ADVANCE_DAYS } from "@/lib/rpc/fees";
 import {
   ALL_BRANCHES,
   branchForbidden,
@@ -84,9 +85,8 @@ function bootstrapPayload(role: RpcRole): Record<string, unknown> {
     planTypes: PLAN_TYPES,
     classCodes: CLASS_CODES,
     feeCycleTypes: PLAN_TYPES,
-    advanceReminderDays: 3,
+    advanceReminderDays: DEFAULT_ADVANCE_DAYS,
     branches: BRANCHES,
-    dueReminders: builtReminders(),
   };
 }
 
@@ -327,6 +327,27 @@ async function receiptPreflight(arg: Record<string, unknown>, role: RpcRole): Pr
   });
 }
 
+/**
+ * Move the student's fee cycle on after a payment. This is what makes the
+ * "due date advanced" note true — it previously only said so.
+ */
+async function advanceStudentCycle(tx: Tx, studentId: string, paidOn: string): Promise<string | null> {
+  if (!studentId) return null;
+  const st = await tx.queryOne<{ next_due_date: string | null; fee_cycle_months: number | null }>(
+    `select next_due_date::text, fee_cycle_months from students_acad where id = $1`,
+    [studentId],
+  );
+  if (!st) return null;
+  const c = advanceCycle(st.next_due_date, paidOn, st.fee_cycle_months);
+  await tx.query(
+    `update students_acad
+     set next_due_date = $2::date, cycle_start = $3::date, cycle_end = $4::date, last_payment_date = $5::date
+     where id = $1`,
+    [studentId, c.nextDueDate, c.cycleStart, c.cycleEnd, paidOn],
+  );
+  return c.nextDueDate;
+}
+
 /** Receipt + matching ledger inflow, written in the caller's transaction. */
 async function writeReceipt(
   tx: Tx,
@@ -353,18 +374,21 @@ async function addFeePayment(arg: Record<string, unknown>): Promise<Record<strin
   if (amount <= 0 || !studentName) return { ok: false, code: "BAD_PAYMENT", error: "Valid amount + student required" };
   const studentId = s(arg["studentId"]);
   const student = studentId ? await acadStudentById(studentId) : null;
-  const receiptNo = await withTransaction((tx) =>
-    writeReceipt(tx, {
+  const paidOn = d(s(arg["paymentDate"])) || todayIso();
+  const { receiptNo, nextDueDate } = await withTransaction(async (tx) => {
+    const no = await writeReceipt(tx, {
       studentId: student?.id ?? "",
       studentName,
       amount,
       mode: s(arg["paymentMode"] ?? "UPI"),
       branch: student ? recordBranch(student.branch) : "",
-      description: (no) => `Fee receipt ${no}`,
-    }),
-  );
-  await bumpRevisions(["receipts", "payments", "students", "dashboard"]);
-  return ok({ ok: true, receiptNo, note: "receipt created" });
+      description: (rno) => `Fee receipt ${rno}`,
+    });
+    const due = await advanceStudentCycle(tx, student?.id ?? "", paidOn);
+    return { receiptNo: no, nextDueDate: due };
+  });
+  await bumpRevisions(["receipts", "payments", "students", "dashboard", "tasks"]);
+  return ok({ ok: true, receiptNo, nextDueDate: nextDueDate ?? "", note: "receipt created" });
 }
 
 async function prepareReceiptDraft(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
@@ -447,6 +471,7 @@ async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole,
       return { ok: false, code: "NOT_APPROVED", error: `Draft status ${s(draft.status)} — only APPROVED drafts can finalise` };
     }
     const studentId = s(draft.student_id);
+    const paidOn = d(s(draft.payment_date)) || todayIso();
     const receiptNo = await writeReceipt(tx, {
       studentId,
       studentName: s(draft.student_name),
@@ -459,10 +484,12 @@ async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole,
       "update payment_drafts set status = 'FINALISED', finalised_receipt_no = $2, finalised_at = now() where id = $1",
       [draftId, receiptNo],
     );
+    let nextDueDate: string | null = null;
     if (studentId) {
       await tx.query("update students_acad set status = 'ACTIVE' where id = $1", [studentId]);
+      nextDueDate = await advanceStudentCycle(tx, studentId, paidOn);
     }
-    await bumpRevisions(["receipts", "payments", "approvals", "students", "dashboard"], tx);
+    await bumpRevisions(["receipts", "payments", "approvals", "students", "dashboard", "tasks"], tx);
     return ok({
       changed: true,
       draftId,
@@ -471,8 +498,9 @@ async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole,
       pdfUrl: "",
       idempotent: false,
       financialWrites: true,
+      nextDueDate: nextDueDate ?? "",
       finalisedBy: role === "FOUNDER_ADMIN" ? "sharvil@founder" : "latika@ops",
-      note: "receipt + ledger written; due date advanced",
+      note: nextDueDate ? `receipt + ledger written; next due ${nextDueDate}` : "receipt + ledger written",
     });
   });
 }
@@ -480,14 +508,4 @@ async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole,
 // --------------------------------------------------------------- helpers re-export used across handlers
 export { ok, s, n, d };
 
-async function builtReminders(): Promise<Record<string, unknown>> {
-  return {
-    ok: true,
-    branch: "ALL",
-    advanceDays: 3,
-    dueSoon: [],
-    dueToday: [],
-    overdue: [],
-    ...(await classSummary()),
-  };
-}
+

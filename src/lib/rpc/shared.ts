@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { query, queryOne, type Tx } from "@/lib/db";
 import { formatDocNo } from "@/lib/rpc/numbering";
+import { feeState, todayIso } from "@/lib/rpc/fees";
 
 const s = (v: unknown): string => (v == null ? "" : String(v));
 const n = (v: unknown): number => {
@@ -96,7 +97,20 @@ export interface AcadStudent {
   fee_plan: string;
   status: string;
   notes: string;
+  // Fee cycle: null where the academy has not recorded it yet.
+  fee_plan_name: string | null;
+  monthly_fee: string | null;
+  fee_cycle_months: number | null;
+  fee_due_day: number | null;
+  next_due_date: string | null;
+  cycle_start: string | null;
+  cycle_end: string | null;
+  last_payment_date: string | null;
 }
+
+const STUDENT_COLUMNS = `id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes,
+     fee_plan_name, monthly_fee, fee_cycle_months, fee_due_day,
+     next_due_date::text, cycle_start::text, cycle_end::text, last_payment_date::text`;
 
 export interface AcadTeacher {
   id: string;
@@ -109,12 +123,10 @@ export interface AcadTeacher {
 
 export async function acadStudents(filter = ""): Promise<AcadStudent[]> {
   if (!filter) {
-    return query<AcadStudent>(
-      `select id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes from students_acad order by name`,
-    );
+    return query<AcadStudent>(`select ${STUDENT_COLUMNS} from students_acad order by name`);
   }
   return query<AcadStudent>(
-    `select id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes
+    `select ${STUDENT_COLUMNS}
      from students_acad
      where id ilike $1 or name ilike $1 or phone ilike $1 or instrument ilike $1
      order by name`,
@@ -123,10 +135,7 @@ export async function acadStudents(filter = ""): Promise<AcadStudent[]> {
 }
 
 export async function acadStudentById(id: string): Promise<AcadStudent | null> {
-  return queryOne<AcadStudent>(
-    `select id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes from students_acad where id = $1`,
-    [id],
-  );
+  return queryOne<AcadStudent>(`select ${STUDENT_COLUMNS} from students_acad where id = $1`, [id]);
 }
 
 export async function acadTeachers(): Promise<AcadTeacher[]> {
@@ -160,6 +169,14 @@ export interface StudentRpc {
   lastReceiptAmount: string;
   status: string;
   teacherId?: string;
+  monthlyFee?: string;
+  lastPaymentDate?: string;
+}
+
+export function cycleLabel(months: number): string {
+  if (months === 1) return "Monthly";
+  if (months === 12) return "Yearly";
+  return `${months} Months`;
 }
 
 interface StudentSideData {
@@ -228,7 +245,7 @@ async function sideDataFor(xs: AcadStudent[]): Promise<Map<string, StudentSideDa
   return out;
 }
 
-function composeStudentRpc(x: AcadStudent, side: StudentSideData): StudentRpc {
+function composeStudentRpc(x: AcadStudent, side: StudentSideData, today = todayIso()): StudentRpc {
   const status = s(x.status).toUpperCase();
   return {
     studentId: x.id,
@@ -242,11 +259,14 @@ function composeStudentRpc(x: AcadStudent, side: StudentSideData): StudentRpc {
     className: s(x.branch) === "GOREGAON" ? "Goregaon Music Class" : "Kandivali Music Class",
     location: s(x.branch).toUpperCase(),
     batch: s(x.batch),
-    feePlan: s(x.fee_plan),
-    feeCycleType: feeCycleFromPlan(s(x.fee_plan)),
-    feeDueDay: "",
-    nextDueDate: "",
-    feeStatus: status.startsWith("ACTIVE") ? "PAID" : status === "LEFT" ? "INACTIVE" : status === "DUPLICATE" ? "ACTIVE" : "DUE_SOON",
+    feePlan: s(x.fee_plan_name) || s(x.fee_plan),
+    feeCycleType: x.fee_cycle_months ? cycleLabel(x.fee_cycle_months) : feeCycleFromPlan(s(x.fee_plan)),
+    feeDueDay: x.fee_due_day ? String(x.fee_due_day) : "",
+    nextDueDate: s(x.next_due_date),
+    // Derived from the stored due date, not from the enrolment status.
+    feeStatus: feeState(x.next_due_date, today, { status }),
+    monthlyFee: x.monthly_fee ? String(n(x.monthly_fee)) : "",
+    lastPaymentDate: s(x.last_payment_date),
     lastReceiptNo: side.lastReceiptNo,
     lastReceiptAmount: side.lastReceiptAmount,
     status,
@@ -256,7 +276,8 @@ function composeStudentRpc(x: AcadStudent, side: StudentSideData): StudentRpc {
 /** Batch version of studentToRpc — use this for any list. */
 export async function studentsToRpc(xs: AcadStudent[]): Promise<StudentRpc[]> {
   const side = await sideDataFor(xs);
-  return xs.map((x) => composeStudentRpc(x, side.get(x.id)!));
+  const today = todayIso();
+  return xs.map((x) => composeStudentRpc(x, side.get(x.id)!, today));
 }
 
 /** Single-student convenience wrapper. Prefer studentsToRpc for lists. */

@@ -100,6 +100,31 @@ npm run build
 node --experimental-strip-types --test backend-tests/*.test.ts
 ```
 
+## Fee cycles and due dates
+
+Each student carries their own fee plan on `students_acad`: `fee_plan_name`,
+`monthly_fee`, `fee_cycle_months`, `fee_due_day`, `next_due_date`,
+`cycle_start`, `cycle_end`, `last_payment_date`. The values were imported once
+from the AcademyOS sheet (`db/fee_data_import.sql`, 46 of 58 students); the
+rest are null.
+
+`src/lib/rpc/fees.ts` turns `next_due_date` into a state, against today in IST:
+
+| State | Meaning |
+|---|---|
+| `OVERDUE` | due date has passed |
+| `DUE_TODAY` | due today |
+| `DUE_SOON` | due within `DEFAULT_ADVANCE_DAYS` (3) |
+| `PAID` | paid up, next cycle later |
+| `UNKNOWN` | **no due date recorded** — shown as "not set", never chased |
+| `INACTIVE` | student left, or a duplicate/test record |
+
+Nothing is inferred from the enrolment status any more, and no count is a
+placeholder: reminders, the task cards and the dashboard metrics all come from
+these buckets. A finalised payment advances the cycle (`advanceCycle`): on-time
+payments extend from the old due date so cycles do not drift, late payments
+restart from the payment date.
+
 ## Sync revisions
 
 `api_syncChanges` reads the `entity_revisions` table. Every write handler bumps

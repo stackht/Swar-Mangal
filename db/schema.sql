@@ -591,3 +591,17 @@ create index if not exists idx_receipts_student on receipts (student_id);
 create index if not exists idx_receipts_party on receipts (party_name);
 create index if not exists idx_attendance_acad_student on attendance_acad (student_id);
 create index if not exists idx_money_ledger_entry_date on money_ledger (entry_date);
+
+-- Fee plan + cycle per student (imported from the AcademyOS sheet, then
+-- maintained by the app on each payment). Null means "not recorded yet";
+-- the apps show that honestly instead of assuming a due date.
+alter table students_acad add column if not exists fee_plan_name text;
+alter table students_acad add column if not exists monthly_fee numeric(10,2);
+alter table students_acad add column if not exists fee_cycle_months int;
+alter table students_acad add column if not exists fee_due_day int;
+alter table students_acad add column if not exists next_due_date date;
+alter table students_acad add column if not exists cycle_start date;
+alter table students_acad add column if not exists cycle_end date;
+alter table students_acad add column if not exists last_payment_date date;
+
+create index if not exists idx_students_acad_next_due on students_acad (next_due_date);

@@ -2,6 +2,7 @@ import { query, queryOne, withTransaction } from "@/lib/db";
 import { RpcRole } from "@/lib/rpc/auth";
 import { s, n, d, newId, nextDocNo, bumpRevisions, currentRevisions, acadStudents, acadStudentById, acadTeachers, acadTeacherById, studentToRpc, studentsToRpc, teacherToRpc, classSummary } from "@/lib/rpc/shared";
 import { schoolInvoiceSeries } from "@/lib/rpc/numbering";
+import { feeState, todayIso, DEFAULT_ADVANCE_DAYS, type FeeState } from "@/lib/rpc/fees";
 import {
   branchForbidden,
   defaultBranch,
@@ -113,7 +114,6 @@ async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Prom
     .reduce((a, r) => a + inflowOf(r), 0);
   const cashToday = todayCollection - onlineToday;
   const due = await dueReminders(scope);
-  const counts = (due["overdue"] as unknown[]).length + 1; // small derived count
 
   return ok({
     todayCollection,
@@ -126,7 +126,9 @@ async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Prom
     consolidated: s(arg["scope"] ?? "ALL") === "ALL",
     metrics: {
       dueTodayCount: (due["dueToday"] as unknown[]).length,
+      dueSoonCount: (due["dueSoon"] as unknown[]).length,
       overdueCount: (due["overdue"] as unknown[]).length,
+      feePlanMissingCount: Number(due["notRecorded"] ?? 0),
       termsPendingCount: 0,
     },
     recent: receipts.map((r) => ({
@@ -148,24 +150,47 @@ async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Prom
   });
 }
 
-async function dueReminders(scope: BranchScope): Promise<Record<string, unknown>> {
+/**
+ * Splits students into real due buckets from their stored next_due_date.
+ * A student with no recorded due date lands in "notRecorded" — the app says
+ * so instead of calling them overdue, which is what this used to do to every
+ * active student.
+ */
+async function dueBuckets(scope: BranchScope) {
   const students = (await acadStudents()).filter((x) => inScope(scope, x.branch));
-  const active = students.filter((x) => s(x.status).toUpperCase() === "ACTIVE");
+  const today = todayIso();
+  const by: Record<FeeState, typeof students> = {
+    OVERDUE: [], DUE_TODAY: [], DUE_SOON: [], PAID: [], UNKNOWN: [], INACTIVE: [],
+  };
+  for (const x of students) by[feeState(x.next_due_date, today, { status: x.status })].push(x);
+  return { students, today, by };
+}
+
+async function dueReminders(scope: BranchScope): Promise<Record<string, unknown>> {
+  const { by } = await dueBuckets(scope);
   const cls = await classSummary();
+  // Only the students actually being chased are expanded (bounded work).
+  const rows = async (xs: Awaited<ReturnType<typeof acadStudents>>) =>
+    (await studentsToRpc(xs)).map((st) => ({
+      studentId: st.studentId,
+      studentName: st.studentName,
+      phone: st.phone,
+      classCode: st.classCode,
+      instrument: st.instrument,
+      nextDueDate: st.nextDueDate,
+      feeStatus: st.feeStatus,
+      lastReceiptNo: st.lastReceiptNo,
+      amount: st.monthlyFee ?? "",
+    }));
   return ok({
     branch: "ALL",
-    advanceDays: 3,
-    dueSoon: [],
-    dueToday: [],
-    overdue: active.map((x) => ({
-      studentName: x.name,
-      phone: s(x.phone),
-      classCode: (s(x.branch) || "KANDIVALI").toUpperCase(),
-      instrument: s(x.instrument),
-      nextDueDate: "",
-      feeStatus: "OVERDUE",
-      lastReceiptNo: "",
-    })),
+    advanceDays: DEFAULT_ADVANCE_DAYS,
+    dueSoon: await rows(by.DUE_SOON),
+    dueToday: await rows(by.DUE_TODAY),
+    overdue: await rows(by.OVERDUE),
+    // Students whose fee plan the academy has not recorded yet.
+    notRecorded: by.UNKNOWN.length,
+    upToDate: by.PAID.length,
     gmcActive: cls.gmc,
     kmcActive: cls.kmc,
   });
@@ -556,18 +581,25 @@ async function markAttendance(arg: Record<string, unknown>, scope: BranchScope):
 }
 
 async function todaysTasks(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
-  const active = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE" && inScope(scope, x.branch));
-  const dueCount = active.filter((x) => s(x.fee_plan).toUpperCase().includes("MONTHLY")).length;
-  const inquiries = (await query<{ branch: string }>(`select branch from inquiries`)).filter((r) => inScope(scope, r.branch));
-  const inqRows = [{ c: String(inquiries.length) }];
+  // Every count below is real: no placeholder numbers.
+  const { by, today } = await dueBuckets(scope);
+  const inquiries = (
+    await query<{ branch: string; status: string }>(`select branch, status from inquiries`)
+  ).filter((r) => inScope(scope, r.branch) && !["CONVERTED", "LOST", "CLOSED"].includes(s(r.status).toUpperCase()));
+  const drafts = (
+    await query<{ branch: string }>(`select branch from payment_drafts where status = 'SUBMITTED'`)
+  ).filter((r) => inScope(scope, r.branch));
+
+  const state = (n: number) => (n > 0 ? "ATTENTION" : "OPEN");
   const cards = [
-    { key: "FEES_DUE_TODAY", title: "Fees Due Today", label: "Fees Due Today", priority: "HIGH", count: Math.max(0, dueCount - 2), state: "ATTENTION", targetView: "students", emptyText: "No fees due today", actionable: true, bucket: "DUE_TODAY" },
-    { key: "FEES_DUE_SOON", title: "Fees Upcoming", label: "Fees Upcoming", priority: "MEDIUM", count: 2, state: "OPEN", targetView: "students", emptyText: "Nothing upcoming", actionable: true, bucket: "DUE_SOON" },
-    { key: "PAYMENT_PENDING", title: "Payment Pending", label: "Payment Pending", priority: "HIGH", count: 1, state: "ATTENTION", targetView: "students", emptyText: "No pending payments", actionable: true },
-    { key: "INQUIRIES_FOLLOW_UP", title: "Inquiries to follow up", label: "Inquiries to follow up", priority: "MEDIUM", count: Number(inqRows[0]?.c ?? 0), state: "OPEN", targetView: "inquiries", emptyText: "No inquiries", actionable: true },
-    { key: "TERMS_PENDING", title: "Terms Pending", label: "Terms Pending", priority: "MEDIUM", count: 0, state: "OPEN", targetView: "students", emptyText: "All terms accepted", actionable: true },
+    { key: "FEES_OVERDUE", title: "Fees Overdue", label: "Fees Overdue", priority: "HIGH", count: by.OVERDUE.length, state: state(by.OVERDUE.length), targetView: "students", emptyText: "Nothing overdue", actionable: true, bucket: "OVERDUE" },
+    { key: "FEES_DUE_TODAY", title: "Fees Due Today", label: "Fees Due Today", priority: "HIGH", count: by.DUE_TODAY.length, state: state(by.DUE_TODAY.length), targetView: "students", emptyText: "No fees due today", actionable: true, bucket: "DUE_TODAY" },
+    { key: "FEES_DUE_SOON", title: "Fees Upcoming", label: "Fees Upcoming", priority: "MEDIUM", count: by.DUE_SOON.length, state: "OPEN", targetView: "students", emptyText: "Nothing upcoming", actionable: true, bucket: "DUE_SOON" },
+    { key: "PAYMENT_PENDING", title: "Payment Pending", label: "Payment Pending", priority: "HIGH", count: drafts.length, state: state(drafts.length), targetView: "students", emptyText: "No pending payments", actionable: true },
+    { key: "INQUIRIES_FOLLOW_UP", title: "Inquiries to follow up", label: "Inquiries to follow up", priority: "MEDIUM", count: inquiries.length, state: "OPEN", targetView: "inquiries", emptyText: "No inquiries", actionable: true },
+    { key: "FEE_PLAN_MISSING", title: "Fee plan not set", label: "Fee plan not set", priority: "LOW", count: by.UNKNOWN.length, state: "OPEN", targetView: "students", emptyText: "Every student has a plan", actionable: true, bucket: "UNKNOWN" },
   ];
-  return ok({ cards, mode: "COPY_ONLY", today: new Date().toISOString().slice(0, 10) });
+  return ok({ cards, mode: "COPY_ONLY", today });
 }
 
 async function todaysClasses(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
@@ -644,8 +676,19 @@ async function sessionRoster(arg: Record<string, unknown>, scope: BranchScope): 
 }
 
 async function feeDueList(scope: BranchScope): Promise<Record<string, unknown>> {
-  const active = (await acadStudents()).filter((x) => s(x.status).toUpperCase() === "ACTIVE" && inScope(scope, x.branch));
-  return ok({ counts: { dueToday: 0, dueSoon: 0, paymentPending: active.length } });
+  const { by } = await dueBuckets(scope);
+  const pending = (
+    await query<{ branch: string }>(`select branch from payment_drafts where status = 'SUBMITTED'`)
+  ).filter((r) => inScope(scope, r.branch));
+  return ok({
+    counts: {
+      dueToday: by.DUE_TODAY.length,
+      dueSoon: by.DUE_SOON.length,
+      overdue: by.OVERDUE.length,
+      notRecorded: by.UNKNOWN.length,
+      paymentPending: pending.length,
+    },
+  });
 }
 
 // -------------------------------------------------------------- inquiries

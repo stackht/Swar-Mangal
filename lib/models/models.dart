@@ -802,6 +802,102 @@ class PaymentDraftRow {
 
 /// A single founder teacher-payout preview row (server-computed payable).
 /// Never compute payouts on the device — display only.
+/// A student taught by more than one teacher in a month. Their fee counts
+/// for nobody until the founder decides the split.
+class SharedStudentDecision {
+  SharedStudentDecision({
+    required this.studentId,
+    required this.studentName,
+    required this.collected,
+    required this.assigned,
+    required this.remaining,
+    required this.teachers,
+  });
+  factory SharedStudentDecision.fromApi(Map<String, dynamic> b) {
+    num n(dynamic v) {
+      final s = v == null ? '' : v.toString().replaceAll(RegExp(r'[^\d.\-]'), '');
+      return double.tryParse(s) ?? 0;
+    }
+    return SharedStudentDecision(
+      studentId: _s(b['studentId']),
+      studentName: _s(b['studentName']),
+      collected: n(b['collected']),
+      assigned: n(b['assigned']),
+      remaining: n(b['remaining']),
+      teachers: ((b['teachers'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(SharedStudentTeacher.fromApi)
+          .toList(),
+    );
+  }
+  final String studentId;
+  final String studentName;
+  final num collected;
+  final num assigned;
+  final num remaining;
+  final List<SharedStudentTeacher> teachers;
+}
+
+class SharedStudentTeacher {
+  SharedStudentTeacher({
+    required this.teacherId,
+    required this.teacherName,
+    required this.classesThisMonth,
+    required this.assigned,
+  });
+  factory SharedStudentTeacher.fromApi(Map<String, dynamic> b) {
+    num n(dynamic v) {
+      final s = v == null ? '' : v.toString().replaceAll(RegExp(r'[^\d.\-]'), '');
+      return double.tryParse(s) ?? 0;
+    }
+    return SharedStudentTeacher(
+      teacherId: _s(b['teacherId']),
+      teacherName: _s(b['teacherName']),
+      classesThisMonth: (b['classesThisMonth'] as num?)?.toInt() ?? 0,
+      assigned: n(b['assigned']),
+    );
+  }
+  final String teacherId;
+  final String teacherName;
+  final int classesThisMonth;
+  final num assigned;
+}
+
+/// Everything api_teacherPayoutPreview returns for a month.
+class PayoutPreview {
+  PayoutPreview({
+    required this.rows,
+    required this.awaitingDecision,
+    required this.awaitingAmount,
+    required this.unattributedReceipts,
+    required this.unattributedAmount,
+  });
+  factory PayoutPreview.fromApi(Map<String, dynamic> b) {
+    num n(dynamic v) {
+      final s = v == null ? '' : v.toString().replaceAll(RegExp(r'[^\d.\-]'), '');
+      return double.tryParse(s) ?? 0;
+    }
+    return PayoutPreview(
+      rows: ((b['results'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(PayoutRow.fromApi)
+          .toList(),
+      awaitingDecision: ((b['awaitingDecision'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(SharedStudentDecision.fromApi)
+          .toList(),
+      awaitingAmount: n(b['awaitingDecisionAmount']),
+      unattributedReceipts: (b['unattributedReceipts'] as num?)?.toInt() ?? 0,
+      unattributedAmount: n(b['unattributedAmount']),
+    );
+  }
+  final List<PayoutRow> rows;
+  final List<SharedStudentDecision> awaitingDecision;
+  final num awaitingAmount;
+  final int unattributedReceipts;
+  final num unattributedAmount;
+}
+
 /// One payment actually made to a teacher (api_recordTeacherPayout /
 /// api_teacherPayoutHistory).
 class PayoutPayment {

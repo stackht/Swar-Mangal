@@ -81,6 +81,8 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   // Paying a teacher is money leaving the academy: founder only.
   api_recordTeacherPayout: FOUNDER,
   api_teacherPayoutHistory: FOUNDER,
+  // Deciding how a shared student's fee splits between teachers.
+  api_assignSharedStudent: FOUNDER,
 
   // ------------------------------------------------- cashbook / expenses
   // Staff submits an expense DRAFT; founder records real expense + ledger read.
@@ -202,7 +204,7 @@ export const WRITE_FUNCTIONS = new Set<string>([
   "api_addFeePayment", "api_staff_prepareReceiptDraft",
   "api_founder_paymentDraftApprove", "api_founder_paymentDraftReject",
   "api_founder_finalisePaymentDraft", "api_staff_finalisePaymentDraft",
-  "api_addTeacher", "api_updateTeacherStatus", "api_updateTeacherCompensation", "api_recordTeacherPayout",
+  "api_addTeacher", "api_updateTeacherStatus", "api_updateTeacherCompensation", "api_recordTeacherPayout", "api_assignSharedStudent",
   "api_addExpenseEntry", "api_staff_submitExpenseDraft",
   "api_generateSchoolInvoice",
   "api_timetableCreate", "api_timetableUpdate", "api_timetableDelete",

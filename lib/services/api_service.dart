@@ -363,16 +363,34 @@ class ApiService {
       });
 
   /// Founder-only teacher payout preview (server-computed payable). Never compute on client.
-  Future<List<PayoutRow>> founderPayoutPreview(String month, {String? entityId}) async {
+  Future<List<PayoutRow>> founderPayoutPreview(String month, {String? entityId}) async =>
+      (await founderPayoutPreviewFull(month, entityId: entityId)).rows;
+
+  /// The full preview: rows plus the shared students awaiting a decision.
+  Future<PayoutPreview> founderPayoutPreviewFull(String month, {String? entityId}) async {
     final b = await _api.call('api_teacherPayoutPreview', {
       if (month.isNotEmpty) 'month': month,
       if (entityId != null && entityId.isNotEmpty) 'entityId': entityId,
     });
-    return ((b as Map)['results'] as List?)
-            ?.whereType<Map<String, dynamic>>()
-            .map(PayoutRow.fromApi)
-            .toList() ??
-        [];
+    return PayoutPreview.fromApi(b as Map<String, dynamic>);
+  }
+
+  /// Founder-only: decide how a shared student's fee splits between the
+  /// teachers who taught them that month. Amounts must not exceed what the
+  /// student paid; an empty list clears the decision.
+  Future<void> assignSharedStudent({
+    required String month,
+    required String studentId,
+    required Map<String, num> allocations,
+  }) async {
+    await _api.call('api_assignSharedStudent', {
+      'month': month,
+      'studentId': studentId,
+      'allocations': [
+        for (final e in allocations.entries)
+          if (e.value > 0) {'teacherId': e.key, 'amount': e.value},
+      ],
+    });
   }
 
   /// Founder-only: record money actually paid to a teacher for a service

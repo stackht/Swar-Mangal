@@ -656,3 +656,19 @@ create table if not exists teacher_payouts (
 );
 
 create index if not exists idx_teacher_payouts_month on teacher_payouts (service_month, teacher_id);
+
+-- Founder's decision on how a shared student's fee is split for one month.
+-- Until a decision exists the fee counts toward nobody, so payout totals
+-- never exceed the money actually collected.
+create table if not exists payout_attributions (
+  id text primary key,
+  service_month text not null,
+  student_id text not null,
+  teacher_id text not null,
+  amount numeric(10,2) not null,
+  decided_by text,
+  created_at timestamptz not null default now(),
+  unique (service_month, student_id, teacher_id)
+);
+
+create index if not exists idx_payout_attributions_month on payout_attributions (service_month);

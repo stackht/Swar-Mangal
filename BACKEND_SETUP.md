@@ -109,6 +109,16 @@ know — `unattributedReceipts` (receipts in the month with no student link),
 `sharedStudents` (taught by more than one teacher, so their fee counts for
 each) and `missingRule`.
 
+### Students taught by two teachers
+
+A shared student's fee counts toward **nobody** until the founder decides the
+split, so payout totals can never exceed the money collected. The preview
+returns them in `awaitingDecision` with each teacher's class count for the
+month as context, and `api_assignSharedStudent` records the decision
+(`payout_attributions`, one row per teacher, replacing any earlier decision
+for that student and month; the total may not exceed what the student paid).
+The founder app does this from the payout screen.
+
 `api_recordTeacherPayout` (founder only) records money actually paid. Each
 payment writes a `teacher_payouts` row **and** a `money_ledger` outflow in one
 transaction, so the cashbook and the payout history can never disagree. A

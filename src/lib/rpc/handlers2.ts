@@ -44,6 +44,8 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
       return recordTeacherPayout(arg, scope);
     case "api_teacherPayoutHistory":
       return payoutHistory(arg);
+    case "api_assignSharedStudent":
+      return assignSharedStudent(arg);
     case "api_generateSchoolInvoice":
       return generateSchoolInvoice(arg, scope);
     case "api_listSchoolInvoices":
@@ -283,7 +285,15 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
   const monthStart = `${month}-01`;
   const teachers = await acadTeachers();
 
-  const [links, receipts, rules, paidRows] = await Promise.all([
+  const [monthLinks, links, receipts, rules, paidRows, attributions, studentNames] = await Promise.all([
+    // Who actually taught this student during the month, and how often.
+    query<{ teacher_id: string; student_id: string; classes: string }>(
+      `select teacher_id, student_id, count(*)::text as classes from attendance_acad
+       where coalesce(teacher_id,'') <> '' and coalesce(student_id,'') <> ''
+         and session_date >= $1::date and session_date < ($1::date + interval '1 month')
+       group by teacher_id, student_id`,
+      [monthStart],
+    ),
     query<{ teacher_id: string; student_id: string }>(
       `select distinct teacher_id, student_id from attendance_acad
        where coalesce(teacher_id,'') <> '' and coalesce(student_id,'') <> ''`,
@@ -301,17 +311,31 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
        from teacher_payouts where service_month = $1 group by teacher_id`,
       [month],
     ),
+    query<{ student_id: string; teacher_id: string; amount: string }>(
+      `select student_id, teacher_id, amount from payout_attributions where service_month = $1`,
+      [month],
+    ),
+    query<{ id: string; name: string }>(`select id, name from students_acad`),
   ]);
   const paidOf = new Map(paidRows.map((r) => [r.teacher_id, { paid: n(r.paid), payments: Number(r.payments) || 0 }]));
+  const nameOf = new Map(studentNames.map((r) => [r.id, r.name]));
 
-  const studentsOf = new Map<string, Set<string>>();
-  const teachersOfStudent = new Map<string, Set<string>>();
-  for (const l of links) {
-    if (!studentsOf.has(l.teacher_id)) studentsOf.set(l.teacher_id, new Set());
-    studentsOf.get(l.teacher_id)!.add(l.student_id);
-    if (!teachersOfStudent.has(l.student_id)) teachersOfStudent.set(l.student_id, new Set());
-    teachersOfStudent.get(l.student_id)!.add(l.teacher_id);
+  // Teachers of a student, preferring the ones who taught them in the month.
+  const monthTeachers = new Map<string, Map<string, number>>();
+  for (const l of monthLinks) {
+    if (!monthTeachers.has(l.student_id)) monthTeachers.set(l.student_id, new Map());
+    monthTeachers.get(l.student_id)!.set(l.teacher_id, Number(l.classes) || 0);
   }
+  const everTeachers = new Map<string, Set<string>>();
+  for (const l of links) {
+    if (!everTeachers.has(l.student_id)) everTeachers.set(l.student_id, new Set());
+    everTeachers.get(l.student_id)!.add(l.teacher_id);
+  }
+  const teachersOf = (sid: string): string[] => {
+    const inMonth = monthTeachers.get(sid);
+    if (inMonth?.size) return [...inMonth.keys()];
+    return [...(everTeachers.get(sid) ?? [])];
+  };
   const ruleOf = new Map(rules.map((r) => [r.teacher_id, r]));
 
   const byStudent = new Map<string, { amount: number; count: number }>();
@@ -330,19 +354,72 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
     byStudent.set(sid, cur);
   }
 
+  // Founder decisions for shared students this month.
+  const decided = new Map<string, Map<string, number>>();
+  for (const a of attributions) {
+    if (!decided.has(a.student_id)) decided.set(a.student_id, new Map());
+    decided.get(a.student_id)!.set(a.teacher_id, n(a.amount));
+  }
+
+  // Split each paying student's fee into per-teacher credit.
+  const creditOf = new Map<string, { amount: number; count: number }>();
+  const credit = (tid: string, amount: number, count: number) => {
+    const cur = creditOf.get(tid) ?? { amount: 0, count: 0 };
+    cur.amount += amount;
+    cur.count += count;
+    creditOf.set(tid, cur);
+  };
+  const sharedOf = new Map<string, number>();
+  const awaitingDecision: Record<string, unknown>[] = [];
+
+  for (const [sid, agg] of byStudent) {
+    const tids = teachersOf(sid);
+    if (tids.length === 0) {
+      unattributed++;
+      unattributedAmount += agg.amount;
+      continue;
+    }
+    if (tids.length === 1) {
+      credit(tids[0], agg.amount, agg.count);
+      continue;
+    }
+    // Shared: only what the founder has assigned counts for anybody.
+    const decision = decided.get(sid);
+    let assigned = 0;
+    for (const tid of tids) {
+      const share = money(decision?.get(tid) ?? 0);
+      if (share <= 0) continue;
+      credit(tid, share, 0);
+      assigned += share;
+      sharedOf.set(tid, (sharedOf.get(tid) ?? 0) + 1);
+    }
+    const remaining = money(agg.amount - assigned);
+    if (remaining > 0.005) {
+      const classes = monthTeachers.get(sid);
+      awaitingDecision.push({
+        studentId: sid,
+        studentName: nameOf.get(sid) ?? sid,
+        collected: money(agg.amount),
+        assigned: money(assigned),
+        remaining,
+        receiptCount: agg.count,
+        teachers: tids.map((tid) => ({
+          teacherId: tid,
+          teacherName: teachers.find((t) => t.id === tid)?.name ?? tid,
+          classesThisMonth: classes?.get(tid) ?? 0,
+          assigned: money(decision?.get(tid) ?? 0),
+        })),
+      });
+    }
+  }
+
   const results = teachers.map((t) => {
     const rule = ruleOf.get(t.id);
     const pct = n(rule?.percentage);
-    let totalCollection = 0;
-    let receiptCount = 0;
-    let sharedStudents = 0;
-    for (const sid of studentsOf.get(t.id) ?? []) {
-      const agg = byStudent.get(sid);
-      if (!agg) continue;
-      totalCollection += agg.amount;
-      receiptCount += agg.count;
-      if ((teachersOfStudent.get(sid)?.size ?? 1) > 1) sharedStudents++;
-    }
+    const own = creditOf.get(t.id) ?? { amount: 0, count: 0 };
+    const totalCollection = money(own.amount);
+    const receiptCount = own.count;
+    const sharedStudents = sharedOf.get(t.id) ?? 0;
     const share = money(totalCollection * (pct / 100));
     const settled = paidOf.get(t.id) ?? { paid: 0, payments: 0 };
     return {
@@ -353,15 +430,14 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
       receiptCount,
       totalCollection,
       sharePercent: pct,
+      // Shared students already decided by the founder and included above.
+      sharedStudentsAssigned: sharedStudents,
       totalTeacherShare: share,
       payable: share,
       alreadyPaid: money(settled.paid),
       balance: payoutBalance(share, settled.paid),
       paymentCount: settled.payments,
       status: payoutStatus(share, settled.paid),
-      // Students taught by more than one teacher: their fees count for each,
-      // so these rows need a human decision before money moves.
-      sharedStudents,
       missingRule: rule == null,
       preCutover: false,
       note: rule == null ? "No payout rule set for this teacher" : "",
@@ -375,6 +451,11 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
     // the totals above can be reconciled against the cashbook.
     unattributedReceipts: unattributed,
     unattributedAmount,
+    // Students taught by more than one teacher this month. Their fee counts
+    // for NOBODY until the founder assigns it (api_assignSharedStudent), so
+    // the payout totals never exceed the money actually collected.
+    awaitingDecision,
+    awaitingDecisionAmount: money(awaitingDecision.reduce((a, r) => a + Number(r.remaining), 0)),
     note: "payout preview computed from receipts in the month, one receipt counted once",
   });
 }
@@ -432,6 +513,72 @@ async function recordTeacherPayout(arg: Record<string, unknown>, scope: BranchSc
     totalPaidForMonth: money(n(totals?.paid)),
     ledgerId,
     note: "payout recorded and posted to the cashbook",
+  });
+}
+
+/**
+ * Record the founder's decision on how a shared student's fee splits between
+ * the teachers who taught them that month. Replaces any previous decision for
+ * that student and month. The total may not exceed what the student actually
+ * paid in the month.
+ */
+async function assignSharedStudent(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const month = s(arg["month"]);
+  const studentId = s(arg["studentId"]);
+  if (!isServiceMonth(month)) return { ok: false, code: "BAD_MONTH", error: "month must be YYYY-MM" };
+  if (!studentId) return { ok: false, code: "NO_STUDENT", error: "studentId required" };
+
+  const raw = Array.isArray(arg["allocations"]) ? (arg["allocations"] as Record<string, unknown>[]) : [];
+  const allocations = raw
+    .map((a) => ({ teacherId: s(a["teacherId"]), amount: money(n(a["amount"])) }))
+    .filter((a) => a.teacherId && a.amount > 0);
+
+  const student = await acadStudentById(studentId);
+  if (!student) return { ok: false, code: "NOT_FOUND", error: `No student ${studentId}` };
+
+  const monthStart = `${month}-01`;
+  const collectedRow = await queryOne<{ total: string }>(
+    `select coalesce(sum(amount),0)::text as total from receipts
+     where student_id = $1 and status <> 'VOID'
+       and created_at >= $2::date and created_at < ($2::date + interval '1 month')`,
+    [studentId, monthStart],
+  );
+  const collected = money(n(collectedRow?.total));
+  const total = money(allocations.reduce((a, x) => a + x.amount, 0));
+  if (total > collected + 0.005) {
+    return {
+      ok: false,
+      code: "OVER_ALLOCATED",
+      error: `Allocated ${total} but the student paid ${collected} in ${month}`,
+    };
+  }
+  for (const a of allocations) {
+    if (!(await acadTeacherById(a.teacherId))) {
+      return { ok: false, code: "NOT_FOUND", error: `No teacher ${a.teacherId}` };
+    }
+  }
+
+  await withTransaction(async (tx) => {
+    await tx.query(`delete from payout_attributions where service_month = $1 and student_id = $2`, [month, studentId]);
+    for (const a of allocations) {
+      await tx.query(
+        `insert into payout_attributions (id, service_month, student_id, teacher_id, amount, decided_by)
+         values ($1,$2,$3,$4,$5,$6)`,
+        [newId("PATT"), month, studentId, a.teacherId, a.amount, s(arg["decidedBy"]) || "founder"],
+      );
+    }
+  });
+  await bumpRevisions(["payouts", "dashboard"]);
+
+  return ok({
+    month,
+    studentId,
+    studentName: student.name,
+    collected,
+    assigned: total,
+    remaining: money(collected - total),
+    allocations,
+    note: allocations.length ? "split recorded" : "split cleared",
   });
 }
 

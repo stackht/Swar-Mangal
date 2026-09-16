@@ -107,6 +107,7 @@ class DemoApiClient extends ApiClient {
     'api_founder_mergeStudentDraft': {'students', 'dashboard'},
     'api_updateTeacherCompensation': {'teachers', 'payouts'},
     'api_recordTeacherPayout': {'payouts', 'expenses', 'dashboard'},
+    'api_assignSharedStudent': {'payouts', 'dashboard'},
     'api_generateSchoolInvoice': {'invoices'},
     'api_timetableCreate': {'timetable'},
     'api_timetableUpdate': {'timetable'},
@@ -130,6 +131,7 @@ class DemoApiClient extends ApiClient {
     'api_founder_setStudentStatus',
     'api_updateTeacherStatus',
     'api_recordTeacherPayout',
+    'api_assignSharedStudent',
     'api_founder_paymentDraftApprove',
     'api_founder_paymentDraftReject',
     'api_founder_finalisePaymentDraft',
@@ -291,6 +293,15 @@ class DemoApiClient extends ApiClient {
         };
       case 'api_teacherPayoutHistory':
         return {'ok': true, 'rows': const [], 'total': 0};
+      case 'api_assignSharedStudent':
+        return {
+          'ok': true,
+          'month': a['month'] ?? '',
+          'studentId': a['studentId'] ?? '',
+          'assigned': 0,
+          'remaining': 0,
+          'note': 'demo split — nothing persisted',
+        };
       case 'api_staff_listMyApprovals':
         return _staffMyRequests();
       case 'api_staff_commGenerate':

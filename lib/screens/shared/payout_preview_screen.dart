@@ -19,6 +19,8 @@ class PayoutPreviewScreen extends StatefulWidget {
 class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
   late String _month;
   List<PayoutRow> _rows = [];
+  List<SharedStudentDecision> _awaiting = const [];
+  num _awaitingAmount = 0;
   String? _error;
   bool _busy = false;
 
@@ -47,10 +49,12 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
       _error = null;
     });
     try {
-      final rows = await auth.service!.founderPayoutPreview(_month);
+      final preview = await auth.service!.founderPayoutPreviewFull(_month);
       if (!mounted) return;
       setState(() {
-        _rows = rows;
+        _rows = preview.rows;
+        _awaiting = preview.awaitingDecision;
+        _awaitingAmount = preview.awaitingAmount;
         _busy = false;
       });
     } on ApiException catch (e) {
@@ -119,6 +123,49 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
             _metric('Balance', inr(totalBalance), totalBalance > 0 ? AppColors.warnFg : AppColors.muted),
           ]),
           const SizedBox(height: AppSpace.s4),
+          if (_awaiting.isNotEmpty) ...[
+            Card(
+              color: AppColors.warnBg,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    const Icon(Icons.call_split_outlined, size: 18, color: AppColors.warnFg),
+                    const SizedBox(width: AppSpace.s2),
+                    Expanded(
+                      child: Text('Waiting for your decision · ${inr(_awaitingAmount)}',
+                          style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.warnFg)),
+                    ),
+                  ]),
+                  const SizedBox(height: AppSpace.s2),
+                  const Text(
+                      'These students were taught by more than one teacher this month. '
+                      'Their fees count for nobody until you split them, so no payout is overstated.',
+                      style: TextStyle(fontSize: 12, color: AppColors.warnFg)),
+                  for (final sharedStudent in _awaiting) ...[
+                    const SizedBox(height: AppSpace.s3),
+                    Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(sharedStudent.studentName,
+                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                          Text(
+                              'paid ${inr(sharedStudent.collected)} · unassigned ${inr(sharedStudent.remaining)} · '
+                              '${sharedStudent.teachers.map((t) => '${t.teacherName} (${t.classesThisMonth})').join(', ')}',
+                              style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                        ]),
+                      ),
+                      TextButton(
+                        onPressed: _busy ? null : () => _splitShared(sharedStudent),
+                        child: const Text('Split'),
+                      ),
+                    ]),
+                  ],
+                ]),
+              ),
+            ),
+            const SizedBox(height: AppSpace.s4),
+          ],
           if (_rows.isEmpty)
             const EmptyState('No payout rows for this month.'),
           for (final r in _rows)
@@ -165,6 +212,92 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
         ],
       ),
     );
+  }
+
+  /// Decide how a shared student's fee splits between the teachers who taught
+  /// them this month. Amounts start empty — the class counts are shown as
+  /// context, not as a suggested answer.
+  Future<void> _splitShared(SharedStudentDecision shared) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final controllers = {
+      for (final t in shared.teachers)
+        t.teacherId: TextEditingController(text: t.assigned > 0 ? t.assigned.toStringAsFixed(0) : ''),
+    };
+
+    num entered() => controllers.values
+        .fold<num>(0, (sum, c) => sum + (num.tryParse(c.text.trim()) ?? 0));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final left = shared.collected - entered();
+          return AlertDialog(
+            title: Text('Split ${shared.studentName}'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('Paid ${inr(shared.collected)} in $_month',
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+              const SizedBox(height: AppSpace.s3),
+              for (final t in shared.teachers)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpace.s2),
+                  child: TextField(
+                    controller: controllers[t.teacherId],
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setLocal(() {}),
+                    decoration: InputDecoration(
+                      labelText: '${t.teacherName} · ${t.classesThisMonth} classes',
+                      prefixText: '₹ ',
+                    ),
+                  ),
+                ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  left < 0 ? 'Over by ${inr(-left)}' : 'Unassigned ${inr(left)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: left < 0 ? AppColors.blockFg : AppColors.muted,
+                  ),
+                ),
+              ),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: left < 0 ? null : () => Navigator.pop(ctx, true),
+                child: const Text('Save split'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await auth.service!.assignSharedStudent(
+        month: _month,
+        studentId: shared.studentId,
+        allocations: {
+          for (final entry in controllers.entries) entry.key: num.tryParse(entry.value.text.trim()) ?? 0,
+        },
+      );
+      if (!mounted) return;
+      _toast('Split saved for ${shared.studentName}.');
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      _toast(e.message);
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      _toast(e.message);
+    }
   }
 
   /// Record money actually paid to a teacher. The amount defaults to the

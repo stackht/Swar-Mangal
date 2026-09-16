@@ -375,6 +375,42 @@ class ApiService {
         [];
   }
 
+  /// Founder-only: record money actually paid to a teacher for a service
+  /// month. The backend posts the cashbook entry; the app never computes it.
+  Future<PayoutPayment> recordTeacherPayout({
+    required String teacherId,
+    required String month,
+    required num amount,
+    String paidOn = '',
+    String paymentMode = 'Bank Transfer',
+    String reference = '',
+    String branch = '',
+  }) async {
+    final b = await _api.call('api_recordTeacherPayout', {
+      'teacherId': teacherId,
+      'month': month,
+      'amount': amount,
+      if (paidOn.isNotEmpty) 'paidOn': paidOn,
+      'paymentMode': paymentMode,
+      if (reference.isNotEmpty) 'reference': reference,
+      if (branch.isNotEmpty) 'branch': branch,
+    });
+    return PayoutPayment.fromApi(b as Map<String, dynamic>);
+  }
+
+  /// Founder-only: payments already made, newest first.
+  Future<List<PayoutPayment>> teacherPayoutHistory({String teacherId = '', String month = ''}) async {
+    final b = await _api.call('api_teacherPayoutHistory', {
+      if (teacherId.isNotEmpty) 'teacherId': teacherId,
+      if (month.isNotEmpty) 'month': month,
+    });
+    return ((b as Map)['rows'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(PayoutPayment.fromApi)
+            .toList() ??
+        [];
+  }
+
   /// Staff — persisted drafts awaiting (or resolved by) founder approval.
   Future<List<ApprovalRequestRow>> staffMyRequests({String branch = ''}) async {
     final b = await _api.call('api_staff_listMyApprovals', {'branch': branch});

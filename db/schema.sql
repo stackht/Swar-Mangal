@@ -637,3 +637,22 @@ create table if not exists audit_log (
 );
 
 create index if not exists idx_audit_log_at on audit_log (at desc);
+
+-- Teacher payouts actually paid out. One row per payment, so a month can be
+-- settled in parts; the balance is payable minus the sum of these.
+create table if not exists teacher_payouts (
+  id text primary key,
+  teacher_id text not null,
+  teacher_name text,
+  service_month text not null,
+  amount numeric(10,2) not null,
+  paid_on date not null,
+  payment_mode text,
+  reference text,
+  branch text,
+  recorded_by text,
+  ledger_id text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_teacher_payouts_month on teacher_payouts (service_month, teacher_id);

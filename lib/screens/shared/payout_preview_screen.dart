@@ -150,12 +150,103 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
                     _tag('paid', inr(r.alreadyPaid)),
                     _tag('balance', inr(r.balance)),
                   ]),
+                  if (r.balance > 0)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _busy ? null : () => _recordPayment(r),
+                        icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
+                        label: const Text('Record payment'),
+                      ),
+                    ),
                 ]),
               ),
             ),
         ],
       ),
     );
+  }
+
+  /// Record money actually paid to a teacher. The amount defaults to the
+  /// outstanding balance; the backend posts the cashbook entry.
+  Future<void> _recordPayment(PayoutRow r) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final amountCtl = TextEditingController(text: r.balance.toStringAsFixed(0));
+    final refCtl = TextEditingController();
+    var mode = 'Bank Transfer';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Pay ${r.teacherName.isNotEmpty ? r.teacherName : r.teacherId}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Service month ${r.month} · balance ${inr(r.balance)}',
+                style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+            const SizedBox(height: AppSpace.s3),
+            TextField(
+              controller: amountCtl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Amount paid', prefixText: '₹ '),
+            ),
+            const SizedBox(height: AppSpace.s2),
+            DropdownButtonFormField<String>(
+              initialValue: mode,
+              decoration: const InputDecoration(labelText: 'Payment mode'),
+              items: const [
+                DropdownMenuItem(value: 'Bank Transfer', child: Text('Bank Transfer')),
+                DropdownMenuItem(value: 'UPI', child: Text('UPI')),
+                DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                DropdownMenuItem(value: 'Cheque', child: Text('Cheque')),
+              ],
+              onChanged: (v) => setLocal(() => mode = v ?? mode),
+            ),
+            const SizedBox(height: AppSpace.s2),
+            TextField(
+              controller: refCtl,
+              decoration: const InputDecoration(labelText: 'Reference (optional)'),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Record')),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final amount = num.tryParse(amountCtl.text.trim()) ?? 0;
+    if (amount <= 0) {
+      _toast('Enter an amount greater than zero.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final paid = await auth.service!.recordTeacherPayout(
+        teacherId: r.teacherId,
+        month: r.month,
+        amount: amount,
+        paymentMode: mode,
+        reference: refCtl.text.trim(),
+      );
+      if (!mounted) return;
+      _toast('Recorded ${inr(paid.amount)} for ${r.teacherName}.');
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      _toast(e.message);
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      _toast(e.message);
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _monthInput(String label, String value, ValueChanged<String> onChanged) {

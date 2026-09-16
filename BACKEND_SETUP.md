@@ -100,6 +100,25 @@ npm run build
 node --experimental-strip-types --test backend-tests/*.test.ts
 ```
 
+## Teacher payouts
+
+`api_teacherPayoutPreview` computes what a teacher earned in a service month:
+each receipt counted once, attributed through the student id it was written
+with, times the percentage in `payout_rules`. It also reports what it cannot
+know — `unattributedReceipts` (receipts in the month with no student link),
+`sharedStudents` (taught by more than one teacher, so their fee counts for
+each) and `missingRule`.
+
+`api_recordTeacherPayout` (founder only) records money actually paid. Each
+payment writes a `teacher_payouts` row **and** a `money_ledger` outflow in one
+transaction, so the cashbook and the payout history can never disagree. A
+month can be settled in parts; `alreadyPaid`, `balance` and `status`
+(`UNPAID` / `PARTIAL` / `PAID` / `OVERPAID` / `NOTHING_DUE`) come from the sum
+of those rows. `api_teacherPayoutHistory` lists them.
+
+The founder app records a payment from the payout screen; the amount defaults
+to the outstanding balance and the app never computes the figures itself.
+
 ## Device tokens and the audit trail
 
 A token resolves in two steps: the shared env tokens

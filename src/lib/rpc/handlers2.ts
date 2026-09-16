@@ -3,6 +3,7 @@ import { RpcRole } from "@/lib/rpc/auth";
 import { s, n, d, newId, nextDocNo, bumpRevisions, currentRevisions, acadStudents, acadStudentById, acadTeachers, acadTeacherById, studentToRpc, studentsToRpc, teacherToRpc, classSummary } from "@/lib/rpc/shared";
 import { schoolInvoiceSeries } from "@/lib/rpc/numbering";
 import { feeState, todayIso, DEFAULT_ADVANCE_DAYS, type FeeState } from "@/lib/rpc/fees";
+import { money, payoutStatus, payoutBalance, isServiceMonth } from "@/lib/rpc/payouts";
 import {
   branchForbidden,
   defaultBranch,
@@ -39,6 +40,10 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
       return updateTeacherCompensation(arg);
     case "api_teacherPayoutPreview":
       return payoutPreview(arg);
+    case "api_recordTeacherPayout":
+      return recordTeacherPayout(arg, scope);
+    case "api_teacherPayoutHistory":
+      return payoutHistory(arg);
     case "api_generateSchoolInvoice":
       return generateSchoolInvoice(arg, scope);
     case "api_listSchoolInvoices":
@@ -274,11 +279,11 @@ async function updateTeacherCompensation(arg: Record<string, unknown>): Promise<
  * cannot be attributed are reported rather than silently dropped.
  */
 async function payoutPreview(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const month = /^\d{4}-\d{2}$/.test(s(arg["month"])) ? s(arg["month"]) : todayIso().slice(0, 7);
+  const month = isServiceMonth(s(arg["month"])) ? s(arg["month"]) : todayIso().slice(0, 7);
   const monthStart = `${month}-01`;
   const teachers = await acadTeachers();
 
-  const [links, receipts, rules] = await Promise.all([
+  const [links, receipts, rules, paidRows] = await Promise.all([
     query<{ teacher_id: string; student_id: string }>(
       `select distinct teacher_id, student_id from attendance_acad
        where coalesce(teacher_id,'') <> '' and coalesce(student_id,'') <> ''`,
@@ -291,7 +296,13 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
     query<{ teacher_id: string; payout_type: string; percentage: string }>(
       `select distinct on (teacher_id) teacher_id, payout_type, percentage from payout_rules order by teacher_id, id`,
     ),
+    query<{ teacher_id: string; paid: string; payments: string }>(
+      `select teacher_id, sum(amount)::text as paid, count(*)::text as payments
+       from teacher_payouts where service_month = $1 group by teacher_id`,
+      [month],
+    ),
   ]);
+  const paidOf = new Map(paidRows.map((r) => [r.teacher_id, { paid: n(r.paid), payments: Number(r.payments) || 0 }]));
 
   const studentsOf = new Map<string, Set<string>>();
   const teachersOfStudent = new Map<string, Set<string>>();
@@ -332,7 +343,8 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
       receiptCount += agg.count;
       if ((teachersOfStudent.get(sid)?.size ?? 1) > 1) sharedStudents++;
     }
-    const share = Math.round(totalCollection * (pct / 100) * 100) / 100;
+    const share = money(totalCollection * (pct / 100));
+    const settled = paidOf.get(t.id) ?? { paid: 0, payments: 0 };
     return {
       teacherId: t.id,
       teacherName: t.name,
@@ -343,10 +355,10 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
       sharePercent: pct,
       totalTeacherShare: share,
       payable: share,
-      alreadyPaid: 0,
-      balance: share,
-      // No payments-made ledger exists yet, so nothing can be marked settled.
-      status: "UNPAID",
+      alreadyPaid: money(settled.paid),
+      balance: payoutBalance(share, settled.paid),
+      paymentCount: settled.payments,
+      status: payoutStatus(share, settled.paid),
       // Students taught by more than one teacher: their fees count for each,
       // so these rows need a human decision before money moves.
       sharedStudents,
@@ -364,6 +376,99 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
     unattributedReceipts: unattributed,
     unattributedAmount,
     note: "payout preview computed from receipts in the month, one receipt counted once",
+  });
+}
+
+/**
+ * Record money actually paid to a teacher for a service month. Writes the
+ * payout and a matching cashbook outflow in one transaction, so the ledger
+ * and the payout history can never disagree.
+ */
+async function recordTeacherPayout(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const teacherId = s(arg["teacherId"]);
+  const amount = n(arg["amount"]);
+  const month = s(arg["month"] ?? arg["serviceMonth"]);
+  if (!teacherId) return { ok: false, code: "NO_TEACHER", error: "teacherId required" };
+  if (!isServiceMonth(month)) return { ok: false, code: "BAD_MONTH", error: "month must be YYYY-MM" };
+  if (amount <= 0) return { ok: false, code: "BAD_AMOUNT", error: "Amount must be > 0" };
+
+  const teacher = await acadTeacherById(teacherId);
+  if (!teacher) return { ok: false, code: "NOT_FOUND", error: `No teacher ${teacherId}` };
+
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
+  const paidOn = d(s(arg["paidOn"] ?? arg["date"])) || todayIso();
+  const mode = s(arg["paymentMode"]) || "Bank Transfer";
+  const reference = s(arg["reference"] ?? arg["note"]);
+  const id = newId("TPO");
+  const ledgerId = newId("LED");
+
+  await withTransaction(async (tx) => {
+    await tx.query(
+      `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, status, branch)
+       values ($1, $2::date, $3, 'Teacher Payout', $4, $5, $5, $6, 'ACTIVE', $7)`,
+      [ledgerId, paidOn, teacher.name, `Payout ${month}${reference ? ` · ${reference}` : ""}`, amount, mode, branch],
+    );
+    await tx.query(
+      `insert into teacher_payouts (id, teacher_id, teacher_name, service_month, amount, paid_on, payment_mode, reference, branch, recorded_by, ledger_id)
+       values ($1,$2,$3,$4,$5,$6::date,$7,$8,$9,$10,$11)`,
+      [id, teacherId, teacher.name, month, amount, paidOn, mode, reference || null, branch, s(arg["recordedBy"]) || "founder", ledgerId],
+    );
+  });
+  await bumpRevisions(["payouts", "expenses", "teachers", "dashboard"]);
+
+  const totals = await queryOne<{ paid: string }>(
+    `select coalesce(sum(amount),0)::text as paid from teacher_payouts where teacher_id = $1 and service_month = $2`,
+    [teacherId, month],
+  );
+  return ok({
+    payoutId: id,
+    teacherId,
+    teacherName: teacher.name,
+    month,
+    amount: money(amount),
+    paidOn,
+    paymentMode: mode,
+    totalPaidForMonth: money(n(totals?.paid)),
+    ledgerId,
+    note: "payout recorded and posted to the cashbook",
+  });
+}
+
+/** Payments already made, newest first. Optionally for one teacher/month. */
+async function payoutHistory(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const teacherId = s(arg["teacherId"]);
+  const month = s(arg["month"]);
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (teacherId) {
+    params.push(teacherId);
+    where.push(`teacher_id = $${params.length}`);
+  }
+  if (isServiceMonth(month)) {
+    params.push(month);
+    where.push(`service_month = $${params.length}`);
+  }
+  const rows = await query<Record<string, unknown>>(
+    `select id, teacher_id, teacher_name, service_month, amount, paid_on::text, payment_mode, reference, branch, recorded_by
+     from teacher_payouts ${where.length ? `where ${where.join(" and ")}` : ""}
+     order by paid_on desc, id desc limit 200`,
+    params,
+  );
+  return ok({
+    rows: rows.map((r) => ({
+      payoutId: s(r.id),
+      teacherId: s(r.teacher_id),
+      teacherName: s(r.teacher_name),
+      month: s(r.service_month),
+      amount: n(r.amount),
+      paidOn: d(r.paid_on),
+      paymentMode: s(r.payment_mode),
+      reference: s(r.reference),
+      branch: s(r.branch),
+      recordedBy: s(r.recorded_by),
+    })),
+    total: money(rows.reduce((a, r) => a + n(r.amount), 0)),
   });
 }
 

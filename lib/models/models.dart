@@ -802,6 +802,45 @@ class PaymentDraftRow {
 
 /// A single founder teacher-payout preview row (server-computed payable).
 /// Never compute payouts on the device — display only.
+/// One payment actually made to a teacher (api_recordTeacherPayout /
+/// api_teacherPayoutHistory).
+class PayoutPayment {
+  PayoutPayment({
+    required this.payoutId,
+    required this.teacherId,
+    required this.teacherName,
+    required this.month,
+    required this.amount,
+    required this.paidOn,
+    required this.paymentMode,
+    required this.reference,
+  });
+  factory PayoutPayment.fromApi(Map<String, dynamic> b) {
+    num n(dynamic v) {
+      final s = v == null ? '' : v.toString().replaceAll(RegExp(r'[^\d.\-]'), '');
+      return double.tryParse(s) ?? 0;
+    }
+    return PayoutPayment(
+      payoutId: _s(b['payoutId']),
+      teacherId: _s(b['teacherId']),
+      teacherName: _s(b['teacherName']),
+      month: _s(b['month']),
+      amount: n(b['amount']),
+      paidOn: _s(b['paidOn']),
+      paymentMode: _s(b['paymentMode']),
+      reference: _s(b['reference']),
+    );
+  }
+  final String payoutId;
+  final String teacherId;
+  final String teacherName;
+  final String month;
+  final num amount;
+  final String paidOn;
+  final String paymentMode;
+  final String reference;
+}
+
 class PayoutRow {
   PayoutRow({
     required this.teacherId,

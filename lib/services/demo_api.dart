@@ -106,6 +106,7 @@ class DemoApiClient extends ApiClient {
     'api_updateTeacherStatus': {'teachers'},
     'api_founder_mergeStudentDraft': {'students', 'dashboard'},
     'api_updateTeacherCompensation': {'teachers', 'payouts'},
+    'api_recordTeacherPayout': {'payouts', 'expenses', 'dashboard'},
     'api_generateSchoolInvoice': {'invoices'},
     'api_timetableCreate': {'timetable'},
     'api_timetableUpdate': {'timetable'},
@@ -128,6 +129,7 @@ class DemoApiClient extends ApiClient {
     'api_staff_resolveTodaysClass',
     'api_founder_setStudentStatus',
     'api_updateTeacherStatus',
+    'api_recordTeacherPayout',
     'api_founder_paymentDraftApprove',
     'api_founder_paymentDraftReject',
     'api_founder_finalisePaymentDraft',
@@ -274,6 +276,21 @@ class DemoApiClient extends ApiClient {
         };
       case 'api_teacherPayoutPreview':
         return _payoutPreview(a);
+      case 'api_recordTeacherPayout':
+        return {
+          'ok': true,
+          'payoutId': 'TPO-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'teacherId': a['teacherId'] ?? '',
+          'teacherName': 'Demo Teacher',
+          'month': a['month'] ?? '',
+          'amount': a['amount'] ?? 0,
+          'paidOn': a['paidOn'] ?? '',
+          'paymentMode': a['paymentMode'] ?? 'Bank Transfer',
+          'totalPaidForMonth': a['amount'] ?? 0,
+          'note': 'demo payout — no real money row written',
+        };
+      case 'api_teacherPayoutHistory':
+        return {'ok': true, 'rows': const [], 'total': 0};
       case 'api_staff_listMyApprovals':
         return _staffMyRequests();
       case 'api_staff_commGenerate':

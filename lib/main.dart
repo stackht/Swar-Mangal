@@ -90,14 +90,14 @@ class _StartupGateState extends State<StartupGate> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _ensureRestore();
-  }
-
-  void _ensureRestore() {
-    final auth = context.read<AuthProvider>();
-    if (_restored || auth.restoring || auth.isLoggedIn) return;
-    _restored = true;
-    auth.restoreSession();
+    if (!_restored) {
+      _restored = true;
+      // Defer past the build phase: restoreSession() notifies listeners and
+      // must never run synchronously inside build (would throw setState-in-build).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<AuthProvider>().restoreSession();
+      });
+    }
   }
 
   @override
@@ -118,10 +118,11 @@ class _StartupGateState extends State<StartupGate> {
     return _RestoreError(
       onRetry: () {
         final a = context.read<AuthProvider>();
-        // A retry only makes sense if we still hold a credential to retry with.
-        _restored = false;
         a.clearError();
-        Future.microtask(_ensureRestore);
+        _restored = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) context.read<AuthProvider>().restoreSession();
+        });
       },
     );
   }

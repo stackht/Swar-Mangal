@@ -96,7 +96,9 @@ class DemoApiClient extends ApiClient {
     'api_addStudent': {'students', 'dashboard'},
     'api_staff_saveStudentDraft': {'students', 'dashboard'},
     'api_addExpenseEntry': {'expenses', 'dashboard'},
-    'api_staff_submitExpenseDraft': {'expenses', 'dashboard'},
+    'api_staff_submitExpenseDraft': {'expenses', 'approvals', 'dashboard'},
+    'api_founder_expenseDraftApprove': {'expenses', 'approvals', 'dashboard'},
+    'api_founder_expenseDraftReject': {'expenses', 'approvals'},
     'api_staff_inquiryQuickAdd': {'inquiries'},
     'api_staff_inquiryTransition': {'inquiries'},
     'api_staff_markAttendance': {'attendance', 'dashboard', 'sessions'},
@@ -123,6 +125,8 @@ class DemoApiClient extends ApiClient {
     'api_addTeacher',
     'api_addExpenseEntry',
     'api_staff_submitExpenseDraft',
+    'api_founder_expenseDraftApprove',
+    'api_founder_expenseDraftReject',
     'api_staff_inquiryQuickAdd',
     'api_staff_inquiryTransition',
     'api_staff_markAttendance',
@@ -199,6 +203,22 @@ class DemoApiClient extends ApiClient {
         return _sessionRoster();
       case 'api_staff_inquiryTransition':
         return _inquiryTransition(a);
+      case 'api_founder_expenseDraftApprove':
+        return {
+          'ok': true,
+          'changed': true,
+          'draftId': a['draftId'] ?? '',
+          'status': 'APPROVED',
+          'note': 'demo approval — no real expense written',
+        };
+      case 'api_founder_expenseDraftReject':
+        return {
+          'ok': true,
+          'changed': true,
+          'draftId': a['draftId'] ?? '',
+          'status': 'REJECTED',
+          'note': 'demo rejection',
+        };
       case 'api_founder_auditLog':
         return {
           'ok': true,

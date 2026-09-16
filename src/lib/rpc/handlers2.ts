@@ -27,7 +27,11 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_addExpenseEntry":
       return addExpense(arg);
     case "api_staff_submitExpenseDraft":
-      return submitExpenseDraft(arg);
+      return submitExpenseDraft(arg, scope);
+    case "api_founder_expenseDraftApprove":
+      return expenseDraftApprove(arg);
+    case "api_founder_expenseDraftReject":
+      return expenseDraftReject(arg);
     case "api_listTeachers":
       return listTeachers();
     case "api_addTeacher":
@@ -72,7 +76,7 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_staff_resolveTodaysClass":
       return resolveTodaysClass(arg, scope);
     case "api_staff_scheduleSession":
-      return scheduleSession(arg);
+      return scheduleSession(arg, scope);
     case "api_staff_sessionRoster":
       return sessionRoster(arg, scope);
     case "api_staff_feeDueList":
@@ -230,8 +234,15 @@ async function teacherProfile(arg: Record<string, unknown>, scope: BranchScope):
   const trpc = await teacherToRpc(t);
   const students = (await acadStudents()).filter((x) => inScope(scope, x.branch));
   const myStudents = (await studentsToRpc(students)).filter((st) => st.teacherId === t.id);
+  // Receipts this calendar month from the students this teacher teaches —
+  // the old query counted every active receipt ever and called it a month.
   const receipts = await query<{ c: string }>(
-    `select count(*)::text as c from receipts where id >= (select min(id) from receipts) and status = 'ACTIVE'`,
+    `select count(*)::text as c from receipts r
+     where r.status = 'ACTIVE'
+       and r.created_at >= date_trunc('month', current_date)
+       and r.student_id in (select distinct student_id from attendance_acad
+                            where teacher_id = $1 and coalesce(student_id,'') <> '')`,
+    [t.id],
   );
   return ok({
     teacher: {
@@ -663,8 +674,90 @@ async function addExpense(arg: Record<string, unknown>): Promise<Record<string, 
   return ok({ entryId: id, expenseDraftId: newId("EDRAFT"), note: "expense recorded" });
 }
 
-async function submitExpenseDraft(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return ok({ draftId: newId("EDRAFT"), persisted: true, note: "expense draft submitted" });
+/**
+ * Staff submit an expense for the founder to approve. This used to return
+ * "persisted: true" without writing anything, so the entry was lost.
+ */
+async function submitExpenseDraft(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const amount = n(arg["amount"]);
+  const description = s(arg["description"] ?? arg["narrative"]);
+  if (amount <= 0 || !description) {
+    return { ok: false, code: "BAD_EXPENSE", error: "valid amount + description required" };
+  }
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
+  const id = newId("EDRAFT");
+  await query(
+    `insert into expense_drafts (id, status, category, vendor, description, amount, payment_mode, branch, submitted_by)
+     values ($1,'SUBMITTED',$2,$3,$4,$5,$6,$7,$8)`,
+    [
+      id,
+      s(arg["category"]) || "General",
+      s(arg["vendor"] ?? arg["payee"]),
+      description,
+      amount,
+      s(arg["paymentMode"]) || "Cash",
+      branch,
+      s(arg["submittedBy"]) || "staff",
+    ],
+  );
+  await bumpRevisions(["expenses", "approvals", "tasks"]);
+  return ok({ draftId: id, persisted: true, status: "SUBMITTED", note: "expense draft submitted for approval" });
+}
+
+/** Founder approves: the draft becomes a real expense plus a cashbook outflow. */
+async function expenseDraftApprove(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const draftId = s(arg["draftId"] ?? arg["itemId"]);
+  if (!draftId) return { ok: false, code: "NO_DRAFT", error: "draftId required" };
+  const result: Record<string, unknown> = await withTransaction(async (tx) => {
+    const draft = await tx.queryOne<Record<string, unknown>>(
+      `select * from expense_drafts where id = $1 for update`,
+      [draftId],
+    );
+    if (!draft) return { ok: false, code: "NOT_FOUND", error: `No expense draft ${draftId}` };
+    if (s(draft.status) === "APPROVED") {
+      return ok({ changed: false, draftId, status: "APPROVED", expenseId: s(draft.expense_id), idempotent: true, note: "already approved" });
+    }
+    if (s(draft.status) !== "SUBMITTED") {
+      return { ok: false, code: "NOT_SUBMITTED", error: `Draft status ${s(draft.status)}` };
+    }
+    const expenseId = newId("EXP");
+    const ledgerId = newId("LED");
+    const amount = n(draft.amount);
+    await tx.query(
+      `insert into expenses (id, expense_date, category, vendor, description, amount, approval_status)
+       values ($1, now(), $2, $3, $4, $5, 'APPROVED')`,
+      [expenseId, s(draft.category) || "General", s(draft.vendor), s(draft.description), amount],
+    );
+    await tx.query(
+      `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, status, branch)
+       values ($1, now(), $2, $3, $4, $5, $5, $6, 'ACTIVE', $7)`,
+      [ledgerId, s(draft.vendor) || "Office", s(draft.category) || "General", s(draft.description), amount, s(draft.payment_mode) || "Cash", s(draft.branch) || null],
+    );
+    await tx.query(
+      `update expense_drafts set status = 'APPROVED', decided_by = $2, decided_at = now(), expense_id = $3, ledger_id = $4 where id = $1`,
+      [draftId, s(arg["decidedBy"]) || "founder", expenseId, ledgerId],
+    );
+    return ok({ changed: true, draftId, status: "APPROVED", expenseId, ledgerId, amount, note: "expense recorded and posted to the cashbook" });
+  });
+  if (result["ok"] === true && result["changed"] === true) {
+    await bumpRevisions(["expenses", "approvals", "dashboard"]);
+  }
+  return result;
+}
+
+async function expenseDraftReject(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const draftId = s(arg["draftId"] ?? arg["itemId"]);
+  const reason = s(arg["reason"] ?? arg["comment"]);
+  if (!draftId) return { ok: false, code: "NO_DRAFT", error: "draftId required" };
+  const rows = await query<{ id: string }>(
+    `update expense_drafts set status = 'REJECTED', decided_by = $2, decided_at = now(), decision_note = $3
+     where id = $1 and status = 'SUBMITTED' returning id`,
+    [draftId, s(arg["decidedBy"]) || "founder", reason || null],
+  );
+  if (!rows.length) return { ok: false, code: "NOT_FOUND", error: `No pending expense draft ${draftId}` };
+  await bumpRevisions(["expenses", "approvals"]);
+  return ok({ changed: true, draftId, status: "REJECTED", note: reason || "rejected" });
 }
 
 // ------------------------------------------------------- school invoices
@@ -980,9 +1073,27 @@ async function resolveTodaysClass(arg: Record<string, unknown>, scope: BranchSco
   return ok({ eventId, outcome, evidenceClass: "VERIFIED", payeeTeacherId: deliveredBy, note: "class resolved" });
 }
 
-async function scheduleSession(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+/** Schedule a session. The id used to be returned without storing anything,
+ *  so api_staff_sessionRoster could never find it again. */
+async function scheduleSession(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
   const id = newId("SCSS");
-  return ok({ scheduledSessionId: id, status: "SCHEDULED", sessionDate: d(s(arg["sessionDate"])), sessionCredit: n(arg["sessionCredit"]) || 1, durationMinutes: n(arg["durationMinutes"]) || 60 });
+  const sessionDate = d(s(arg["sessionDate"])) || todayIso();
+  await query(
+    `insert into scheduled_sessions (id, session_date, start_time, teacher_id, teacher_name, branch, course, resolved, answerable)
+     values ($1,$2,$3,$4,$5,$6,$7,false,true)`,
+    [id, sessionDate, s(arg["startTime"]), s(arg["teacherId"]), s(arg["teacherName"]), branch, s(arg["course"] ?? arg["className"])],
+  );
+  await bumpRevisions(["sessions", "tasks"]);
+  return ok({
+    scheduledSessionId: id,
+    status: "SCHEDULED",
+    sessionDate,
+    branch,
+    sessionCredit: n(arg["sessionCredit"]) || 1,
+    durationMinutes: n(arg["durationMinutes"]) || 60,
+  });
 }
 
 async function sessionRoster(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
@@ -1085,8 +1196,51 @@ async function founderApprovals(): Promise<Record<string, unknown>> {
     termsStatus: s(r.terms_status) || "TERMS ACCEPTED",
     actions: ["details", "approve", "reject"],
   }));
-  const groups = [{ type: "PAYMENT_DRAFT", label: "Payment drafts", items: paymentItems }];
-  return ok({ build: "RC3.85-standalone", branch: "CONSOLIDATED", count: paymentItems.length, counts: { total: paymentItems.length, WAITING_ON_TERMS: 0, PAYMENT_DRAFT: paymentItems.length, STUDENT_DRAFT: 0, SCHOOL_MASTER: 0, WAIVER: 0, UNKNOWN_STATUS: 0 }, empty: paymentItems.length === 0, items: paymentItems, groups, note: "standalone approvals" });
+  const expenseRows = await query<Record<string, unknown>>(
+    `select id, category, vendor, description, amount, payment_mode, branch, submitted_by, submitted_at::text
+     from expense_drafts where status = 'SUBMITTED' order by submitted_at`,
+  );
+  const expenseItems = expenseRows.map((r) => ({
+    type: "EXPENSE_DRAFT",
+    itemId: s(r.id),
+    entity: s(r.vendor) || s(r.category) || "Expense",
+    studentId: "",
+    noStudentLinked: false,
+    paymentMode: s(r.payment_mode),
+    feesPeriod: "",
+    amount: s(r.amount),
+    branch: s(r.branch),
+    date: d(r.submitted_at),
+    reason: s(r.description),
+    flags: { backdated: false, incomplete: false, junk: false },
+    termsStatus: "",
+    actions: ["details", "approve", "reject"],
+  }));
+
+  const items = [...paymentItems, ...expenseItems];
+  const groups = [
+    { type: "PAYMENT_DRAFT", label: "Payment drafts", items: paymentItems },
+    { type: "EXPENSE_DRAFT", label: "Expense drafts", items: expenseItems },
+  ];
+  return ok({
+    build: "RC3.85-standalone",
+    branch: "CONSOLIDATED",
+    count: items.length,
+    counts: {
+      total: items.length,
+      WAITING_ON_TERMS: 0,
+      PAYMENT_DRAFT: paymentItems.length,
+      EXPENSE_DRAFT: expenseItems.length,
+      STUDENT_DRAFT: 0,
+      SCHOOL_MASTER: 0,
+      WAIVER: 0,
+      UNKNOWN_STATUS: 0,
+    },
+    empty: items.length === 0,
+    items,
+    groups,
+    note: "standalone approvals",
+  });
 }
 
 /**
@@ -1137,10 +1291,15 @@ async function staffMyRequests(scope: BranchScope): Promise<Record<string, unkno
   const rows = (
     await query<Record<string, unknown>>(`select id, status, student_name, amount, branch, submitted_at::text from payment_drafts where status in ('SUBMITTED','APPROVED') order by submitted_at`)
   ).filter((r) => inScope(scope, r.branch));
-  return ok({
-    branch: "ALL",
-    count: rows.length,
-    rows: rows.map((r) => ({
+  const expenseRows = (
+    await query<Record<string, unknown>>(
+      `select id, status, category, description, amount, branch, submitted_at::text
+       from expense_drafts where status in ('SUBMITTED','APPROVED','REJECTED') order by submitted_at desc limit 100`,
+    )
+  ).filter((r) => inScope(scope, r.branch));
+
+  const out = [
+    ...rows.map((r) => ({
       type: "PAYMENT_DRAFT",
       id: s(r.id),
       status: s(r.status),
@@ -1150,9 +1309,18 @@ async function staffMyRequests(scope: BranchScope): Promise<Record<string, unkno
       when: d(r.submitted_at),
       backdated: false,
     })),
-    canApprove: false,
-    note: "standalone my requests",
-  });
+    ...expenseRows.map((r) => ({
+      type: "EXPENSE_DRAFT",
+      id: s(r.id),
+      status: s(r.status),
+      student: "",
+      category: s(r.category),
+      amount: s(r.amount),
+      when: d(r.submitted_at),
+      backdated: false,
+    })),
+  ];
+  return ok({ branch: "ALL", count: out.length, rows: out, canApprove: false, note: "standalone my requests" });
 }
 
 // -------------------------------------------------------------- comm / sync

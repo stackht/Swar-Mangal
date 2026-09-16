@@ -129,6 +129,15 @@ of those rows. `api_teacherPayoutHistory` lists them.
 The founder app records a payment from the payout screen; the amount defaults
 to the outstanding balance and the app never computes the figures itself.
 
+## Expense drafts
+
+Staff submit an expense with api_staff_submitExpenseDraft; it is stored in
+expense_drafts as SUBMITTED and appears in the founder approval centre.
+api_founder_expenseDraftApprove turns it into a real expense plus the matching
+cashbook outflow in one transaction; api_founder_expenseDraftReject records the
+reason. Nothing reaches the books until the founder decides, and approving
+twice is a no-op.
+
 ## Device tokens and the audit trail
 
 A token resolves in two steps: the shared env tokens

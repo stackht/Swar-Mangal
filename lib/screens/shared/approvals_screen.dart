@@ -140,12 +140,24 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
     if (_acting.contains(item.itemId)) return;
     setState(() => _acting.add(item.itemId));
     try {
+      final isExpense = item.type == 'EXPENSE_DRAFT';
       if (action == 'reject') {
         final reason = await _ask('Reject ${item.itemId}', 'Reason (required)');
         if (reason == null) return;
-        await auth.service!.founderPaymentDraftReject(item.itemId, reason);
+        if (isExpense) {
+          await auth.service!.founderExpenseDraftReject(item.itemId, reason);
+        } else {
+          await auth.service!.founderPaymentDraftReject(item.itemId, reason);
+        }
       } else if (action == 'approve') {
-        await auth.service!.founderPaymentDraftApprove(item.itemId);
+        if (isExpense) {
+          final confirmed = await _confirm('Approve expense',
+              'Record "${item.reason}" as a real expense and post it to the cashbook?');
+          if (!confirmed) return;
+          await auth.service!.founderExpenseDraftApprove(item.itemId);
+        } else {
+          await auth.service!.founderPaymentDraftApprove(item.itemId);
+        }
       } else if (action == 'merge') {
         final ok = await _confirm('Merge student draft', 'Merge "${item.entity}" into the STUDENTS master?');
         if (!ok) return;

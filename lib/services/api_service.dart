@@ -375,6 +375,15 @@ class ApiService {
     return PayoutPreview.fromApi(b as Map<String, dynamic>);
   }
 
+  /// Founder-only: approve a staff expense draft. The backend turns it into
+  /// a real expense plus the matching cashbook outflow.
+  Future<dynamic> founderExpenseDraftApprove(String draftId) =>
+      _api.call('api_founder_expenseDraftApprove', {'draftId': draftId});
+
+  /// Founder-only: reject a staff expense draft, with a reason.
+  Future<dynamic> founderExpenseDraftReject(String draftId, String reason) =>
+      _api.call('api_founder_expenseDraftReject', {'draftId': draftId, 'reason': reason});
+
   /// Founder-only: the write trail (who changed what, newest first).
   Future<List<AuditEntry>> founderAuditLog({int limit = 100, String fn = '', bool failuresOnly = false}) async {
     final b = await _api.call('api_founder_auditLog', {

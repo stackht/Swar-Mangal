@@ -89,6 +89,9 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   api_cashbookReport: STAFF,
   api_staff_submitExpenseDraft: STAFF,
   api_addExpenseEntry: FOUNDER,
+  // Founder decides on a staff expense draft.
+  api_founder_expenseDraftApprove: FOUNDER,
+  api_founder_expenseDraftReject: FOUNDER,
 
   // ------------------------------------------------------- school invoices
   // Shared across roles: staff can also generate/read school invoices.
@@ -208,6 +211,7 @@ export const WRITE_FUNCTIONS = new Set<string>([
   "api_founder_finalisePaymentDraft", "api_staff_finalisePaymentDraft",
   "api_addTeacher", "api_updateTeacherStatus", "api_updateTeacherCompensation", "api_recordTeacherPayout", "api_assignSharedStudent",
   "api_addExpenseEntry", "api_staff_submitExpenseDraft",
+  "api_founder_expenseDraftApprove", "api_founder_expenseDraftReject",
   "api_generateSchoolInvoice",
   "api_timetableCreate", "api_timetableUpdate", "api_timetableDelete",
   "api_staff_markAttendance", "api_staff_resolveTodaysClass", "api_staff_scheduleSession",

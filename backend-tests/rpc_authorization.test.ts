@@ -213,3 +213,17 @@ test("the activity log is founder-only and read-only", () => {
   // Reading the trail is not itself an audited write.
   assert.ok(!WRITE_FUNCTIONS.has("api_founder_auditLog"));
 });
+
+test("expense drafts: staff submit, founder decides", () => {
+  assert.equal(RPC_POLICY["api_staff_submitExpenseDraft"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_expenseDraftApprove"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_expenseDraftReject"], "FOUNDER");
+  // Staff may propose but never approve their own spending.
+  assert.equal(authorizeRpc(staff, "api_staff_submitExpenseDraft").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_expenseDraftApprove").ok, false);
+  assert.equal(authorizeRpc(staff, "api_addExpenseEntry").ok, false);
+  // All three change data, so all three are audited.
+  for (const fn of ["api_staff_submitExpenseDraft", "api_founder_expenseDraftApprove", "api_founder_expenseDraftReject"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});

@@ -672,3 +672,25 @@ create table if not exists payout_attributions (
 );
 
 create index if not exists idx_payout_attributions_month on payout_attributions (service_month);
+
+-- Staff-submitted expense drafts awaiting the founder. These used to be
+-- answered with "persisted: true" and then dropped on the floor.
+create table if not exists expense_drafts (
+  id text primary key,
+  status text not null default 'SUBMITTED',
+  category text,
+  vendor text,
+  description text,
+  amount numeric(10,2) not null,
+  payment_mode text,
+  branch text,
+  submitted_by text,
+  submitted_at timestamptz not null default now(),
+  decided_by text,
+  decided_at timestamptz,
+  decision_note text,
+  expense_id text,
+  ledger_id text
+);
+
+create index if not exists idx_expense_drafts_status on expense_drafts (status, submitted_at);

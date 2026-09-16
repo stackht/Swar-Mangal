@@ -79,6 +79,7 @@ export interface StudentRpc {
   className: string;
   location: string;
   batch: string;
+  feePlan: string;
   feeCycleType: string;
   feeDueDay: string;
   nextDueDate: string;
@@ -112,6 +113,7 @@ export async function studentToRpc(x: AcadStudent): Promise<StudentRpc> {
     className: s(x.branch) === "GOREGAON" ? "Goregaon Music Class" : "Kandivali Music Class",
     location: s(x.branch).toUpperCase(),
     batch: s(x.batch),
+    feePlan: s(x.fee_plan),
     feeCycleType: feeCycleFromPlan(s(x.fee_plan)),
     feeDueDay: "",
     nextDueDate: "",
@@ -124,7 +126,7 @@ export async function studentToRpc(x: AcadStudent): Promise<StudentRpc> {
 
 export function feeCycleFromPlan(plan: string): string {
   const p = plan.toUpperCase();
-  if (p.includes("3 MONTH") || p.includes("THREE")) return "3 Months";
+  if (p.includes("3 MONTH") || p.includes("THREE") || p.includes("PLAN 3") || p.includes("PLAN 4")) return "3 Months";
   if (p.includes("6 MONTH") || p.includes("SIX")) return "6 Months";
   if (p.includes("YEAR") || p.includes("12")) return "Yearly";
   return "Monthly";

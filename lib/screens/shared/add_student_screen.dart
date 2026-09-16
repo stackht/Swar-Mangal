@@ -35,6 +35,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   final _notes = TextEditingController();
   String _classCode = 'GMC';
   String _feeCycle = 'Monthly';
+  String _plan = '';
   int _feeDueDay = 5;
   bool _busy = false;
   String? _result; // server message after a save
@@ -53,6 +54,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       _instrument.text = e.instrument;
       _batch.text = e.batch;
       _classCode = e.classCode == 'KMC' ? 'KMC' : 'GMC';
+      _plan = e.feePlan;
       if (e.feeDueDay.isNotEmpty) _feeDueDay = int.tryParse(e.feeDueDay) ?? 5;
     }
   }
@@ -90,6 +92,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               'batch': _batch.text.trim(),
               'notes': _notes.text.trim(),
               'lenient': true,
+              if (_plan.isNotEmpty) 'feeCycleType': _plan,
             }
           : {
               'studentName': _name.text.trim(),
@@ -97,7 +100,10 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               'email': _email.text.trim(),
               'guardianName': _parent.text.trim(),
               'classCode': _classCode,
-              'feeCycleType': _feeCycle,
+              if (_plan.isNotEmpty)
+                'feeCycleType': _plan
+              else
+                'feeCycleType': _feeCycle,
               'feeDueDay': _feeDueDay,
               'instrument': _instrument.text.trim(),
             };
@@ -183,6 +189,46 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(labelText: 'Instrument / course', prefixIcon: Icon(Icons.music_note_outlined)),
                   ),
+                ]),
+              ),
+            ),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('PLAN',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
+                  const SizedBox(height: AppSpace.s2),
+                  DropdownButtonFormField<String>(
+                    initialValue: _plan.isEmpty ? null : _plan,
+                    decoration: const InputDecoration(labelText: 'Fee plan'),
+                    hint: const Text('Select plan…'),
+                    items: [
+                      for (final p in academyPlans)
+                        DropdownMenuItem(
+                          value: p.key,
+                          child: Text('${p.key} — ₹${p.amount}${p.months > 0 ? ' / ${p.months} months' : ' / month'}'),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      setState(() {
+                        _plan = v ?? '';
+                        for (final p in academyPlans) {
+                          if (p.key == v) {
+                            _feeCycle = p.months > 0 ? '3 Months' : 'Monthly';
+                            break;
+                          }
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(height: AppSpace.s2),
+                  if (_plan.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpace.s2),
+                      child: Text(planSummary(_plan),
+                          style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                    ),
                 ]),
               ),
             ),

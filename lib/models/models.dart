@@ -78,6 +78,7 @@ class Student {
     required this.className,
     required this.location,
     required this.batch,
+    required this.feePlan,
     required this.feeCycleType,
     this.feeDueDay = '',
     required this.nextDueDate,
@@ -97,6 +98,7 @@ class Student {
         className: _s(b['className']),
         location: _s(b['location'] ?? b['branch']),
         batch: _s(b['batch']),
+        feePlan: _s(b['feePlan']),
         feeCycleType: _s(b['feeCycleType']),
         feeDueDay: _s(b['feeDueDay']),
         nextDueDate: _s(b['nextDueDate']),
@@ -116,6 +118,7 @@ class Student {
   final String className;
   final String location;
   final String batch;
+  final String feePlan;
   final String feeCycleType;
   final String feeDueDay;
   final String nextDueDate;
@@ -1234,6 +1237,24 @@ class TimetablePolicy {
   TimetablePolicy._();
 
   static bool canEdit({required bool staff}) => true;
+}
+
+/// Academy fee-plan catalog: 4 plans (display + add/edit picker).
+const academyPlans = <({String key, String sessions, String amount, int months})>[
+  (key: 'Plan 1', sessions: '1 session/week · 4/month', amount: '2,500', months: 0),
+  (key: 'Plan 2', sessions: '2 sessions/week · 8/month', amount: '3,600', months: 0),
+  (key: 'Plan 3', sessions: '1 session/week · 4/month for 3 months', amount: '6,500', months: 3),
+  (key: 'Plan 4', sessions: '2 sessions/week · 8/month for 3 months', amount: '9,500', months: 3),
+];
+
+/// One-line plan description for the profile. Falls back to raw plan text.
+String planSummary(String plan) {
+  for (final p in academyPlans) {
+    if (plan.toUpperCase().contains(p.key.toUpperCase())) {
+      return '${p.key} · ${p.sessions} · ₹${p.amount}${p.months > 0 ? ' / ${p.months} mo' : ' / mo'}';
+    }
+  }
+  return plan.trim().isEmpty ? '—' : plan;
 }
 
 /// Result of `api_syncChanges`: current server revisions + change markers.

@@ -114,9 +114,9 @@ void main() {
   });
 
   group('TimetablePolicy', () {
-    test('founder edits, staff read-only', () {
+    test('staff and founder both edit', () {
       expect(TimetablePolicy.canEdit(staff: false), true);
-      expect(TimetablePolicy.canEdit(staff: true), false);
+      expect(TimetablePolicy.canEdit(staff: true), true);
     });
   });
 }

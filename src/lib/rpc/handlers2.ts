@@ -367,10 +367,8 @@ async function getSchoolInvoice(arg: Record<string, unknown>): Promise<Record<st
 
 // -------------------------------------------------------------- timetable
 function ttSlot(seed: string, day: number): { start: string; end: string } {
-  // Deterministic 60-min slot (10:00–19:00) per teacher×day, so the
-  // timetable is not uniform 5–6pm. Hash teacher+day into an hour offset.
   let h = 10;
-  for (const ch of seed + "-" + day) h = (h * 31 + ch.codePointAt(0)!) % 10;
+  for (const ch of seed + "-" + day) h = (h * 31 + ch.codePointAt(0)!) % 10 + 10;
   const start = `${String(h).padStart(2, "0")}:00`;
   const end = `${String(h + 1).padStart(2, "0")}:00`;
   return { start, end };

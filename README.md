@@ -2,108 +2,81 @@
 
 Premium music class management platform for students, teachers, and academies.
 
+## Production stack
+
+```
+[ Flutter Android APK ]  --HTTPS RPC-->  [ Railway backend: Next.js / Node.js /api/rpc ]
+                                              |
+                                              | PostgreSQL
+                                              v
+                                       [ production database ]
+```
+
+- **Native client**: Flutter Android app (`lib/`).
+- **Backend**: Next.js / Node.js deployed on Railway.
+- **Database**: PostgreSQL (managed by Railway).
+- **RPC**: `POST /api/rpc` — `function`, `token`, `arg` form fields, JSON response.
+- **Auth**: Founder/Staff device tokens; backend-authoritative.
+- **Zero Google Apps Script**: no `script.google.com`, no `/exec`, no Google Sheets.
+
+Deployment URL: `https://swarmangal-app-production.up.railway.app/api/rpc`.
+
 ## Features
 
-**Student**
-- Dashboard with next-class countdown, quick actions, practice summary, progress rings, assignments, activity feed, achievements
-- Class schedule with week navigation
-- Practice tracker with animated timer, weekly chart, streak, session history
-- Assignments: submit, attach, track status
-- Learning library with search, filters, favorites
-- Music-specific progress: 7 skill categories, trend chart, teacher feedback
-- Attendance history, fees/invoices, messaging, notifications
+**Founder / Staff app surfaces**
+- Daily ops: today's classes, attendance roster + marking, fee reminders, inquiries.
+- Students: search, add, drafts, profiles, fee status, receipts (finalisation is
+  founder-gated).
+- Finance: cashbook, expenses (staff drafts / founder records), teacher payouts,
+  school invoices, payment drafts + approvals.
+- Teachers: list, add, profile, compensation, status.
+- Sync: revision-based near-real-time synchronization of changed entities.
 
-**Teacher**
-- Dashboard: today's classes timeline, student attention, quick actions
-- Students: per-student practice tracking, overall skill score, one-click feedback dialog
-- Attendance: bulk roll marking (present/absent/late/excused)
-- Assignments: review, grade, feedback, request revision
-- Practice tracking per student with weekly goals
-- Learning materials manager, schedule, messaging, progress charts
+## Tech stack (Flutter)
 
-**Admin**
-- SaaS dashboard: student growth / attendance / revenue charts
-- Students/Teachers/Courses/Instruments CRUD
-- Schedule with week view and class counts
-- Fees & payments: invoices, payment recording, outstanding balances
-- Announcements publisher, analytics (instrument mix, class utilization), settings
+- Flutter + Material design, custom Swar Mangal theme (`lib/core/theme.dart`).
+- `http` for the RPC client, `provider` for state, `shared_preferences` for
+  non-sensitive settings, `flutter_secure_storage` for the device token.
+- `pdf` + `printing` for receiving/invoice document generation.
 
-**Parent**
-- Dashboard: child's practice, attendance, skill score, fee status
-- Attendance, progress, messaging, notifications
+## Quick start (Flutter)
 
-## Tech Stack
+```bash
+flutter pub get
+flutter run          # connect a device or emulator, or use in-app Demo mode
+```
 
-- Next.js 15 (App Router) + React 19 + TypeScript (strict)
-- Tailwind CSS design system with HSL color tokens, dark mode via `next-themes`
-- Radix UI primitives, Lucide icons, Framer Motion animations
-- React Hook Form + Zod (forms), TanStack Query (server state)
-- Recharts (analytics), date-fns (dates)
-- Supabase (PostgreSQL + Auth + RLS + Storage), installable PWA
+Login with a device token (founder/staff) against the deployed gateway, or use
+**Demo · Founder / Demo · Staff** for an offline preview (memory only, never
+persisted).
 
-## Quick Start
+## Configuration
 
-The app runs in **demo mode** out of the box — no credentials needed. Pick a role on the login screen to explore fully functional dashboards backed by realistic demo data.
+- Production RPC URL: `lib/config.dart` (`founderExecUrl` / `staffExecUrl`).
+- Custom gateway URL: login screen gear icon (validated: `https` + `/api/rpc`,
+  rejects placeholders and legacy Google URLs).
+- Device token: stored in secure storage (`lib/core/session_storage.dart`).
+
+## Backend
+
+See [BACKEND_SETUP.md](./BACKEND_SETUP.md) for setup, environment variables,
+RPC contract, authorization policy, and database management.
 
 ```bash
 npm install
-npm run dev
-# http://localhost:3000
+npm run typecheck
+npm run build
 ```
 
-### Connect Supabase (production)
-
-1. Create a project at [supabase.com](https://supabase.com).
-2. Run `supabase/schema.sql` in the SQL editor.
-3. Set env vars:
+## Build APK
 
 ```bash
-cp .env.example .env.local
+flutter build apk --release
 ```
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+## Test
+
+```bash
+flutter test
+node --experimental-strip-types --test test/rpc_authorization.test.ts
 ```
-
-4. Enable the signup trigger in `auth.users` → new users get a `profiles` row and role via `raw_user_meta_data.role`.
-
-## Project Structure
-
-```
-app/
-  (auth)/          login, auth layout
-  (dashboard)/     student/, teacher/, admin/, parent/ — role-guarded layouts
-components/
-  ui/              button, card, dialog, dropdown, tabs, input, progress, toast, etc.
-  dashboard/       app-shell, sidebar, header, bottom-nav, stat-card, gradient-card, class-card, messages-view
-  practice/        practice-timer
-lib/
-  data/demo.ts     realistic demo data (students, classes, practice, invoices…)
-  utils/           cn, date/time helpers
-  supabase/        client + typed client
-types/
-  index.ts         shared domain types
-supabase/
-  schema.sql       full PostgreSQL schema + RLS policies
-public/
-  manifest.json    PWA manifest
-```
-
-## Scripts
-
-- `npm run dev` — development server
-- `npm run build` — production build (runs ESLint + type checking)
-- `npm run typecheck` — TypeScript strict check
-- `npm run lint` — ESLint
-
-## Design System
-
-- Warm neutral background (`hsl 220 33% 98%`), deep navy primary (`222 45% 11%`)
-- Pastel accents: lavender / mint / peach / sky
-- 20px base card radius, soft shadows, glass blurs, subtle gradients
-- Framer Motion: page transitions, card hover lift, staggered list entrances, animated progress, timer ticks, layout-animated navigation — all respecting `prefers-reduced-motion`
-
-## Demo Accounts
-
-Login page offers **Admin**, **Teacher**, and **Student** demo entry points. A parent option is also available. All data lives in `src/lib/data/demo.ts` and is fully interactive (attendance marking, practice logging, submissions, invoice creation all persist client-side for the session).

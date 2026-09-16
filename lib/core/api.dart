@@ -41,11 +41,11 @@ const _timeout = Duration(seconds: 45);
 /// One client instance per login session. All `api_*` calls go through here
 /// as posts to the Railway gateway `/api/rpc`.
 class ApiClient {
-  ApiClient({required this.execUrl, required this.token}) {
+  ApiClient({required this.apiUrl, required this.token}) {
     _http = http.Client();
   }
 
-  final String execUrl;
+  final String apiUrl;
   final String token;
   late final http.Client _http;
 
@@ -60,7 +60,7 @@ class ApiClient {
     final http.Response resp;
     try {
       resp = await _http
-          .post(Uri.parse(execUrl), body: body, headers: const {
+          .post(Uri.parse(apiUrl), body: body, headers: const {
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
           })
           .timeout(_timeout);
@@ -85,7 +85,7 @@ class ApiClient {
     } catch (_) {
       throw ApiException(
           'Server answered in an unexpected format. Wrong backend URL '
-          '(${execUrl.replaceFirst(RegExp(r'https?://'), '')})?',
+          '(${apiUrl.replaceFirst(RegExp(r'https?://'), '')})?',
           code: kErrWrongBackend);
     }
     if (data is! Map<String, dynamic>) {

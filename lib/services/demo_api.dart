@@ -12,7 +12,7 @@ String _slice10(dynamic v) {
 /// network and no deployed gateway. Zero real writes ever.
 class DemoApiClient extends ApiClient {
   DemoApiClient({this.branch = 'ALL'})
-      : super(execUrl: 'demo://local', token: 'demo');
+      : super(apiUrl: 'demo://local', token: 'demo');
 
   final String branch;
 
@@ -114,9 +114,9 @@ class DemoApiClient extends ApiClient {
     await Future<void>.delayed(const Duration(milliseconds: 350)); // feel real
     if (_writes.contains(api) && data is Map<String, dynamic>) {
       data['demo'] = true;
-      data['demoNote'] = 'DEMO — no real backend write. Not persisted.';
+      data['demoNote'] = 'DEMO â€” no real backend write. Not persisted.';
       final bump = _revisionByApi[api];
-      if (bump != null) _bump(bump); // success only — post-_route, never on throw
+      if (bump != null) _bump(bump); // success only â€” post-_route, never on throw
     }
     return data;
   }
@@ -184,7 +184,7 @@ class DemoApiClient extends ApiClient {
           'idempotent': false,
           'financialWrites': false,
           'finalisedBy': 'demo',
-          'note': 'demo finalise — real money path writes receipt + ledger + due-date advance server-side',
+          'note': 'demo finalise â€” real money path writes receipt + ledger + due-date advance server-side',
         };
       case 'api_founder_setStudentStatus':
         return {
@@ -272,7 +272,7 @@ class DemoApiClient extends ApiClient {
           'routine': {'selfServe': true},
           'receiptNo': 'RCP-DEMO-1',
           'persisted': true,
-          'note': 'demo draft — self-serve routine lane',
+          'note': 'demo draft â€” self-serve routine lane',
         };
       case 'api_addTeacher':
         return {'ok': true, 'teacherId': 'T-DEMO', 'note': 'demo teacher added'};
@@ -652,7 +652,7 @@ class DemoApiClient extends ApiClient {
             'entryId': 'EXP-101',
             'date': '2026-09-05',
             'category': 'Rent',
-            'description': 'Classroom rent — Goregaon',
+            'description': 'Classroom rent â€” Goregaon',
             'amount': 15000,
             'type': 'EXPENSE',
             'mode': 'UPI',
@@ -674,7 +674,7 @@ class DemoApiClient extends ApiClient {
             'entryId': 'EXP-103',
             'date': '2026-09-02',
             'category': 'School invoice',
-            'description': 'MHWS school billed — September',
+            'description': 'MHWS school billed â€” September',
             'amount': 85000,
             'type': 'INFLOW',
             'mode': 'Bank Transfer',
@@ -723,7 +723,7 @@ class DemoApiClient extends ApiClient {
         {
           'key': 'CAP_REVIEW',
           'title': 'Cap Review',
-          'label': 'Cap Review — status check',
+          'label': 'Cap Review â€” status check',
           'priority': 'HIGH',
           'count': 1,
           'state': 'OPEN',
@@ -908,7 +908,7 @@ class DemoApiClient extends ApiClient {
             'termsStatus': 'TERMS PENDING',
             'studentId': 'STU-55DCD622',
             'studentName': 'Aarav Mehta',
-            'phoneMasked': '••••••1123',
+            'phoneMasked': 'â€¢â€¢â€¢â€¢â€¢â€¢1123',
             'branch': 'GOREGAON',
             'teacherName': 'Rahul Joshi',
             'instrument': 'Keyboard',
@@ -928,7 +928,7 @@ class DemoApiClient extends ApiClient {
             'termsStatus': 'TERMS ACCEPTED',
             'studentId': 'STU-77FA91C0',
             'studentName': 'Diya Shah',
-            'phoneMasked': '••••••2334',
+            'phoneMasked': 'â€¢â€¢â€¢â€¢â€¢â€¢2334',
             'branch': 'GOREGAON',
             'teacherName': 'Meera Nair',
             'instrument': 'Violin',
@@ -950,7 +950,7 @@ class DemoApiClient extends ApiClient {
             'termsStatus': 'TERMS ACCEPTED',
             'studentId': 'STU-31B84E07',
             'studentName': 'Ishaan Verma',
-            'phoneMasked': '••••••3445',
+            'phoneMasked': 'â€¢â€¢â€¢â€¢â€¢â€¢3445',
             'branch': 'KANDIVALI',
             'teacherName': 'Vikram Singh',
             'instrument': 'Tabla',
@@ -992,7 +992,7 @@ class DemoApiClient extends ApiClient {
           'studentId': 'STU-55DCD622',
           'noStudentLinked': false,
           'paymentMode': 'UPI',
-          'feesPeriod': '2026-09-05 → 2026-10-04',
+          'feesPeriod': '2026-09-05 â†’ 2026-10-04',
           'amount': '5000',
           'branch': 'GOREGAON',
           'date': '2026-09-10',
@@ -1008,7 +1008,7 @@ class DemoApiClient extends ApiClient {
           'studentId': 'STU-31B84E07',
           'noStudentLinked': false,
           'paymentMode': 'Cash',
-          'feesPeriod': '2026-09-02 → 2026-10-01',
+          'feesPeriod': '2026-09-02 â†’ 2026-10-01',
           'amount': '5500',
           'branch': 'KANDIVALI',
           'date': '2026-09-09',
@@ -1028,7 +1028,7 @@ class DemoApiClient extends ApiClient {
           'amount': '5000',
           'branch': 'KANDIVALI',
           'date': '2026-09-08',
-          'reason': 'student edit — merge into master',
+          'reason': 'student edit â€” merge into master',
           'flags': {'backdated': false, 'incomplete': false, 'junk': false},
           'termsStatus': '',
           'actions': ['details', 'merge', 'reject'],
@@ -1054,9 +1054,9 @@ class DemoApiClient extends ApiClient {
   Map<String, dynamic> _commGenerate() => {
         'ok': true,
         'type': 'FEE_REMINDER',
-        'subject': 'Fees due — Swar Mangal',
-        'body': 'Namaste, reminder that Aarav Mehta\'s fees of ₹5,000 are due on 5 September 2026. '
-            'Please pay via the link shared. — Swar Mangal Music Academy',
+        'subject': 'Fees due â€” Swar Mangal',
+        'body': 'Namaste, reminder that Aarav Mehta\'s fees of â‚¹5,000 are due on 5 September 2026. '
+            'Please pay via the link shared. â€” Swar Mangal Music Academy',
         'recipientName': 'Parent of Aarav Mehta',
         'recipientType': 'parent',
         'typeRequested': 'FEE_REMINDER',
@@ -1423,7 +1423,7 @@ class DemoApiClient extends ApiClient {
             'balance': 0,
             'status': 'PAID',
             'preCutover': true,
-            'note': 'Pre-cutover manual settlement — balance forced to zero.',
+            'note': 'Pre-cutover manual settlement â€” balance forced to zero.',
           },
         ],
         'byEntity': {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../config.dart';
+import '../../core/session_storage.dart';
 import '../../core/theme.dart';
 import '../../core/url_config.dart';
 import '../../state/auth_provider.dart';
@@ -17,15 +18,21 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _token = TextEditingController();
+  bool _obscureToken = true;
   String _endpoint = 'founder';
   String? _customUrl;
 
   @override
   void initState() {
     super.initState();
+    // Load only NON-sensitive settings (API URL + endpoint). The token is
+    // never loaded into the visible field Ã¢â‚¬â€ session restoration is silent.
     AuthProvider.loadSettings().then((s) {
       if (!mounted) return;
-      setState(() => _customUrl = s.url);
+      setState(() {
+        _customUrl = s.url;
+        if (s.endpoint == 'staff' || s.endpoint == 'founder') _endpoint = s.endpoint!;
+      });
     });
   }
 
@@ -43,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
     // Persisted custom URL only if it passes validation; otherwise fall back
     // to the configured production gateway. Never silently use a placeholder.
     final url = resolveEffectiveUrl(persistedUrl: _customUrl, staff: _endpoint == 'staff');
-    final v = ExecUrlValidator.validate(url);
+    final v = RpcUrlValidator.validate(url);
     if (!v.ok) {
       _toast(v.error ?? 'Invalid API URL.');
       return;
@@ -52,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
     await provider.login(
           endpoint: _endpoint,
           token: _token.text.trim(),
-          execUrl: v.url!,
+          apiUrl: v.url!,
         );
     if (!mounted) return;
     if (provider.error != null) {
@@ -113,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: scheme.onSurface,
                   )),
               const SizedBox(height: AppSpace.s2),
-              Text('Goregaon  ·  Kandivali',
+              Text('Goregaon  Ã‚Â·  Kandivali',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
               const SizedBox(height: AppSpace.s6),
@@ -134,11 +141,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: AppSpace.s4),
                       TextField(
                         controller: _token,
-                        obscureText: true,
-                        decoration: const InputDecoration(
+                        obscureText: _obscureToken,
+                        decoration: InputDecoration(
                           labelText: 'Device token',
                           hintText: 'Issued by the founder',
-                          prefixIcon: Icon(Icons.key),
+                          prefixIcon: const Icon(Icons.key),
+                          suffixIcon: IconButton(
+                            tooltip: _obscureToken ? 'Show token' : 'Hide token',
+                            icon: Icon(
+                              _obscureToken
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () => setState(() => _obscureToken = !_obscureToken),
+                          ),
                         ),
                       ),
                       const SizedBox(height: AppSpace.s4),
@@ -168,7 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : () => context
                                     .read<AuthProvider>()
                                     .demoLogin(founder: true),
-                            child: const Text('Demo · Founder',
+                            child: const Text('Demo Ã‚Â· Founder',
                                 style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ),
@@ -185,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : () => context
                                     .read<AuthProvider>()
                                     .demoLogin(founder: false),
-                            child: const Text('Demo · Staff',
+                            child: const Text('Demo Ã‚Â· Staff',
                                 style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ),
@@ -201,8 +217,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       Align(
                         child: Text(
-                            'v${AppConfig.appVersion} · ${AppConfig.appBuild}'
-                            '${auth.isDemo ? ' · demo mode' : ''}',
+                            'v${AppConfig.appVersion} Ã‚Â· ${AppConfig.appBuild}'
+                            '${auth.isDemo ? ' Ã‚Â· demo mode' : ''}',
                             style: const TextStyle(fontSize: 11, color: AppColors.muted)),
                       ),
                     ],
@@ -228,7 +244,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: _ServerSheet(
           initial: _customUrl,
           onSave: (url) async {
-            await AuthProvider.saveSettings(execUrl: url);
+            await SessionStorage.saveApiUrl(url);
             if (!mounted) return;
             setState(() => _customUrl = url);
             Navigator.pop(context);
@@ -252,7 +268,7 @@ class _ServerSheetState extends State<_ServerSheet> {
   @override
   void initState() {
     super.initState();
-    _c = TextEditingController(text: widget.initial ?? AppConfig.founderExecUrl);
+    _c = TextEditingController(text: widget.initial ?? AppConfig.founderApiUrl);
   }
   @override
   void dispose() {

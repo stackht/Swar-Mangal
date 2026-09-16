@@ -8,7 +8,7 @@ import { isDbConfigured } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const sheetOkResponse = (body: Record<string, unknown>) => {
+const rpcOkResponse = (body: Record<string, unknown>) => {
   const json = JSON.stringify(body);
   return new NextResponse(json, {
     status: 200,
@@ -17,7 +17,7 @@ const sheetOkResponse = (body: Record<string, unknown>) => {
 };
 
 const rpcError = (code: string, message: string) =>
-  sheetOkResponse({ ok: false, code, error: message });
+  rpcOkResponse({ ok: false, code, error: message });
 
 function logDeny(sessionEmail: string, role: string, fn: string, code: string, branch: string) {
   // SAFE logging: no token, no password, no payload, no PII.
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
   try {
     const handler = inHandlers1.includes(functionName) ? rpcDispatch : dispatch2;
     const result = await handler(session.role, functionName, argMap);
-    return sheetOkResponse(result);
+    return rpcOkResponse(result);
   } catch (e) {
     return rpcError("SERVER_ERROR", "Backend error");
   }

@@ -3,8 +3,8 @@ import 'dart:convert';
 import '../core/api.dart';
 import '../models/models.dart';
 
-/// Typed facade over the raw Apps Script RPC surface. Endpoint names must
-/// match the deployed backend exactly (`api_*` for the founder app,
+/// Typed facade over the raw RPC surface of the Railway gateway. Endpoint
+/// names are configured/deployed server-side (`api_*` for the founder app,
 /// `api_staff_*` for the staff app).
 class ApiService {
   ApiService(this._api);

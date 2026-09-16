@@ -336,7 +336,7 @@ class AboutScreen extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(AppSpace.s4),
             child: Column(children: [
-              InfoRow('Scope', 'Device-token gateway on Apps Script'),
+              InfoRow('Scope', 'Device-token gateway on Railway /api/rpc'),
               InfoRow('Money path', 'Server-authoritative · lock · counter · audit'),
             ]),
           ),

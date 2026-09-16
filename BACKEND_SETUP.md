@@ -1,125 +1,102 @@
-# Swar Mangal — Flutter APK → Backend Setup
+# Swar Mangal — Backend Setup
 
-The native app (`swar_mangal`) talks to the **existing** Google Apps Script
-backend over HTTPS. No database was rewritten, no rule duplicated: money
-computation, counters, locks, idempotency guards and audits stay server-side.
+Swar Mangal is a **zero-Google-Script** stack:
+
+```
+[ Flutter Android APK ]  --HTTPS POST function=<api>&token=<deviceToken>&arg=<json>-->  [ Railway /api/rpc ]
+                                                                                              |  Next.js / Node.js
+                                                                                              |  token auth -> RPC authz -> handler
+                                                                                              v
+                                                                                    [ PostgreSQL ]
+```
+
+No Google Apps Script. No Google Sheets. No `clasp`. No `/exec`. No `MobileApiGateway`.
 
 ## Architecture
 
-```
-[ Flutter APK ]  ──POST function=<api>&token=<deviceToken>&arg=<json>──▶  [ Apps Script doPost ]
-                                                                            └─ MobileApiGateway
-                                                                               └─ bounded by role
-                                                                                  └─ runs existing api_*
-```
+- **Client**: Flutter Android APK. Talks RPC to `https://swarmangal-app-production.up.railway.app/api/rpc`.
+- **Backend**: Next.js / Node.js deployed on Railway. Exposes a single RPC entry point (`POST /api/rpc`).
+- **Database**: PostgreSQL (Railway-managed). Connected via `DATABASE_URL`.
+- **Authentication**: Founder/Staff device tokens (`RPC_FOUNDER_TOKEN`, `RPC_STAFF_TOKEN`).
+- **Authorization**: Centralized fail-closed policy — every RPC function lists its
+  minimum role (`FOUNDER` / `STAFF`); unknown functions and wrong-role calls are
+  rejected before the handler runs (see `src/lib/rpc/authorization.ts`).
+- **Branch isolation**: staff sessions are scoped to allowed branches; founder
+  sees all. Client-supplied branch/entity values are never trusted.
 
-The apps authenticate with the *browser* Google session (`Session.getActiveUser()`
-in `Code.js:226`). A native app has no browser session, so the gateway bridges
-it with a **device token** the founder issues.
-
-## 1. Required backend change (one file, held pending approval)
-
-File already written to the repo (NOT deployed, NOT pushed):
+## RPC contract
 
 ```
-docs/held/MobileApiGateway.gs
+POST /api/rpc
+Content-Type: application/x-www-form-urlencoded
+
+function=<api_name>
+token=<device_token>
+arg=<json>
 ```
 
-It adds `doPost` keyed on `function=` / `token=` / `arg=`, validates the token
-against a `MOBILE_ACCESS` tab, checks the calling role against a per-role
-endpoint allow list, then calls the existing `api_*` functions unchanged.
+Response is always JSON:
 
-### Setup steps
+```json
+{ "ok": true, ... }
+```
 
-1. In the master workbook add a tab **`MOBILE_ACCESS`**:
-   `Token | Email | Role | Status | Created At | Note`
-   - `Status` must be `ACTIVE`
-   - `Role` → `FOUNDER_ADMIN` or `STAFF_OPS`
-   - Generate tokens (e.g. `openssl rand -hex 24`) — give one per device/operator.
-2. Set the master workbook id at `mobileAuthorize_()` (the `04-master` placeholder).
-3. Deploy the founder/smart project with a **NEW deployment**:
-   - `Execute as: Me (deployer)`
-   - `Who has access: Anyone`
-   - ⚠️ Under ANYONE the script resolves identity to the owner. The token is the
-     only boundary. Do NOT point money-capable `FOUNDER_ADMIN` tokens at a plain
-     person's phone; treat each token as the equivalent of the device holder.
-4. `clasp push` + deploy only through the repo's guarded deploy flow with the
-   founder's explicit approval (CLAUDE.md: no unattended push/deploy).
+Errors use machine-readable codes:
+- `AUTH_FAILED` — missing/invalid token
+- `ROLE_FORBIDDEN` — authenticated but wrong role for this function
+- `BRANCH_FORBIDDEN` — staff requesting an unauthorized branch
+- `UNKNOWN_API` — function not in the authorization policy (fail closed)
+- `SERVER_ERROR` — backend exception (never leaks stack traces/secrets)
 
-### Endpoint allow list (extend in `mobileRoute_`)
+## Environment variables (Railway)
 
-| Role | Allowed |
+| Variable | Purpose |
 |---|---|
-| FOUNDER_ADMIN + STAFF_OPS | `api_bootstrap`, `api_searchStudent`, `api_searchReceipt`, `api_dashboard`, `api_dueReminders`, `api_listTeachers`, `api_searchStudentsV2`, `api_receiptPreflight` |
-| FOUNDER_ADMIN only | `api_addStudent`, `api_addFeePayment`, `api_addExpenseEntry`, `api_addTeacher`, `api_cashbookReport` |
-| STAFF_OPS only | `api_staff_prepareReceiptDraft`, `api_staff_submitExpenseDraft`, `api_staff_saveStudentDraft` |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `RPC_FOUNDER_TOKEN` | Founder device token (`FOUNDER_ADMIN` role) |
+| `RPC_STAFF_TOKEN` | Staff device token (`OPS_USER` role) |
+| `RPC_STAFF_BRANCHES` | Optional staff branch allow-list (`GOREGAON,KANDIVALI`) |
+| `NEXT_PUBLIC_AUTH_ENABLED` | Web-app auth flag |
+| `SESSION_SECRET` | Web-app session signing |
 
-## 2. Point the app at the deployment URL
+## Database (`DATABASE_URL`)
 
-1. Open the app → Login screen → gear icon → "API server".
-2. Paste the `/exec` URL of the *gateway* deployment (`…/s/<SCRIPT_ID>/exec`).
-3. Enter the device token issued above.
-4. Pick Founder or Staff surface.
+Schema lives in `db/schema.sql`; seed data in `db/seed.sql`; one-time real-data
+import in `db/academyos_import.sql`. `db/apply.mjs` applies all three idempotently
+on boot (`prestart`). Manual run against a fresh database:
 
-The URL + token persist on the device (`shared_preferences`).
+```
+psql "$DATABASE_URL" -f db/schema.sql
+psql "$DATABASE_URL" -f db/seed.sql
+```
 
-## 3. What the app covers today (v1.0.0)
+## API key surfaces (Flutter side)
 
-**Founder surface**
-- Home: collections, fee buckets, recent receipts
-- Students: search + profile + receipts history
-- Add Student (checked founder path → draft+merge)
-- Add Fee (server-authoritative `api_addFeePayment`)
-- Receipts (search + detail)
-- Teachers (list + add)
-- Expenses (record + cashbook)
+- Production RPC URL is set in `lib/config.dart` (`founderExecUrl` / `staffExecUrl`).
+- Login screen accepts a custom gateway URL (validated: https + `/api/rpc`, rejects
+  placeholders and legacy Google URLs).
+- The device token is stored in **secure storage** (`lib/core/session_storage.dart`),
+  never SharedPreferences, never logged.
 
-**Staff surface**
-- Branch gate (Goregaon / Kandivali), branch-isolated reads
-- Today (task cards from `api_staff_todaysTasks`)
-- Students (search + profile), Add Student → draft for founder merge
-- Attendance (roster + mark)
-- Add Fee (draft → routine self-serve or founder approval)
-- Expenses (draft → founder approval)
-- Inquiries (quick add + follow-up queue)
-- Receipts (branch-isolated)
+## Build commands
 
-## 4. Build the APK
-
-```sh
+```
+# Flutter app
 flutter pub get
 flutter analyze
 flutter test
 flutter build apk --release
-# output: build/app/outputs/flutter-apk/app-release.apk
+
+# Backend
+npm install
+npm run typecheck
+npm run build
+node --experimental-strip-types --test test/rpc_authorization.test.ts
 ```
 
-### Android release signing
+## Security model
 
-Development builds sign with the debug key so `flutter build apk --release`
-works out of the box. For a distributable release supply a real keystore:
-
-1. Generate one (never commit it):
-   `keytool -genkey -v -keystore keystore/release.jks -alias swar-mangal -keyalg RSA -keysize 2048 -validity 10000`
-2. Create `android/key.properties` (git-ignored):
-   ```
-   storePassword=<...>
-   keyPassword=<...>
-   keyAlias=swar-mangal
-   storeFile=../keystore/release.jks
-   ```
-3. `flutter build apk --release` then signs with the real keystore.
-
-`android/key.properties` and `keystore/` are git-ignored — secrets never ship.
-
-## 5. Security notes (read before issuing tokens)
-
-- A `STAFF_OPS` token cannot ship money: the gateway routes its calls only to
-  staff *draft* endpoints. None of them writes STUDENTS/STUDENT_RECEIPTS
-  directly; founder approval keeps the existing bar.
-- A `FOUNDER_ADMIN` token is equivalent to the founder account on that device:
-  it can record receipts and expenses. Issue only to devices Sharvil owns.
-- Never log tokens. The app posts them in the request body; Apps Script does
-  not echo them back.
-- Revoke by flipping `Status` in `MOBILE_ACCESS` to `DISABLED` — takes effect
-  immediately (the gateway re-reads the tab per request).
+- Backend is authoritative for role, branches, permissions and identity.
+- Stored device token is only a cached credential; validation happens server-side.
+- Tokens are never logged, never included in exception messages, never persisted
+  in shared preferences.

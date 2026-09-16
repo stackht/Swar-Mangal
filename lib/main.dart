@@ -7,6 +7,7 @@ import 'screens/founder/founder_shell.dart';
 import 'screens/staff/staff_shell.dart';
 import 'state/auth_provider.dart';
 import 'state/sync_manager.dart';
+import 'widgets/music_mark.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +34,7 @@ class AcademyApp extends StatelessWidget {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: theme.mode,
-          home: const SyncBinder(child: Gate()),
+          home: const SyncBinder(child: StartupGate()),
         ),
       ),
     );
@@ -70,16 +71,136 @@ class _SyncBinderState extends State<SyncBinder> {
   }
 }
 
-/// Routes between the login screen and the two app surfaces based on which
-/// role the backend reported at login.
-class Gate extends StatelessWidget {
-  const Gate({super.key});
+/// Part 7 — startup gate. Runs session restoration once, then routes:
+///   restoring → splash/loading
+///   no session → LoginScreen
+///   founder    → FounderShell
+///   staff      → StaffShell
+///   temporary network failure (restore error, session still stored) → Retry
+class StartupGate extends StatefulWidget {
+  const StartupGate({super.key});
+
+  @override
+  State<StartupGate> createState() => _StartupGateState();
+}
+
+class _StartupGateState extends State<StartupGate> {
+  bool _restored = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ensureRestore();
+  }
+
+  void _ensureRestore() {
+    final auth = context.read<AuthProvider>();
+    if (_restored || auth.restoring || auth.isLoggedIn) return;
+    _restored = true;
+    auth.restoreSession();
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    if (!auth.isLoggedIn) return const LoginScreen();
-    if (auth.isFounder) return const FounderShell();
-    return const StaffShell();
+
+    // Still restoring → splash/loading, never flash login.
+    if (auth.restoring) return const _Splash();
+    if (auth.isLoggedIn) {
+      if (auth.isFounder) return const FounderShell();
+      return const StaffShell();
+    }
+    // No stored token → normal login.
+    if (auth.error == null) return const LoginScreen();
+    // Restore attempted but failed. If a token is still stored (network
+    // issue), show Retry. If explicitly invalidated, AuthProvider cleared
+    // the token → login. Distinguish by whether a session could still exist.
+    return _RestoreError(
+      onRetry: () {
+        final a = context.read<AuthProvider>();
+        // A retry only makes sense if we still hold a credential to retry with.
+        _restored = false;
+        a.clearError();
+        Future.microtask(_ensureRestore);
+      },
+    );
+  }
+}
+
+class _Splash extends StatelessWidget {
+  const _Splash();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.music_note, size: 38, color: scheme.primary),
+            ),
+            const SizedBox(height: 28),
+            WaveformMark(active: true, height: 20, color: scheme.primary),
+            const SizedBox(height: 12),
+            Text('Swar Mangal', style: AppType.eyebrow.copyWith(color: scheme.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RestoreError extends StatelessWidget {
+  const _RestoreError({required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_off_outlined, size: 44, color: scheme.error),
+                const SizedBox(height: 16),
+                Text('Connecting to Swar Mangal failed.',
+                    style: AppType.body.copyWith(color: scheme.onSurface)),
+                const SizedBox(height: 8),
+                Text('Check your network, then retry.',
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    // Sign out (keeps credentials) → login screen.
+                    context.read<AuthProvider>().logout();
+                  },
+                  child: const Text('Use another account'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -1,4 +1,4 @@
-// Plain data models mirroring the Apps Script `api_*` response shapes.
+// Plain data models mirroring the Railway RPC `api_*` response shapes.
 // All parsing is defensive: unknown/missing fields fall back to '' or 0.
 
 String _s(dynamic v) => v == null ? '' : v.toString();

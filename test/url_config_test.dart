@@ -3,33 +3,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:swar_mangal/core/url_config.dart';
 
 void main() {
-  group('ExecUrlValidator', () {
+  group('RpcUrlValidator', () {
     test('rejects placeholder URLs', () {
-      final r = ExecUrlValidator.validate(
+      final r = RpcUrlValidator.validate(
           'https://script.google.com/macros/s/REPLACE_WITH_FOUNDER_SCRIPT_ID/exec');
       expect(r.ok, isFalse);
       expect(r.error, contains('placeholder'));
     });
 
     test('rejects malformed URL (not https)', () {
-      final r = ExecUrlValidator.validate('http://example.com/api/rpc');
+      final r = RpcUrlValidator.validate('http://example.com/api/rpc');
       expect(r.ok, isFalse);
     });
 
     test('rejects URL with spaces', () {
-      final r = ExecUrlValidator.validate('https://exa mple.com/api/rpc');
+      final r = RpcUrlValidator.validate('https://exa mple.com/api/rpc');
       expect(r.ok, isFalse);
     });
 
     test('accepts valid /api/rpc URL', () {
       final r =
-          ExecUrlValidator.validate('https://swarmangal-app-production.up.railway.app/api/rpc');
+          RpcUrlValidator.validate('https://swarmangal-app-production.up.railway.app/api/rpc');
       expect(r.ok, isTrue);
       expect(r.url, 'https://swarmangal-app-production.up.railway.app/api/rpc');
     });
 
     test('trims surrounding whitespace', () {
-      final r = ExecUrlValidator.validate('  https://example.com/api/rpc  ');
+      final r = RpcUrlValidator.validate('  https://example.com/api/rpc  ');
       expect(r.ok, isTrue);
       expect(r.url, 'https://example.com/api/rpc');
     });

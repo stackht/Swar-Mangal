@@ -14,7 +14,7 @@ import '../services/api_service.dart';
 ///   → if any differ, this manager advertises which entities changed
 ///   → affected screens reload ONLY those entities (via [SyncAware]).
 ///
-/// Transport is revision polling, not a push channel: the Apps Script backend
+/// Transport is revision polling, not a push channel: the Railway gateway
 /// has no websocket, so we deliberately call this NEAR-REAL-TIME (mandate
 /// §"near-real-time synchronization" wording).
 class SyncManager extends ChangeNotifier {

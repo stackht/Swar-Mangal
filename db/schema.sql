@@ -605,3 +605,35 @@ alter table students_acad add column if not exists cycle_end date;
 alter table students_acad add column if not exists last_payment_date date;
 
 create index if not exists idx_students_acad_next_due on students_acad (next_due_date);
+
+-- ============ DEVICE TOKENS + AUDIT TRAIL ============
+
+-- One row per issued device token. The token itself is never stored, only
+-- its SHA-256. Revoke a lost phone by setting revoked_at.
+create table if not exists device_tokens (
+  id text primary key,
+  token_hash text not null unique,
+  role text not null,
+  label text not null,
+  email text,
+  branches text,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  revoked_at timestamptz
+);
+
+-- Who did what. Ids only: no names, amounts or phone numbers.
+create table if not exists audit_log (
+  id bigserial primary key,
+  at timestamptz not null default now(),
+  actor_role text,
+  actor_email text,
+  device_label text,
+  fn text not null,
+  ok boolean not null,
+  code text,
+  branch text,
+  ref text
+);
+
+create index if not exists idx_audit_log_at on audit_log (at desc);

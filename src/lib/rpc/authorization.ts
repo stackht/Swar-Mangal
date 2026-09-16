@@ -182,8 +182,30 @@ export function roleAllowedBranches(role: RpcRole): string[] {
 
 /** Record-level scope handed to handlers (see scope.ts). */
 export function scopeForSession(session: RpcSession): BranchScope {
+  // A device token may carry its own allow-list; otherwise fall back to the
+  // role default (founder: all, staff: RPC_STAFF_BRANCHES).
+  if (session.role !== "FOUNDER_ADMIN" && session.branches?.length) {
+    return makeScope(session.branches);
+  }
   return makeScope(roleAllowedBranches(session.role));
 }
+
+/**
+ * Functions that change data. Used for the audit trail, and to decide what is
+ * worth recording; reads are not logged.
+ */
+export const WRITE_FUNCTIONS = new Set<string>([
+  "api_addStudent", "api_staff_saveStudentDraft", "api_founder_setStudentStatus", "api_founder_mergeStudentDraft",
+  "api_addFeePayment", "api_staff_prepareReceiptDraft",
+  "api_founder_paymentDraftApprove", "api_founder_paymentDraftReject",
+  "api_founder_finalisePaymentDraft", "api_staff_finalisePaymentDraft",
+  "api_addTeacher", "api_updateTeacherStatus", "api_updateTeacherCompensation",
+  "api_addExpenseEntry", "api_staff_submitExpenseDraft",
+  "api_generateSchoolInvoice",
+  "api_timetableCreate", "api_timetableUpdate", "api_timetableDelete",
+  "api_staff_markAttendance", "api_staff_resolveTodaysClass", "api_staff_scheduleSession",
+  "api_staff_inquiryQuickAdd", "api_staff_inquiryTransition",
+]);
 
 /**
  * Resolve the branch implied by an RPC argument (branch/scope/entityId).

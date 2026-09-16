@@ -261,35 +261,110 @@ async function updateTeacherCompensation(arg: Record<string, unknown>): Promise<
   return ok({ changed: true, teacherId: id, oldPercentage: "", newPercentage: String(pct), effectiveFrom: s(arg["effectiveFrom"]) || "2026-07-01", reason: s(arg["reason"]), auditWritten: true, note: "compensation updated" });
 }
 
+/**
+ * Teacher payout preview for one month.
+ *
+ * The previous version joined receipts to attendance on student NAME and
+ * counted a receipt once per attendance row, so a student with twenty marked
+ * classes inflated their teacher's collection twentyfold (capped at an
+ * arbitrary 50 rows), and the requested month was ignored entirely.
+ *
+ * Now: a receipt counts once, is attributed through the student id it was
+ * written with, and only counts inside the requested month. Receipts that
+ * cannot be attributed are reported rather than silently dropped.
+ */
 async function payoutPreview(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const month = /^\d{4}-\d{2}$/.test(s(arg["month"])) ? s(arg["month"]) : todayIso().slice(0, 7);
+  const monthStart = `${month}-01`;
   const teachers = await acadTeachers();
-  const results: Record<string, unknown>[] = [];
-  for (const t of teachers) {
-    const rule = await queryOne<{ payout_type: string; percentage: string }>(`select payout_type, percentage from payout_rules where teacher_id = $1 order by id limit 1`, [t.id]);
+
+  const [links, receipts, rules] = await Promise.all([
+    query<{ teacher_id: string; student_id: string }>(
+      `select distinct teacher_id, student_id from attendance_acad
+       where coalesce(teacher_id,'') <> '' and coalesce(student_id,'') <> ''`,
+    ),
+    query<{ id: string; student_id: string | null; amount: string; branch: string | null }>(
+      `select id, student_id, amount, branch from receipts
+       where status <> 'VOID' and created_at >= $1::date and created_at < ($1::date + interval '1 month')`,
+      [monthStart],
+    ),
+    query<{ teacher_id: string; payout_type: string; percentage: string }>(
+      `select distinct on (teacher_id) teacher_id, payout_type, percentage from payout_rules order by teacher_id, id`,
+    ),
+  ]);
+
+  const studentsOf = new Map<string, Set<string>>();
+  const teachersOfStudent = new Map<string, Set<string>>();
+  for (const l of links) {
+    if (!studentsOf.has(l.teacher_id)) studentsOf.set(l.teacher_id, new Set());
+    studentsOf.get(l.teacher_id)!.add(l.student_id);
+    if (!teachersOfStudent.has(l.student_id)) teachersOfStudent.set(l.student_id, new Set());
+    teachersOfStudent.get(l.student_id)!.add(l.teacher_id);
+  }
+  const ruleOf = new Map(rules.map((r) => [r.teacher_id, r]));
+
+  const byStudent = new Map<string, { amount: number; count: number }>();
+  let unattributed = 0;
+  let unattributedAmount = 0;
+  for (const r of receipts) {
+    const sid = s(r.student_id);
+    if (!sid) {
+      unattributed++;
+      unattributedAmount += n(r.amount);
+      continue;
+    }
+    const cur = byStudent.get(sid) ?? { amount: 0, count: 0 };
+    cur.amount += n(r.amount);
+    cur.count += 1;
+    byStudent.set(sid, cur);
+  }
+
+  const results = teachers.map((t) => {
+    const rule = ruleOf.get(t.id);
     const pct = n(rule?.percentage);
-    const receipts = await query<{ amount: string }>(
-      `select r.amount from receipts r join attendance_acad a on a.teacher_id = $1 where r.party_name = a.student_name order by r.id desc limit 50`,
-      [t.id],
-    );
-    const totalCollection = receipts.reduce((a, r) => a + n(r.amount), 0);
-    const share = totalCollection * (pct / 100);
-    results.push({
+    let totalCollection = 0;
+    let receiptCount = 0;
+    let sharedStudents = 0;
+    for (const sid of studentsOf.get(t.id) ?? []) {
+      const agg = byStudent.get(sid);
+      if (!agg) continue;
+      totalCollection += agg.amount;
+      receiptCount += agg.count;
+      if ((teachersOfStudent.get(sid)?.size ?? 1) > 1) sharedStudents++;
+    }
+    const share = Math.round(totalCollection * (pct / 100) * 100) / 100;
+    return {
       teacherId: t.id,
       teacherName: t.name,
-      month: s(arg["month"] ?? new Date().toISOString().slice(0, 7)),
+      month,
       entityId: "ENT-KANDIVALI",
-      receiptCount: receipts.length,
+      receiptCount,
       totalCollection,
+      sharePercent: pct,
       totalTeacherShare: share,
       payable: share,
       alreadyPaid: 0,
       balance: share,
-      status: share === 0 ? "UNPAID" : "PARTIAL",
+      // No payments-made ledger exists yet, so nothing can be marked settled.
+      status: "UNPAID",
+      // Students taught by more than one teacher: their fees count for each,
+      // so these rows need a human decision before money moves.
+      sharedStudents,
+      missingRule: rule == null,
       preCutover: false,
-      note: "",
-    });
-  }
-  return ok({ results, note: "standalone payout preview (server-computed)" });
+      note: rule == null ? "No payout rule set for this teacher" : "",
+    };
+  });
+
+  return ok({
+    results,
+    month,
+    // Receipts inside the month that carry no student link (older rows), so
+    // the totals above can be reconciled against the cashbook.
+    unattributedReceipts: unattributed,
+    unattributedAmount,
+    note: "payout preview computed from receipts in the month, one receipt counted once",
+  });
 }
 
 // ------------------------------------------------------- cashbook / expenses

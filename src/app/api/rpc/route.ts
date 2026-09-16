@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateToken } from "@/lib/rpc/auth";
 import { rpcDispatch } from "@/lib/rpc/handlers";
 import { dispatch2 } from "@/lib/rpc/handlers2";
-import { authorizeRpc, authorizeBranch, scopeForSession } from "@/lib/rpc/authorization";
-import { isDbConfigured } from "@/lib/db";
+import { authorizeRpc, authorizeBranch, scopeForSession, WRITE_FUNCTIONS } from "@/lib/rpc/authorization";
+import { isDbConfigured, query } from "@/lib/db";
+import { impliedBranch } from "@/lib/rpc/authorization";
+import type { RpcSession } from "@/lib/rpc/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +20,50 @@ const rpcOkResponse = (body: Record<string, unknown>) => {
 
 const rpcError = (code: string, message: string) =>
   rpcOkResponse({ ok: false, code, error: message });
+
+// Ids only — never names, amounts or phone numbers.
+const REF_KEYS = ["receiptNo", "draftId", "studentId", "teacherId", "invoiceId", "invoiceNo", "entryId", "inquiryId", "eventId", "id"];
+
+function refOf(result: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const k of REF_KEYS) {
+    const v = result[k];
+    if (typeof v === "string" && v) parts.push(`${k}=${v}`);
+    const entry = result["entry"];
+    if (k === "id" && entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).id === "string") {
+      parts.push(`id=${(entry as Record<string, unknown>).id}`);
+    }
+  }
+  return parts.slice(0, 4).join(" ");
+}
+
+/** Audit trail for writes. Never fails the request. */
+async function recordAudit(
+  session: RpcSession,
+  fn: string,
+  arg: Record<string, unknown>,
+  result: Record<string, unknown>,
+) {
+  if (!WRITE_FUNCTIONS.has(fn)) return;
+  try {
+    await query(
+      `insert into audit_log (actor_role, actor_email, device_label, fn, ok, code, branch, ref)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        session.role,
+        session.email,
+        session.deviceLabel,
+        fn,
+        result["ok"] === true,
+        typeof result["code"] === "string" ? result["code"] : null,
+        impliedBranch(arg) || null,
+        refOf(result) || null,
+      ],
+    );
+  } catch {
+    console.error(`[audit-write-failed] fn=${fn}`);
+  }
+}
 
 function logDeny(sessionEmail: string, role: string, fn: string, code: string, branch: string) {
   // SAFE logging: no token, no password, no payload, no PII.
@@ -61,7 +107,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- authenticate ----
-  const session = authenticateToken(token);
+  const session = await authenticateToken(token);
   if (!session) {
     return rpcError("AUTH_FAILED", "Invalid or missing token");
   }
@@ -91,6 +137,7 @@ export async function POST(req: NextRequest) {
   try {
     const handler = inHandlers1.includes(functionName) ? rpcDispatch : dispatch2;
     const result = await handler(session.role, functionName, argMap, scopeForSession(session));
+    await recordAudit(session, functionName, argMap, result);
     return rpcOkResponse(result);
   } catch (e) {
     // Log the failure type only: no payload, token or stack (may carry PII).

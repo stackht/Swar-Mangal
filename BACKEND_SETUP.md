@@ -100,6 +100,30 @@ npm run build
 node --experimental-strip-types --test backend-tests/*.test.ts
 ```
 
+## Device tokens and the audit trail
+
+A token resolves in two steps: the shared env tokens
+(`RPC_FOUNDER_TOKEN` / `RPC_STAFF_TOKEN`), then the `device_tokens` table —
+one row per phone, which can be revoked without a redeploy and can carry its
+own branch allow-list (overriding `RPC_STAFF_BRANCHES` for that device).
+Only the SHA-256 of a token is stored, so a database backup cannot be replayed
+against the gateway.
+
+```bash
+node db/mint_device_token.mjs "Latika Pixel" OPS_USER KANDIVALI  # prints the token once
+node db/mint_device_token.mjs --list
+node db/mint_device_token.mjs --revoke DEV-XXXX                  # effective immediately
+```
+
+Every write (the `WRITE_FUNCTIONS` set in `authorization.ts`) is recorded in
+`audit_log`: when, which role and device, the function, whether it succeeded,
+the branch and the record ids involved. Ids only — no names, amounts or phone
+numbers. A failed audit insert never fails the request.
+
+```sql
+select at, device_label, fn, ok, code, ref from audit_log order by at desc limit 20;
+```
+
 ## Fee cycles and due dates
 
 Each student carries their own fee plan on `students_acad`: `fee_plan_name`,

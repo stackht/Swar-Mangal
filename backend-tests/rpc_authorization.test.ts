@@ -48,22 +48,24 @@ test("authorizeRpc: staff -> api_addTeacher ROLE_FORBIDDEN", () => {
   assert.equal(r.code, "ROLE_FORBIDDEN");
 });
 
-test("authorizeRpc: staff -> api_timetableCreate ROLE_FORBIDDEN", () => {
+test("authorizeRpc: staff -> api_timetableCreate ALLOWED", () => {
   const r = authorizeRpc(staff, "api_timetableCreate");
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "ROLE_FORBIDDEN");
+  assert.equal(r.ok, true);
 });
 
-test("authorizeRpc: staff -> api_timetableUpdate ROLE_FORBIDDEN", () => {
+test("authorizeRpc: staff -> api_timetableUpdate ALLOWED", () => {
   const r = authorizeRpc(staff, "api_timetableUpdate");
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "ROLE_FORBIDDEN");
+  assert.equal(r.ok, true);
 });
 
-test("authorizeRpc: staff -> api_timetableDelete ROLE_FORBIDDEN", () => {
+test("authorizeRpc: staff -> api_timetableDelete ALLOWED", () => {
   const r = authorizeRpc(staff, "api_timetableDelete");
-  assert.equal(r.ok, false);
-  assert.equal(r.code, "ROLE_FORBIDDEN");
+  assert.equal(r.ok, true);
+});
+
+test("authorizeRpc: staff -> api_generateSchoolInvoice ALLOWED", () => {
+  const r = authorizeRpc(staff, "api_generateSchoolInvoice");
+  assert.equal(r.ok, true);
 });
 
 test("authorizeRpc: staff -> founder approval endpoint ROLE_FORBIDDEN", () => {

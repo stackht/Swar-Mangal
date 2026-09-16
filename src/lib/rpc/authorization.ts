@@ -85,16 +85,17 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   api_addExpenseEntry: FOUNDER,
 
   // ------------------------------------------------------- school invoices
-  api_generateSchoolInvoice: FOUNDER, // invoice = money document
-  api_listSchoolInvoices: FOUNDER,
-  api_getSchoolInvoice: FOUNDER,
+  // Shared across roles: staff can also generate/read school invoices.
+  api_generateSchoolInvoice: STAFF, // invoice = money document
+  api_listSchoolInvoices: STAFF,
+  api_getSchoolInvoice: STAFF,
 
   // ------------------------------------------------------------ timetable
-  // Staff reads (today's classes); only founder edits.
+  // Shared across roles: staff reads + edits (add/edit enables both shells).
   api_timetableList: STAFF,
-  api_timetableCreate: FOUNDER,
-  api_timetableUpdate: FOUNDER,
-  api_timetableDelete: FOUNDER,
+  api_timetableCreate: STAFF,
+  api_timetableUpdate: STAFF,
+  api_timetableDelete: STAFF,
 
   // ------------------------------------------------------ attendance/today
   api_staff_attendanceRoster: STAFF,

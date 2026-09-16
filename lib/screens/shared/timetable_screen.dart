@@ -10,7 +10,7 @@ import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
 
 /// Branch timetable — day selector + per-day class cards, weekly view.
-/// Founder edits (add/edit/enable-disable/delete); staff read-only.
+/// Both roles edit (add/edit/enable-disable/delete).
 class TimetableScreen extends StatefulWidget {
   const TimetableScreen({super.key, required this.staff});
   final bool staff;
@@ -32,7 +32,7 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
   int _day = DateTime.now().weekday - 1; // ISO: 0=Mon
   bool _weekly = false;
 
-  bool get canEdit => !widget.staff && TimetablePolicy.canEdit(staff: widget.staff);
+  bool get canEdit => TimetablePolicy.canEdit(staff: widget.staff);
 
   @override
   void initState() {
@@ -50,7 +50,7 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
     try {
       final results = await Future.wait([
         auth.service!.timetableList(branch: auth.branch ?? 'ALL'),
-        if (widget.staff) Future.value(<Teacher>[]) else auth.service!.listTeachers(),
+        auth.service!.listTeachers(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -107,15 +107,6 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
             child: Text(_weekly ? 'Day view' : 'Weekly view',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
-          if (widget.staff)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Center(
-                child: Text('READ-ONLY',
-                    style: AppType.eyebrow.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 9)),
-              ),
-            ),
         ],
       ),
       floatingActionButton: canEdit

@@ -1233,7 +1233,7 @@ class TimetableValidator {
 class TimetablePolicy {
   TimetablePolicy._();
 
-  static bool canEdit({required bool staff}) => !staff;
+  static bool canEdit({required bool staff}) => true;
 }
 
 /// Result of `api_syncChanges`: current server revisions + change markers.

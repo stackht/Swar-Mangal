@@ -135,7 +135,7 @@ class _BodyState extends State<_Body> with SyncAware {
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: c.needsAttention ? () => _open(c.targetView) : null,
+        onTap: () => _open(c.targetView),
         child: Padding(
           padding: const EdgeInsets.all(AppSpace.s3),
           child: Column(
@@ -169,15 +169,24 @@ class _BodyState extends State<_Body> with SyncAware {
 
   void _open(String target) {
     // Tiles announce the view they would open; the shell switches to the
-    // closest staff nav destination.
+    // closest staff nav destination. Every card is clickable.
     final map = <String, String>{
       'students': 'students',
-      'myRequests': 'students',
+      'myRequests': 'requests',
+      'requests': 'requests',
       'comm': 'today',
       'terms': 'students',
       'extension': 'students',
-      'approvals': 'today',
+      'approvals': 'addFee',
       'inquiries': 'inquiries',
+      'attendance': 'attendance',
+      'receipts': 'receipts',
+      'expenses': 'expenses',
+      'teachers': 'teachers',
+      'timetable': 'timetable',
+      'todayClasses': 'todayClasses',
+      'fees': 'addFee',
+      'payments': 'receipts',
     };
     final key = map[target] ?? 'today';
     ShellNavigator.of(context).go(key);

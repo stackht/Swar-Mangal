@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../core/api.dart';
@@ -32,11 +31,13 @@ class SyncManager extends ChangeNotifier {
   Timer? _timer;
   AppLifecycleListener? _life;
   bool _enabled = false;
-  bool _inFlight = false;
   ApiService? _svc;
 
   /// Attach the live/demo API service (called by the app on login/logout).
+  /// A no-op when the same service is already attached, so the rebuilds that
+  /// follow every sync do not start another one.
   void attach(ApiService? service) {
+    if (identical(_svc, service)) return;
     _svc = service;
     if (service != null) _begin();
   }
@@ -92,7 +93,9 @@ class SyncManager extends ChangeNotifier {
     _begin();
   }
 
-  Future<void> syncNow() => _sync();
+  /// Awaits the sync that is already running, if any, so a caller that awaits
+  /// this always sees the finished state (it used to return immediately).
+  Future<void> syncNow() => _inFlightSync ?? _sync();
 
   void disposeSelf() {
     _stopTimer();
@@ -124,18 +127,30 @@ class SyncManager extends ChangeNotifier {
     await _sync();
   }
 
-  Future<void> _sync() async {
-    if (_inFlight) return;
+  Future<void> _sync() {
+    final running = _inFlightSync;
+    if (running != null) return running;
+    // Start on a microtask: a caller may be inside a build (e.g. a screen
+    // reacting to a branch change), and notifyListeners() during build throws.
+    final started = Future.microtask(_runSync);
+    _inFlightSync = started;
+    return started.whenComplete(() {
+      if (identical(_inFlightSync, started)) _inFlightSync = null;
+    });
+  }
+
+  Future<void>? _inFlightSync;
+
+  Future<void> _runSync() async {
     final svc = _svc;
     if (svc == null) {
       _state = SyncState.offline;
       notifyListeners();
       return;
     }
-    _inFlight = true;
     try {
       final res = await svc.syncChanges(branch: _branch, knownRevisions: _known);
-      _server..clear();
+      _server.clear();
       _server.addAll(res.revisions);
       _changed = _diff(_known, _server);
       _known.clear();
@@ -150,7 +165,6 @@ class SyncManager extends ChangeNotifier {
       _state = SyncState.syncError;
       _lastError = e.toString();
     } finally {
-      _inFlight = false;
       notifyListeners(); // any changed entities advertised here
     }
   }

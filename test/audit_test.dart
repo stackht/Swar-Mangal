@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +13,10 @@ Future<void> waitBeat(WidgetTester tester) async {
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    // Startup reads the device token from secure storage; with no mock the
+    // read never returns and StartupGate stays on the splash.
+    FlutterSecureStorage.setMockInitialValues({});
+    DemoApiClient.resetSharedState();
   });
 
   group('DemoApiClient — demo provenance (never pretends persistence)', () {

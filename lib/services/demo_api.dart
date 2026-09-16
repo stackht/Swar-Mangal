@@ -19,12 +19,45 @@ class DemoApiClient extends ApiClient {
   /// In-memory timetable, SHARED across all DemoApiClient instances in this
   /// process (simulates multiple sessions/devices seeing each other's edits).
   /// Seeded once from the Kandivali seed; founder edits are never reseeded.
-  List<TimetableEntry>? _timetable;
   static List<TimetableEntry>? _sharedTimetable;
 
   List<TimetableEntry> get _tt {
     _sharedTimetable ??= kandivaliTimetableSeed.map((e) => _clone(e)).toList();
     return _sharedTimetable!;
+  }
+
+  /// School invoices, SHARED like the timetable, so an invoice generated in
+  /// one session shows up in another's list.
+  static List<Map<String, dynamic>>? _sharedInvoices;
+
+  static List<Map<String, dynamic>> get _invoices {
+    _sharedInvoices ??= [
+      {
+        'invoiceNo': 'INV-DEMO-98000',
+        'invoiceDate': '2026-09-12',
+        'tenure': '6 Months',
+        'amount': 18000,
+        'invoiceId': 'SINV-DEMO-1',
+        'className': 'Keyboard',
+      },
+      {
+        'invoiceNo': 'INV-DEMO-97887',
+        'invoiceDate': '2026-06-10',
+        'tenure': '3 Months',
+        'amount': 9000,
+        'invoiceId': 'SINV-DEMO-2',
+        'className': 'Flute',
+      },
+    ];
+    return _sharedInvoices!;
+  }
+
+  /// Clears the process-wide demo store. Tests call this in setUp so one
+  /// test's writes cannot change what another test sees.
+  static void resetSharedState() {
+    _sharedTimetable = null;
+    _sharedInvoices = null;
+    revisions.updateAll((k, v) => 1);
   }
 
   static TimetableEntry _clone(TimetableEntry e) => TimetableEntry(
@@ -1229,9 +1262,20 @@ class DemoApiClient extends ApiClient {
 
   Map<String, dynamic> _schoolInvoice(Map<String, dynamic> a) {
     final no = 'INV-DEMO-${98000 + (a['amount'] as num).toInt()}';
+    final id = 'SINV-DEMO-${DateTime.now().microsecondsSinceEpoch}';
+    // Keep it in the shared store so api_listSchoolInvoices shows it.
+    _invoices.insert(0, {
+      'invoiceNo': no,
+      'invoiceDate': a['invoiceDate'] ?? '2026-09-12',
+      'tenure': a['tenure'] ?? '6 Months',
+      'amount': a['amount'] ?? 0,
+      'invoiceId': id,
+      'className': a['className'] ?? '',
+      'branch': a['branch'] ?? 'KANDIVALI',
+    });
     return {
       'ok': true,
-      'invoiceId': 'SINV-DEMO-${DateTime.now().microsecondsSinceEpoch}',
+      'invoiceId': id,
       'invoiceNo': no,
       'invoiceDate': a['invoiceDate'] ?? '2026-09-12',
       'branch': a['branch'] ?? 'KANDIVALI',
@@ -1247,24 +1291,7 @@ class DemoApiClient extends ApiClient {
   Map<String, dynamic> _schoolInvoicesList(Map<String, dynamic> a) {
     return {
       'ok': true,
-      'invoices': [
-        {
-          'invoiceNo': 'INV-DEMO-98000',
-          'invoiceDate': '2026-09-12',
-          'tenure': '6 Months',
-          'amount': 18000,
-          'invoiceId': 'SINV-DEMO-1',
-          'className': 'Keyboard',
-        },
-        {
-          'invoiceNo': 'INV-DEMO-97887',
-          'invoiceDate': '2026-06-10',
-          'tenure': '3 Months',
-          'amount': 9000,
-          'invoiceId': 'SINV-DEMO-2',
-          'className': 'Flute',
-        },
-      ],
+      'invoices': _invoices.map((e) => Map<String, dynamic>.from(e)).toList(),
     };
   }
 

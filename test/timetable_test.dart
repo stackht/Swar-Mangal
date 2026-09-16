@@ -4,6 +4,8 @@ import 'package:swar_mangal/models/models.dart';
 import 'package:swar_mangal/services/demo_api.dart';
 
 void main() {
+  setUp(DemoApiClient.resetSharedState);
+
   group('Seed — exact Kandivali timetable', () {
     test('total entries across the week', () {
       expect(kandivaliTimetableSeed.length, 25);

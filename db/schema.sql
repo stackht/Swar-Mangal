@@ -575,3 +575,19 @@ create table if not exists schema_migrations (
   id text primary key,
   applied_at timestamptz not null default now()
 );
+
+-- Receipt timestamp: the app used to derive a "date" from the row id.
+alter table receipts add column if not exists created_at timestamptz;
+
+-- Revision counters powering api_syncChanges. Bumped by every write handler;
+-- clients poll for the entities whose revision moved.
+create table if not exists entity_revisions (
+  entity text primary key,
+  revision bigint not null default 1,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_receipts_student on receipts (student_id);
+create index if not exists idx_receipts_party on receipts (party_name);
+create index if not exists idx_attendance_acad_student on attendance_acad (student_id);
+create index if not exists idx_money_ledger_entry_date on money_ledger (entry_date);

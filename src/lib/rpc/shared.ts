@@ -43,6 +43,47 @@ export async function nextDocNo(tx: Tx, kind: keyof typeof DOC_SOURCES, series: 
   return formatDocNo(series, Number(row!.last_no));
 }
 
+// --------------------------------------------------------------------------
+// revision counters (api_syncChanges)
+// --------------------------------------------------------------------------
+
+/** Entities the Flutter clients track. Keep in sync with SyncManager. */
+export const SYNC_ENTITIES = [
+  "students", "receipts", "teachers", "payments", "expenses", "invoices", "timetable",
+  "attendance", "inquiries", "approvals", "sessions", "dashboard", "tasks", "payouts",
+] as const;
+
+export type SyncEntity = (typeof SYNC_ENTITIES)[number];
+
+/**
+ * Bump the revision of each entity a write touched, so polling clients
+ * reload exactly those. Never throws: a failed bump must not fail the write
+ * (the next successful bump, or a client restart, catches the change up).
+ */
+export async function bumpRevisions(entities: SyncEntity[], tx?: Tx): Promise<void> {
+  if (!entities.length) return;
+  const run = tx ? tx.query.bind(tx) : query;
+  try {
+    await run(
+      `insert into entity_revisions (entity, revision) select unnest($1::text[]), 1
+       on conflict (entity) do update set revision = entity_revisions.revision + 1, updated_at = now()`,
+      [entities],
+    );
+  } catch (e) {
+    console.error(`[revision-bump-failed] entities=${entities.join(",")}`);
+  }
+}
+
+export async function currentRevisions(): Promise<Record<string, number>> {
+  const rows = await query<{ entity: string; revision: string }>(`select entity, revision from entity_revisions`);
+  // An entity never written to is 0, so the very first bump (which inserts 1)
+  // still reads as a change to a client that synced before it.
+  const out: Record<string, number> = {};
+  for (const e of SYNC_ENTITIES) out[e] = 0;
+  for (const r of rows) out[r.entity] = Number(r.revision) || 0;
+  return out;
+}
+
 export interface AcadStudent {
   id: string;
   name: string;
@@ -121,21 +162,73 @@ export interface StudentRpc {
   teacherId?: string;
 }
 
-export async function studentToRpc(x: AcadStudent): Promise<StudentRpc> {
-  let teacherName = "";
-  const g = await query<{ teacher_name: string }>(
-    `select distinct teacher_name from attendance_acad where student_id = $1 and teacher_name <> '' limit 1`,
-    [x.id],
+interface StudentSideData {
+  teacherName: string;
+  teacherId: string;
+  lastReceiptNo: string;
+  lastReceiptAmount: string;
+}
+
+/**
+ * Teacher + last receipt for many students in a fixed number of queries.
+ * Doing this per student cost two round trips each (~700 for a full list).
+ */
+async function sideDataFor(xs: AcadStudent[]): Promise<Map<string, StudentSideData>> {
+  const out = new Map<string, StudentSideData>();
+  if (!xs.length) return out;
+  const ids = xs.map((x) => x.id);
+  const names = xs.map((x) => x.name);
+  const blank = (): StudentSideData => ({ teacherName: "", teacherId: "", lastReceiptNo: "", lastReceiptAmount: "" });
+  for (const x of xs) out.set(x.id, blank());
+
+  const teachers = await query<{ student_id: string; teacher_name: string | null; teacher_id: string | null }>(
+    `select student_id,
+            (array_agg(teacher_name) filter (where coalesce(teacher_name,'') <> ''))[1] as teacher_name,
+            (array_agg(teacher_id)   filter (where coalesce(teacher_id,'')   <> ''))[1] as teacher_id
+     from attendance_acad where student_id = any($1) group by student_id`,
+    [ids],
   );
-  if (g.length) teacherName = g[0].teacher_name;
-  // Prefer the linked student id; fall back to the name only for legacy,
-  // unlinked rows (two students sharing a name must not share receipts).
-  const last = await queryOne<{ receipt_no: string; amount: string }>(
-    `select receipt_no, amount from receipts
-     where student_id = $1 or (student_id is null and party_name = $2)
-     order by id desc limit 1`,
-    [x.id, x.name],
+  for (const t of teachers) {
+    const row = out.get(t.student_id);
+    if (row) {
+      row.teacherName = s(t.teacher_name);
+      row.teacherId = s(t.teacher_id);
+    }
+  }
+
+  const linked = await query<{ student_id: string; receipt_no: string; amount: string }>(
+    `select distinct on (student_id) student_id, receipt_no, amount from receipts
+     where student_id = any($1) order by student_id, id desc`,
+    [ids],
   );
+  for (const r of linked) {
+    const row = out.get(r.student_id);
+    if (row) {
+      row.lastReceiptNo = s(r.receipt_no);
+      row.lastReceiptAmount = String(n(r.amount));
+    }
+  }
+
+  // Legacy rows that were never linked to a student id, matched by name.
+  const byName = await query<{ party_name: string; receipt_no: string; amount: string }>(
+    `select distinct on (party_name) party_name, receipt_no, amount from receipts
+     where student_id is null and party_name = any($1) order by party_name, id desc`,
+    [names],
+  );
+  const nameMap = new Map(byName.map((r) => [r.party_name, r]));
+  for (const x of xs) {
+    const row = out.get(x.id)!;
+    if (row.lastReceiptNo) continue;
+    const r = nameMap.get(x.name);
+    if (r) {
+      row.lastReceiptNo = s(r.receipt_no);
+      row.lastReceiptAmount = String(n(r.amount));
+    }
+  }
+  return out;
+}
+
+function composeStudentRpc(x: AcadStudent, side: StudentSideData): StudentRpc {
   const status = s(x.status).toUpperCase();
   return {
     studentId: x.id,
@@ -143,7 +236,8 @@ export async function studentToRpc(x: AcadStudent): Promise<StudentRpc> {
     phone: s(x.phone),
     email: s(x.email),
     instrument: s(x.instrument),
-    teacher: teacherName,
+    teacher: side.teacherName,
+    teacherId: side.teacherId,
     classCode: (s(x.branch) || "KANDIVALI").toUpperCase(),
     className: s(x.branch) === "GOREGAON" ? "Goregaon Music Class" : "Kandivali Music Class",
     location: s(x.branch).toUpperCase(),
@@ -153,10 +247,21 @@ export async function studentToRpc(x: AcadStudent): Promise<StudentRpc> {
     feeDueDay: "",
     nextDueDate: "",
     feeStatus: status.startsWith("ACTIVE") ? "PAID" : status === "LEFT" ? "INACTIVE" : status === "DUPLICATE" ? "ACTIVE" : "DUE_SOON",
-    lastReceiptNo: last?.receipt_no ?? "",
-    lastReceiptAmount: last ? String(n(last.amount)) : "",
+    lastReceiptNo: side.lastReceiptNo,
+    lastReceiptAmount: side.lastReceiptAmount,
     status,
   };
+}
+
+/** Batch version of studentToRpc — use this for any list. */
+export async function studentsToRpc(xs: AcadStudent[]): Promise<StudentRpc[]> {
+  const side = await sideDataFor(xs);
+  return xs.map((x) => composeStudentRpc(x, side.get(x.id)!));
+}
+
+/** Single-student convenience wrapper. Prefer studentsToRpc for lists. */
+export async function studentToRpc(x: AcadStudent): Promise<StudentRpc> {
+  return (await studentsToRpc([x]))[0];
 }
 
 export function feeCycleFromPlan(plan: string): string {

@@ -1,6 +1,6 @@
 import { query, queryOne, withTransaction, type Tx } from "@/lib/db";
 import { RpcRole } from "@/lib/rpc/auth";
-import { s, n, d, newId, nextDocNo, acadStudents, acadStudentById, studentToRpc, classSummary } from "@/lib/rpc/shared";
+import { s, n, d, newId, nextDocNo, bumpRevisions, acadStudents, acadStudentById, studentToRpc, studentsToRpc, classSummary } from "@/lib/rpc/shared";
 import { receiptSeries } from "@/lib/rpc/numbering";
 import {
   ALL_BRANCHES,
@@ -112,17 +112,15 @@ async function studentsSearch(arg: Record<string, unknown>, scope: BranchScope):
   const branch = s(arg["branch"] ?? "ALL");
   const cc = s(arg["classCode"] ?? "ALL").toUpperCase();
   const all = await acadStudents(q);
-  const rows: Record<string, unknown>[] = [];
-  for (const x of all) {
-    if (!inScope(scope, x.branch)) continue;
-    if (!matchesRequestedBranch(branch, x.branch)) continue;
-    if (cc !== "ALL") {
-      const isGmc = cc === "GMC" && recordBranch(x.branch) === "GOREGAON";
-      const isKmc = cc === "KMC" && recordBranch(x.branch) !== "GOREGAON";
-      if (!isGmc && !isKmc) continue;
-    }
-    rows.push((await studentToRpc(x)) as unknown as Record<string, unknown>);
-  }
+  const matching = all.filter((x) => {
+    if (!inScope(scope, x.branch)) return false;
+    if (!matchesRequestedBranch(branch, x.branch)) return false;
+    if (cc === "ALL") return true;
+    const isGmc = cc === "GMC" && recordBranch(x.branch) === "GOREGAON";
+    const isKmc = cc === "KMC" && recordBranch(x.branch) !== "GOREGAON";
+    return isGmc || isKmc;
+  });
+  const rows = (await studentsToRpc(matching)) as unknown as Record<string, unknown>[];
   return ok({ results: rows, rows, count: rows.length });
 }
 
@@ -135,8 +133,8 @@ async function studentProfile(arg: Record<string, unknown>, scope: BranchScope):
   const st = await studentToRpc(x);
   const receipts = await recentReceipts(id, x.name);
   return ok({
-    student: { ...st, teacherId: await teacherIdOf(x.id), teacherName: st.teacher, branch: s(x.branch).toUpperCase() },
-    teacher: { teacherId: await teacherIdOf(x.id), teacherName: st.teacher },
+    student: { ...st, teacherName: st.teacher, branch: s(x.branch).toUpperCase() },
+    teacher: { teacherId: st.teacherId ?? "", teacherName: st.teacher },
     receipts,
     attendance: [],
   });
@@ -201,6 +199,7 @@ async function addStudent(arg: Record<string, unknown>, scope: BranchScope): Pro
       s(arg["notes"]),
     ],
   );
+  await bumpRevisions(["students", "dashboard", "tasks"]);
   return ok({ studentId: id, studentName: name, duplicateWarning: { hasDuplicates: false }, note: "student created" });
 }
 
@@ -216,6 +215,7 @@ async function saveStudentDraft(arg: Record<string, unknown>, scope: BranchScope
      on conflict (id) do nothing`,
     [id, name, s(arg["parentName"] ?? arg["guardianName"]), s(arg["phone"]), s(arg["email"]), s(arg["instrument"] ?? arg["course"]) || "Music", branch, s(arg["batch"]), s(arg["feeCycleType"] ?? arg["planType"]), s(arg["notes"])],
   );
+  await bumpRevisions(["students", "dashboard", "tasks"]);
   return ok({ studentId: id, studentName: name, duplicateWarning: { hasDuplicates: false }, note: "student draft saved→active" });
 }
 
@@ -228,6 +228,7 @@ async function setStudentStatus(arg: Record<string, unknown>): Promise<Record<st
   if (!before) return { ok: false, code: "NOT_FOUND", error: `No student ${id}` };
   await query("update students_acad set status = $1, notes = coalesce(notes,'') || '[' || $2 || ']' where id = $3", [status.toUpperCase(), reason, id]);
   const after = await acadStudentById(id);
+  await bumpRevisions(["students", "dashboard"]);
   return ok({
     changed: true,
     studentId: id,
@@ -257,13 +258,13 @@ const entityOf = (branch: unknown) => (recordBranch(branch) === "GOREGAON" ? "EN
 
 async function recentReceipts(studentId: string, name: string): Promise<Record<string, unknown>[]> {
   const rows = await query<Record<string, unknown>>(
-    `select id, receipt_no, amount, status, payment_mode, linked_url, branch from receipts
+    `select id, receipt_no, amount, status, payment_mode, linked_url, branch, created_at::text from receipts
      where student_id = $1 or (student_id is null and party_name = $2) order by id desc limit 20`,
     [studentId, name],
   );
   return rows.map((r) => ({
     receiptNo: s(r.receipt_no),
-    date: d(r.id),
+    date: d(r.created_at),
     student: name,
     amount: n(r.amount),
     mode: s(r.payment_mode),
@@ -281,7 +282,7 @@ async function recentReceipts(studentId: string, name: string): Promise<Record<s
 async function searchReceipts(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const q = s(arg["q"] ?? arg["studentName"] ?? arg["receiptNo"] ?? "");
   const status = s(arg["status"]);
-  let sql = `select id, receipt_no, party_name, amount, payment_mode, linked_url, status, branch from receipts where 1=1`;
+  let sql = `select id, receipt_no, party_name, amount, payment_mode, linked_url, status, branch, created_at::text from receipts where 1=1`;
   const params: unknown[] = [];
   if (status) {
     params.push(status);
@@ -290,7 +291,7 @@ async function searchReceipts(arg: Record<string, unknown>, scope: BranchScope):
   const rows = (await query<Record<string, unknown>>(sql, params)).filter((r) => moneyInScope(scope, r.branch));
   let filtered = rows.map((r) => ({
     receiptNo: s(r.receipt_no),
-    date: d(r.id),
+    date: d(r.created_at),
     student: s(r.party_name),
     studentName: s(r.party_name),
     amount: n(r.amount),
@@ -339,8 +340,8 @@ async function writeReceipt(
     [ledgerId, p.studentName, p.description(receiptNo), p.amount, p.mode, p.branch || null],
   );
   await tx.query(
-    `insert into receipts (id, receipt_no, party_name, amount, payment_mode, status, record_id, student_id, branch)
-     values ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8)`,
+    `insert into receipts (id, receipt_no, party_name, amount, payment_mode, status, record_id, student_id, branch, created_at)
+     values ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7, $8, now())`,
     [newId("REC"), receiptNo, p.studentName, p.amount, p.mode, ledgerId, p.studentId || null, p.branch || null],
   );
   return receiptNo;
@@ -362,6 +363,7 @@ async function addFeePayment(arg: Record<string, unknown>): Promise<Record<strin
       description: (no) => `Fee receipt ${no}`,
     }),
   );
+  await bumpRevisions(["receipts", "payments", "students", "dashboard"]);
   return ok({ ok: true, receiptNo, note: "receipt created" });
 }
 
@@ -380,6 +382,7 @@ async function prepareReceiptDraft(arg: Record<string, unknown>, scope: BranchSc
      values ($1, 'SUBMITTED', $2, $3, $4, $5, $6, '', false)`,
     [draftId, sid, studentName, amount, s(arg["paymentMode"] ?? "UPI"), branch],
   );
+  await bumpRevisions(["payments", "approvals", "tasks"]);
   return ok({
     draftId,
     routine: { selfServe: false },
@@ -416,6 +419,7 @@ async function paymentDraftApprove(arg: Record<string, unknown>): Promise<Record
   const draftId = s(arg["draftId"]);
   if (!draftId) return { ok: false, code: "NO_DRAFT", error: "draftId required" };
   await query("update payment_drafts set status = 'APPROVED', approval_authority = 'FOUNDER', approved_by = 'sharvil@founder', approved_at = now() where id = $1", [draftId]);
+  await bumpRevisions(["payments", "approvals"]);
   return ok({ ok: true, changed: true, draftId, approved: true, note: "draft approved" });
 }
 
@@ -424,6 +428,7 @@ async function paymentDraftReject(arg: Record<string, unknown>): Promise<Record<
   const comment = s(arg["comment"]);
   if (!draftId) return { ok: false, code: "NO_DRAFT", error: "draftId required" };
   await query("update payment_drafts set status = 'REJECTED' where id = $1", [draftId]);
+  await bumpRevisions(["payments", "approvals"]);
   return ok({ ok: true, changed: true, draftId, rejected: true, note: comment || "rejected" });
 }
 
@@ -457,6 +462,7 @@ async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole,
     if (studentId) {
       await tx.query("update students_acad set status = 'ACTIVE' where id = $1", [studentId]);
     }
+    await bumpRevisions(["receipts", "payments", "approvals", "students", "dashboard"], tx);
     return ok({
       changed: true,
       draftId,
@@ -473,11 +479,6 @@ async function finalisePaymentDraft(arg: Record<string, unknown>, role: RpcRole,
 
 // --------------------------------------------------------------- helpers re-export used across handlers
 export { ok, s, n, d };
-
-async function teacherIdOf(studentId: string): Promise<string> {
-  const r = await queryOne<{ teacher_id: string }>(`select teacher_id from attendance_acad where student_id = $1 and teacher_id <> '' limit 1`, [studentId]);
-  return s(r?.teacher_id);
-}
 
 async function builtReminders(): Promise<Record<string, unknown>> {
   return {

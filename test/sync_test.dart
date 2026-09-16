@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:swar_mangal/models/models.dart';
 import 'package:swar_mangal/services/api_service.dart';
 import 'package:swar_mangal/services/demo_api.dart';
 import 'package:swar_mangal/state/sync_manager.dart';
@@ -7,6 +6,10 @@ import 'package:swar_mangal/state/sync_manager.dart';
 Map<String, dynamic> _map(dynamic v) => v as Map<String, dynamic>;
 
 void main() {
+  // The demo backend is shared across instances by design; reset it so one
+  // test's writes do not shift another test's expectations.
+  setUp(DemoApiClient.resetSharedState);
+
   group('api_syncChanges — demo shared store (two sessions see changes)', () {
     test('founder (session A) edits timetable → staff (session B) sees revision', () async {
       final a = DemoApiClient();

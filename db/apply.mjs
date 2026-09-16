@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import pg from "pg";
@@ -74,7 +74,21 @@ async function syncLoginUser(client, { envVar, email, role, fullName }) {
 // ---------------------------------------------------------------------------
 class SkipMigration extends Error {}
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
+  {
+    // Demo/seed rows for the legacy web app. Used to run on every boot, which
+    // silently resurrected anything deleted since the last deploy.
+    id: "2026-09-16-seed-demo-data",
+    run: async (c) => {
+      const seed = readFileSync(join(here, "seed.sql"), "utf8");
+      await runStatements(c, seed.split(";").map((s) => s.trim()).filter(Boolean), "seed");
+    },
+  },
+  {
+    // Real academy data. Same reason: one-time import, not a boot-time reset.
+    id: "2026-09-16-academyos-import",
+    run: (c) => c.query(readFileSync(join(here, "academyos_import.sql"), "utf8")),
+  },
   {
     // Formerly ran on every boot. The timetable delete is intentionally gone:
     // it matched staff-created entries (TT-<id>) as well as seeded ones.
@@ -112,6 +126,16 @@ const MIGRATIONS = [
     },
   },
   {
+    // Receipts had no timestamp of their own; the app derived a "date" from
+    // the row id. Take the linked ledger date where there is one.
+    id: "2026-09-16-backfill-receipt-created-at",
+    run: (c) =>
+      c.query(
+        `update receipts r set created_at = l.entry_date::timestamptz
+         from money_ledger l where r.created_at is null and r.record_id = l.id and l.entry_date is not null`,
+      ),
+  },
+  {
     id: "2026-09-16-unique-document-numbers",
     run: async (c) => {
       const dupReceipts = await c.query(
@@ -138,7 +162,7 @@ const MIGRATIONS = [
   },
 ];
 
-async function runMigrations(client) {
+export async function runMigrations(client) {
   const done = new Set((await client.query("select id from schema_migrations")).rows.map((r) => r.id));
   for (const m of MIGRATIONS) {
     if (done.has(m.id)) continue;
@@ -187,27 +211,12 @@ async function main() {
     }
     console.log("schema applied");
 
-    const seed = readFileSync(join(here, "seed.sql"), "utf8");
-    const seedStatements = seed
-      .split(";")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    await runStatements(client, seedStatements, "seed");
-    console.log("seed applied", seedStatements.length, "statements");
-
-    const real = readFileSync(join(here, "academyos_import.sql"), "utf8");
-    try {
-      await client.query(real);
-      console.log("academyos_import applied (single batch)");
-    } catch (err) {
-      console.error("academyos_import FAILED:", err.message);
-      throw err;
-    }
+    // Seed + import are migrations now (see MIGRATIONS), so a row deleted in
+    // the app stays deleted instead of coming back on the next deploy.
+    await runMigrations(client);
 
     await syncLoginUser(client, { envVar: "ADMIN_PASSWORD", email: "admin@maestro.app", role: "admin", fullName: "Academy Admin" });
     await syncLoginUser(client, { envVar: "STAFF_PASSWORD", email: "staff@maestro.app", role: "teacher", fullName: "Academy Staff" });
-
-    await runMigrations(client);
 
     if (!process.env.RPC_STAFF_BRANCHES) {
       console.warn("RPC_STAFF_BRANCHES is not set — the staff app will see no branch data until it is (e.g. KANDIVALI)");
@@ -237,4 +246,7 @@ async function runStatements(client, statements, label) {
   }
 }
 
-main();
+// Only run when executed directly (npm prestart / railpack), not on import.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

@@ -67,7 +67,7 @@ Errors use machine-readable codes:
 
 Schema lives in `db/schema.sql`; seed data in `db/seed.sql`; one-time real-data
 import in `db/academyos_import.sql`. `db/apply.mjs` applies all three idempotently
-on boot (`prestart`), then runs the one-time data migrations in its `MIGRATIONS`
+on boot (`prestart`). The seed and the real-data import are themselves one-time migrations now — they used to re-run on every boot and resurrect deleted rows. apply.mjs then runs the one-time data migrations in its `MIGRATIONS`
 list (recorded in `schema_migrations`, never re-run). Add cleanups there rather
 than as boot-time deletes. Manual run against a fresh database:
 
@@ -99,6 +99,14 @@ npm run typecheck
 npm run build
 node --experimental-strip-types --test backend-tests/*.test.ts
 ```
+
+## Sync revisions
+
+`api_syncChanges` reads the `entity_revisions` table. Every write handler bumps
+the entities it touched (`bumpRevisions` in `src/lib/rpc/shared.ts`), so a
+polling client reloads only what changed. An entity that has never been written
+reads as 0. If you add a write handler, bump its entities there or the apps will
+not refresh.
 
 ## Document numbering
 

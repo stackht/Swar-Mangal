@@ -441,7 +441,7 @@ class _TimetableFormState extends State<_TimetableForm> {
           if (widget.teachers.isNotEmpty) ...[
             const SizedBox(height: AppSpace.s2),
             DropdownButtonFormField<String>(
-              value: _teacherId == '' && widget.teachers.isNotEmpty ? null : _teacherId,
+              initialValue: _teacherId == '' && widget.teachers.isNotEmpty ? null : _teacherId,
               decoration: const InputDecoration(labelText: 'Teacher'),
               hint: const Text('Select teacher…'),
               items: [

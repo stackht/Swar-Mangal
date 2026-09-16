@@ -81,14 +81,19 @@ class _SyncBinderState extends State<SyncBinder> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final sync = context.watch<SyncManager>();
-    // On subsequent rebuilds (login/logout) re-attach the service.
+    // On subsequent rebuilds (login/logout) re-attach the service. This must
+    // happen after the frame: attach/setBranch notify listeners, and doing
+    // that during build marks provider scopes dirty mid-build.
     if (_started) {
-      if (auth.isLoggedIn) {
-        sync.attach(auth.service);
-        if (auth.branch != null) sync.setBranch(auth.branch!);
-      } else {
-        sync.attach(null);
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (auth.isLoggedIn) {
+          sync.attach(auth.service);
+          if (auth.branch != null) sync.setBranch(auth.branch!);
+        } else {
+          sync.attach(null);
+        }
+      });
     }
     return SyncScope(manager: sync, child: widget.child);
   }

@@ -187,8 +187,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : () => context
                                     .read<AuthProvider>()
                                     .demoLogin(founder: true),
-                            child: const Text('Demo · Founder',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
+                            child: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Demo · Founder',
+                                  maxLines: 1, style: TextStyle(fontWeight: FontWeight.w700)),
+                            ),
                           ),
                         ),
                         const SizedBox(width: AppSpace.s2),
@@ -204,8 +207,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : () => context
                                     .read<AuthProvider>()
                                     .demoLogin(founder: false),
-                            child: const Text('Demo · Staff',
-                                style: TextStyle(fontWeight: FontWeight.w700)),
+                            child: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('Demo · Staff',
+                                  maxLines: 1, style: TextStyle(fontWeight: FontWeight.w700)),
+                            ),
                           ),
                         ),
                       ]),

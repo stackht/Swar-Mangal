@@ -118,7 +118,9 @@ class _InquiriesScreenState extends State<InquiriesScreen> with SyncAware {
             const Icon(Icons.campaign_outlined, color: AppColors.primary),
             const SizedBox(width: AppSpace.s2),
             Expanded(
-              child: Text('${list.length} inquiry${list.length == 1 ? '' : 's'}',
+              child: Text('${list.length} ${list.length == 1 ? 'inquiry' : 'inquiries'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w800)),
             ),
             Switch.adaptive(
@@ -126,7 +128,6 @@ class _InquiriesScreenState extends State<InquiriesScreen> with SyncAware {
               onChanged: (v) => setState(() => _actionableOnly = v),
             ),
             const Text('Today', style: TextStyle(fontSize: 12)),
-            const Spacer(),
             TextButton.icon(
               onPressed: () => setState(() => _showAdd = !_showAdd),
               icon: Icon(_showAdd ? Icons.close : Icons.add, size: 18),

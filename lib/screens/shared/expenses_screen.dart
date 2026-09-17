@@ -25,6 +25,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
+      // Staff only have the log, so a one-option switcher is just noise.
+      if (!widget.staff)
       Padding(
         padding: const EdgeInsets.all(AppSpace.s4),
         child: SegmentedButton<int>(

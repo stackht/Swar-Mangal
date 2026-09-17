@@ -119,6 +119,17 @@ class StatusBadge extends StatelessWidget {
     if (st.contains('DUE_SOON')) {
       return (label: 'DUE SOON', fg: AppColors.warnFg, bg: AppColors.warnBg);
     }
+    // Checked before the "good" group below: 'UNPAID' and 'OVERPAID' contain
+    // 'PAID', and 'INACTIVE' contains 'ACTIVE', so they used to show green.
+    if (st.contains('UNPAID') || st.contains('OVERPAID')) {
+      return (label: st, fg: AppColors.warnFg, bg: AppColors.warnBg);
+    }
+    if (st.contains('INACTIVE')) {
+      return (label: st, fg: AppColors.muted, bg: AppColors.pageBg);
+    }
+    if (st == 'PARTIAL') {
+      return (label: st, fg: AppColors.infoFg, bg: AppColors.infoBg);
+    }
     if (st.contains('ACTIVE') || st.contains('PAID') || st.contains('APPROVED') ||
         st.contains('FINALISED') || st.contains('ACCEPTED') || st.contains('SETTLED')) {
       return (label: st, fg: AppColors.okFg, bg: AppColors.okBg);

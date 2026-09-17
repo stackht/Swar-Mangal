@@ -128,19 +128,16 @@ class _BodyState extends State<_Body> with SyncAware {
               if (m != null) ...[
                 _moneyRow(m),
                 const SizedBox(height: AppSpace.s3),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.7,
-                  mainAxisSpacing: AppSpace.s3,
-                  crossAxisSpacing: AppSpace.s3,
-                  children: [
-                    StatTile(label: 'Due Today', value: '${m.dueTodayCount}', icon: Icons.today, accent: AppColors.warnFg),
-                    StatTile(label: 'Overdue', value: '${m.overdueCount}', icon: Icons.flag_outlined, accent: AppColors.blockFg),
-                    StatTile(label: 'Terms Pending', value: '${m.termsPendingCount}', icon: Icons.assignment_outlined),
-                    StatTile(label: 'This Month', value: '${m.monthCount} rct', icon: Icons.receipt_outlined, accent: AppColors.focus),
-                  ],
+                // Rows size to their content. A fixed aspect-ratio grid clipped
+                // the figures on phones (and worse with a larger system font).
+                _tilePair(
+                  StatTile(label: 'Due Today', value: '${m.dueTodayCount}', icon: Icons.today, accent: AppColors.warnFg),
+                  StatTile(label: 'Overdue', value: '${m.overdueCount}', icon: Icons.flag_outlined, accent: AppColors.blockFg),
+                ),
+                const SizedBox(height: AppSpace.s3),
+                _tilePair(
+                  StatTile(label: 'Terms Pending', value: '${m.termsPendingCount}', icon: Icons.assignment_outlined),
+                  StatTile(label: 'This Month', value: '${m.monthCount} rct', icon: Icons.receipt_outlined, accent: AppColors.focus),
                 ),
                 const SectionTitle('Recent receipts'),
                 for (final r in m.recent.take(6)) _receiptTile(r),
@@ -181,15 +178,30 @@ class _BodyState extends State<_Body> with SyncAware {
           const SizedBox(height: AppSpace.s2),
           Text(inr(m.todayCollection), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.primary)),
           const SizedBox(height: AppSpace.s2),
-          Row(children: [
-            _chip('Cash', inr(m.cashToday), AppColors.okFg),
-            const SizedBox(width: AppSpace.s2),
-            _chip('Online', inr(m.onlineToday), AppColors.focus),
-            const Spacer(),
-            Text('Month: ${inr(m.monthCollection)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          ]),
+          // Wraps instead of overflowing once the month total grows (₹1,84,500
+          // already ran off the card on a 360dp phone).
+          Wrap(
+            spacing: AppSpace.s2,
+            runSpacing: AppSpace.s2,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _chip('Cash', inr(m.cashToday), AppColors.okFg),
+              _chip('Online', inr(m.onlineToday), AppColors.focus),
+              Text('Month: ${inr(m.monthCollection)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+          ),
         ]),
       ),
+    );
+  }
+
+  Widget _tilePair(Widget left, Widget right) {
+    return IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Expanded(child: left),
+        const SizedBox(width: AppSpace.s3),
+        Expanded(child: right),
+      ]),
     );
   }
 

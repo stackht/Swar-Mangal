@@ -70,6 +70,42 @@ class _DrawerShellState extends State<DrawerShell> {
     });
   }
 
+  bool _hasContextRow(AuthProvider auth) =>
+      auth.isDemo || widget.branchChip != null || widget.headerTrailing != null;
+
+  /// Slim row under the app bar: which branch you are in, the switcher, and
+  /// the DEMO marker. Never scaled down — the branch must always be readable.
+  PreferredSizeWidget _contextRow(AuthProvider auth, ColorScheme scheme) {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(40),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpace.s4, 0, AppSpace.s2, AppSpace.s2),
+        child: Row(children: [
+          if (widget.branchChip != null) widget.branchChip!,
+          if (widget.headerTrailing != null)
+            SizedBox(height: 32, child: FittedBox(child: widget.headerTrailing!)),
+          if (auth.isDemo) ...[
+            const SizedBox(width: AppSpace.s2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppRadius.s, vertical: 4),
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: Text('DEMO',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF261A08)
+                          : Colors.white)),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+
   /// Android system back: go to the previously opened tab. If already on the
   /// home (today) tab, this is the last tab — allow PopScope canPop to close
   /// the app.
@@ -94,31 +130,12 @@ class _DrawerShellState extends State<DrawerShell> {
       },
       child: Scaffold(
       appBar: AppBar(
-        title: Row(children: [
-          Expanded(child: Text(current.label)),
-          if (auth.isDemo)
-            Container(
-              margin: const EdgeInsets.only(right: AppSpace.s2),
-              padding: const EdgeInsets.symmetric(horizontal: AppRadius.s, vertical: 4),
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: Text('DEMO',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? const Color(0xFF261A08)
-                          : Colors.white)),
-            ),
-          if (widget.branchChip != null) ...[
-            const SizedBox(width: AppSpace.s2),
-            widget.branchChip!,
-          ],
-        ]),
+        // A phone gives the title, badges and actions ~360dp. Squeezing them
+        // into one line hid the screen name and shrank the branch badge until
+        // it was unreadable, so the badges get their own slim row below.
+        title: Text(current.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        bottom: _hasContextRow(auth) ? _contextRow(auth, scheme) : null,
         actions: [
-          if (widget.headerTrailing != null) widget.headerTrailing!,
           Consumer<SyncManager>(builder: (context, sync, _) => _SyncChip(sync: sync)),
           Consumer<ThemeController>(
             builder: (context, theme, _) => IconButton(
@@ -407,15 +424,24 @@ class _SyncChip extends StatelessWidget {
         dot = AppColors.okFg;
         break;
     }
+    // Phones get the dot only: the label ate the title's space. The full state
+    // stays available in the tooltip and to screen readers.
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final last = sync.lastSyncedAt != null ? sync.lastSyncedAt!.toString() : '—';
     return Tooltip(
-      message: 'Last synced ${sync.lastSyncedAt != null ? sync.lastSyncedAt!.toString() : '�'}',
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-        ]),
+      message: '$label · last synced $last',
+      child: Semantics(
+        label: label,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+            if (!compact) ...[
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+            ],
+          ]),
+        ),
       ),
     );
   }

@@ -103,12 +103,23 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> with SyncAware {
               child: Padding(
                 padding: const EdgeInsets.all(AppSpace.s4),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    TagChip(row.type.replaceAll('_', ' ')),
-                    const SizedBox(width: AppSpace.s2),
-                    Expanded(child: Text(row.id, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14))),
-                    StatusBadge(row.status.isEmpty ? 'UNKNOWN' : row.status),
-                  ]),
+                  // Chips wrap onto their own line; a long status such as
+                  // BACKDATED_APPROVAL_REQUIRED used to squeeze the id to one
+                  // character per line and overflow the card.
+                  Wrap(
+                    spacing: AppSpace.s2,
+                    runSpacing: AppSpace.s2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      TagChip(row.type.replaceAll('_', ' ')),
+                      StatusBadge(row.status.isEmpty ? 'UNKNOWN' : row.status),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpace.s2),
+                  Text(row.id,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
                   if (row.student.isNotEmpty || row.category.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: AppSpace.s2),
@@ -121,10 +132,17 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> with SyncAware {
                       Text('₹${row.amount}',
                           style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
                     const Spacer(),
-                    if (row.backdated)
+                    if (row.backdated) ...[
                       TagChip('BACKDATED', color: AppColors.blockFg),
+                      const SizedBox(width: AppSpace.s2),
+                    ],
                     if (row.when.isNotEmpty)
-                      Text(row.when, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                      Flexible(
+                        child: Text(row.when,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                      ),
                   ]),
                 ]),
               ),

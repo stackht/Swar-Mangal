@@ -125,6 +125,12 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
     );
   }
 
+  String _branchHeading() {
+    final b = (context.read<AuthProvider>().branch ?? '').trim().toUpperCase();
+    if (b.isEmpty || b == 'ALL') return 'All branches';
+    return '${b[0]}${b.substring(1).toLowerCase()}';
+  }
+
   TimetableEntry _blankEntry() => TimetableEntry(
         id: '',
         branch: 'KANDIVALI',
@@ -155,11 +161,12 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
           ],
         ),
       ),
-      const Padding(
-        padding: EdgeInsets.only(left: AppSpace.s5, right: AppSpace.s5, top: AppSpace.s2),
+      Padding(
+        padding: const EdgeInsets.only(left: AppSpace.s5, right: AppSpace.s5, top: AppSpace.s2),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Text('Kandivali', style: TextStyle(fontWeight: FontWeight.w800)),
+          // Was hardcoded to "Kandivali", even for staff viewing Goregaon.
+          child: Text(_branchHeading(), style: const TextStyle(fontWeight: FontWeight.w800)),
         ),
       ),
       Expanded(

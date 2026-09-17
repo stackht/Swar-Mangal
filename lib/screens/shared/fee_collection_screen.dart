@@ -180,18 +180,27 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(AppSpace.s4),
                 child: Column(children: [
-                  SegmentedButton<String>(
-                    segments: _paymentModes
-                        .map((p) => ButtonSegment(
-                              value: p,
-                              label: Text(p),
-                              icon: Icon(Icons.circle,
-                                  size: 12,
-                                  color: p.toUpperCase().contains('CASH') ? AppColors.okFg : AppColors.focus),
-                            ))
-                        .toList(),
-                    selected: {_mode},
-                    onSelectionChanged: (s) => setState(() => _mode = s.first),
+                  // Wrapping chips: four modes in a segmented bar split words
+                  // mid-letter on a phone ("Ban/k Tr/ans/fer").
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: AppSpace.s2,
+                      runSpacing: AppSpace.s2,
+                      children: [
+                        for (final p in _paymentModes)
+                          ChoiceChip(
+                            label: Text(p),
+                            avatar: _mode == p
+                                ? null
+                                : Icon(Icons.circle,
+                                    size: 10,
+                                    color: p.toUpperCase().contains('CASH') ? AppColors.okFg : AppColors.focus),
+                            selected: _mode == p,
+                            onSelected: (_) => setState(() => _mode = p),
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppSpace.s3),
                   TextFormField(

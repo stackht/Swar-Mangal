@@ -1,0 +1,141 @@
+# Swar Mangal on a VPS: Postgres (source of truth) + app + Google Sheets mirror.
+#
+#   cd deploy && cp .env.example .env   # fill it in
+#   docker compose up -d --build
+#   docker compose --profile proxy up -d  # only if nothing else owns ports 80/443
+#
+# WhatsApp: the wa-akg gateway (github.com/mrifqidaffaaditya/WA-AKG, pinned)
+# sends messages from the academy's paired WhatsApp number. Its dashboard is
+# bound to localhost; reach it with an SSH tunnel (see README) to scan the QR.
+name: swarmangal
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No published port: only the app and the worker can reach the database.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_SSL: disable
+    depends_on:
+      db:
+        condition: service_healthy
+    # Bound to localhost: the reverse proxy is the only public entry point.
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+
+  sheets-worker:
+    build:
+      context: ..
+    restart: unless-stopped
+    command: ["node", "sync/worker.mjs"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_SSL: disable
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-service-account.json
+    volumes:
+      - ./secrets/google-service-account.json:/run/secrets/google-service-account.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+
+  wa-db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WA_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: wa_akg
+    volumes:
+      - wa_mysql:/var/lib/mysql
+    # No published port.
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${WA_MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  wa-akg:
+    # Pinned to a reviewed commit; bump deliberately, never track a branch.
+    build:
+      context: https://github.com/mrifqidaffaaditya/WA-AKG.git#c7dd01a04339e4363b549beb3a41fe02cf131acb
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql://root:${WA_MYSQL_ROOT_PASSWORD}@wa-db:3306/wa_akg
+      AUTH_SECRET: ${WA_AKG_AUTH_SECRET}
+      BASE_URL: http://localhost:${WA_AKG_DASHBOARD_PORT:-3080}
+      NEXTAUTH_URL: http://localhost:${WA_AKG_DASHBOARD_PORT:-3080}
+      NEXT_PUBLIC_APP_URL: http://localhost:${WA_AKG_DASHBOARD_PORT:-3080}
+      NEXT_PUBLIC_API_URL: http://localhost:${WA_AKG_DASHBOARD_PORT:-3080}/api
+      AUTH_TRUST_HOST: "true"
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      BAILEYS_LOG_LEVEL: error
+      NEXT_PUBLIC_SWAGGER_ENABLED: "false"
+      ENABLE_AUTO_UPDATE_CHECK: "false"
+      TZ: Asia/Kolkata
+      LOCALE: en-IN
+      ADMIN_EMAIL: ${WA_AKG_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${WA_AKG_ADMIN_PASSWORD}
+    # The upstream CMD has a shell typo (`"$ADMIN_EMAIL"]` without a space)
+    # that silently skips creating the dashboard admin; same steps, fixed.
+    command:
+      - sh
+      - -c
+      - >-
+        npx prisma db push &&
+        if [ -n "$$ADMIN_EMAIL" ] && [ -n "$$ADMIN_PASSWORD" ]; then node scripts/setup-admin.js "$$ADMIN_EMAIL" "$$ADMIN_PASSWORD"; fi &&
+        exec node node_modules/tsx/dist/cli.mjs src/server/index.ts
+    volumes:
+      - wa_data:/app/data
+      - wa_uploads:/app/uploads
+    depends_on:
+      wa-db:
+        condition: service_healthy
+    # Dashboard (QR pairing, API key, webhook) only via SSH tunnel.
+    ports:
+      - "127.0.0.1:${WA_AKG_DASHBOARD_PORT:-3080}:3000"
+
+  caddy:
+    profiles: ["proxy"]
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  wa_mysql:
+  wa_data:
+  wa_uploads:
+  caddy_data:
+  caddy_config:

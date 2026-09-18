@@ -53,6 +53,26 @@ void main() {
 
     bool shows(String text) => find.text(text).evaluate().isNotEmpty;
 
+    // A ListView only builds items near the visible/cache extent — an item
+    // further down genuinely does not exist in the tree until scrolled into
+    // range, so checking `shows()` alone gives a false "missing" for anything
+    // below the fold. Drag on the visible Scaffold rather than matching
+    // `Scrollable` by type: earlier routes' scrollables (e.g. a previous
+    // screen's drawer) stay mounted off-screen, so `find.byType(Scrollable)`
+    // can resolve to the wrong one. A real drag gesture hit-tests whatever is
+    // actually rendered at that point, like a user's finger would.
+    Future<bool> scrollToText(String text) async {
+      final target = find.text(text);
+      if (target.evaluate().isNotEmpty) return true;
+      final surface = find.byType(Scaffold);
+      if (surface.evaluate().isEmpty) return false;
+      for (var i = 0; i < 10 && target.evaluate().isEmpty; i++) {
+        await tester.drag(surface.last, const Offset(0, -300));
+        await settle(250);
+      }
+      return target.evaluate().isNotEmpty;
+    }
+
     Future<void> screenshot(String name) async {
       shot++;
       final safe = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
@@ -117,6 +137,141 @@ void main() {
             collect();
             await screenshot('$mode $role students search');
           }
+          if (role == 'staff') {
+            final avatar = find.byType(CircleAvatar);
+            if (avatar.evaluate().isEmpty) {
+              errors.add('[Students] no rows to open a profile from');
+            } else {
+              where = 'student row -> profile';
+              await tester.tap(avatar.first, warnIfMissed: false);
+              await settle(2000);
+              collect();
+              await screenshot('$mode student profile');
+              final pauseLabel = shows('Request resume') ? 'Request resume' : 'Request pause';
+              for (final label2 in [
+                'Request package extension',
+                'Request late-fee waiver',
+                'Request instalment plan',
+                'Admission terms',
+                pauseLabel,
+              ]) {
+                if (!await scrollToText(label2)) {
+                  errors.add('[Student profile] missing button "$label2"');
+                  continue;
+                }
+                where = 'student profile -> $label2';
+                await tester.ensureVisible(find.text(label2).first);
+                await settle(300);
+                await tester.tap(find.text(label2).first, warnIfMissed: false);
+                await settle(1500);
+                collect();
+                await screenshot('$mode ${label2.replaceAll(' ', '_')}');
+                await tester.pageBack();
+                await settle(800);
+              }
+              await tester.pageBack();
+              await settle(800);
+            }
+          }
+        }
+        if (label == 'Inquiries') {
+          where = 'inquiries -> filter dropdown';
+          if (!shows('Filter')) {
+            errors.add('[$where] missing the Filter dropdown button');
+          } else {
+            await tester.tap(find.text('Filter'), warnIfMissed: false);
+            await settle(500);
+            collect();
+            for (final option in const ['All leads', 'New', 'Existing (win-back)', 'No preference']) {
+              if (!shows(option)) errors.add('[$where] filter sheet missing option "$option"');
+            }
+            if (shows('Existing (win-back)')) {
+              await tester.tap(find.text('Existing (win-back)'), warnIfMissed: false);
+              await settle(300);
+            }
+            if (shows('Apply')) {
+              await tester.tap(find.text('Apply'), warnIfMissed: false);
+              await settle(500);
+            }
+            collect();
+            await screenshot('$mode inquiries filtered win-back');
+            // Reopen and clear so the rest of the walkthrough sees the full list.
+            final filterBtn = find.byType(OutlinedButton);
+            if (filterBtn.evaluate().isNotEmpty) {
+              await tester.tap(filterBtn.first, warnIfMissed: false);
+              await settle(500);
+              if (shows('Clear')) {
+                await tester.tap(find.text('Clear'), warnIfMissed: false);
+                await settle(300);
+              }
+              if (shows('Apply')) {
+                await tester.tap(find.text('Apply'), warnIfMissed: false);
+                await settle(500);
+              }
+            }
+          }
+          final avatar = find.byType(CircleAvatar);
+          if (avatar.evaluate().isNotEmpty) {
+            where = 'inquiry row -> profile';
+            await tester.tap(avatar.first, warnIfMissed: false);
+            await settle(2000);
+            collect();
+            if (!shows('Inquiry profile')) errors.add('[$where] did not open Inquiry profile');
+            await screenshot('$mode inquiry profile');
+            await tester.pageBack();
+            await settle(800);
+          }
+        }
+        if (label == 'Timetable') {
+          if (!shows('Closures')) {
+            errors.add('[Timetable] missing "Closures" action');
+          } else {
+            where = 'timetable -> closures';
+            await tester.tap(find.text('Closures').first, warnIfMissed: false);
+            await settle(2000);
+            collect();
+            await screenshot('$mode closures');
+            if (shows('Propose closure')) {
+              where = 'closures -> propose closure';
+              await tester.tap(find.text('Propose closure').first, warnIfMissed: false);
+              await settle(1500);
+              collect();
+              if (!shows('Propose closure')) errors.add('[$where] did not open the propose-closure form');
+              await screenshot('$mode propose closure');
+              await tester.pageBack();
+              await settle(800);
+            } else {
+              errors.add('[Closures] missing "Propose closure" action');
+            }
+            await tester.pageBack();
+            await settle(800);
+          }
+        }
+        if (label == 'School Invoice') {
+          // The button lives on InvoiceConfigScreen, one screen deeper than
+          // the School Invoice list — reached via its "New invoice" FAB.
+          if (!shows('New invoice')) {
+            errors.add('[School Invoice] missing "New invoice" action');
+          } else {
+            where = 'school invoice -> new invoice';
+            await tester.tap(find.text('New invoice'), warnIfMissed: false);
+            await settle(1500);
+            collect();
+            if (!await scrollToText('Request payment profile change')) {
+              errors.add('[School invoice config] missing "Request payment profile change" action');
+            } else {
+              where = 'invoice config -> payment profile change';
+              await tester.tap(find.text('Request payment profile change').first, warnIfMissed: false);
+              await settle(1500);
+              collect();
+              if (!shows('Request payment profile change')) errors.add('[$where] did not open the screen');
+              await screenshot('$mode payment profile change');
+              await tester.pageBack();
+              await settle(800);
+            }
+            await tester.pageBack();
+            await settle(800);
+          }
         }
         if (label == 'Teacher Payouts' && shows('Record payment')) {
           await tester.ensureVisible(find.text('Record payment').first);
@@ -134,6 +289,91 @@ void main() {
             collect();
             await screenshot('$mode payout recorded');
           }
+        }
+        if (label == 'Home' && role == 'founder') {
+          // Founder to-do cards with no sidebar destination of their own
+          // must still open a real screen, not silently redirect elsewhere.
+          if (shows('Classes not answered')) {
+            where = "founder todo -> today's classes";
+            await tester.ensureVisible(find.text('Classes not answered').first);
+            await settle(300);
+            await tester.tap(find.text('Classes not answered').first, warnIfMissed: false);
+            await settle(1500);
+            collect();
+            if (!shows("Today's Classes")) errors.add('[$where] did not open Today\'s Classes');
+            await tester.pageBack();
+            await settle(800);
+          }
+          if (shows('Call these today')) {
+            where = 'founder todo -> inquiries';
+            await tester.ensureVisible(find.text('Call these today').first);
+            await settle(300);
+            await tester.tap(find.text('Call these today').first, warnIfMissed: false);
+            await settle(1500);
+            collect();
+            if (!shows('Inquiries')) errors.add('[$where] did not open Inquiries');
+            await tester.pageBack();
+            await settle(800);
+          }
+        }
+        if (label == 'Receipts' && role == 'founder' && shows('RCP-2401')) {
+          where = 'receipt whatsapp';
+          await tester.tap(find.textContaining('RCP-2401').first, warnIfMissed: false);
+          await settle(2000);
+          collect();
+          final send = find.text('Send receipt on WhatsApp');
+          if (send.evaluate().isEmpty) {
+            errors.add('[Receipt detail] no "Send receipt on WhatsApp" for a linked receipt');
+          } else {
+            await tester.ensureVisible(send);
+            await settle(300);
+            await tester.tap(send, warnIfMissed: false);
+            await settle(1000);
+            await screenshot('$mode receipt whatsapp confirm');
+            await tester.tap(find.widgetWithText(FilledButton, 'Send'));
+            await settle(3000);
+            collect();
+            await screenshot('$mode receipt whatsapp sent');
+            if (!shows('Sent ✓')) errors.add('[Receipt detail] demo send did not complete');
+          }
+          await tester.pageBack();
+          await settle(1500);
+        }
+        if (label == 'Today' && role == 'staff' && shows('Fees Due Today')) {
+          where = 'fee card to whatsapp';
+          await tester.tap(find.text('Fees Due Today').first, warnIfMissed: false);
+          await settle(2500);
+          collect();
+          await screenshot('$mode staff fee bucket');
+          final row = find.byIcon(Icons.chat_outlined);
+          if (row.evaluate().isEmpty) {
+            errors.add('[Fee bucket] no students listed behind "Fees Due Today"');
+          } else {
+            await tester.tap(row.first, warnIfMissed: false);
+            await settle(2000);
+            await tester.tap(find.text('Generate message'));
+            await settle(2000);
+            collect();
+            final send = find.text('Send on WhatsApp');
+            if (send.evaluate().isEmpty) {
+              errors.add('[Compose] no "Send on WhatsApp" button');
+            } else {
+              await tester.ensureVisible(send);
+              await settle(300);
+              await tester.tap(send, warnIfMissed: false);
+              await settle(1000);
+              await screenshot('$mode compose whatsapp confirm');
+              await tester.tap(find.widgetWithText(FilledButton, 'Send'));
+              await settle(3000);
+              collect();
+              await screenshot('$mode compose whatsapp sent');
+              if (!shows('Sent ✓')) errors.add('[Compose] demo send did not complete');
+            }
+            await tester.pageBack();
+            await settle(1500);
+          }
+          await tester.pageBack();
+          await settle(1500);
         }
         if (label == 'Activity Log') {
           if (!shows('Mark attendance')) errors.add('[Activity Log] demo "Mark attendance" entry missing');

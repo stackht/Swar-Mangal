@@ -34,6 +34,37 @@ void main() {
       expect(b['branches'], containsAll(['GOREGAON', 'KANDIVALI']));
     });
 
+    test('api_instalmentPlanForStudent — hasPlan', () async {
+      final b = await call('api_instalmentPlanForStudent', {'studentId': 'S1'});
+      expect(b['ok'], true);
+      expect(b['hasPlan'], isNotNull);
+    });
+
+    test('api_termsStatusForStudent — tokens + manualRequests', () async {
+      final b = await call('api_termsStatusForStudent', {'studentId': 'S1'});
+      expect(b['ok'], true);
+      expect(b['tokens'], isA<List>());
+      expect(b['manualRequests'], isA<List>());
+    });
+
+    test('api_founder_listAuthorizedEmails — rows', () async {
+      final b = await call('api_founder_listAuthorizedEmails');
+      expect(b['ok'], true);
+      expect(b['rows'], isNotEmpty);
+    });
+
+    test('api_founder_listStaffTokens — rows', () async {
+      final b = await call('api_founder_listStaffTokens');
+      expect(b['ok'], true);
+      expect(b['rows'], isNotEmpty);
+    });
+
+    test('api_closureCalendarList — rows', () async {
+      final b = await call('api_closureCalendarList');
+      expect(b['ok'], true);
+      expect(b['rows'], isNotEmpty);
+    });
+
     test('api_searchStudent — results', () async {
       final b = await call('api_searchStudent', {'q': '', 'includeAll': true});
       expect(b['ok'], true);
@@ -93,6 +124,12 @@ void main() {
       expect(b['rows'], isNotEmpty);
     });
 
+    test('api_staff_inquiryDetail — followups', () async {
+      final b = await call('api_staff_inquiryDetail', {'inquiryId': 'INQ-501'});
+      expect(b['ok'], true);
+      expect(b['followups'], isNotEmpty);
+    });
+
     test('api_founder_approvalsList — groups + items', () async {
       final b = await call('api_founder_approvalsList', const {});
       expect(b['groups'], isNotEmpty);
@@ -127,12 +164,23 @@ void main() {
       expect(rows.firstWhere((r) => r['canFinalise'] == true), isNotEmpty);
     });
 
-    test('api_staff_commGenerate — subject + body + COPY_ONLY', () async {
+    test('api_staff_commGenerate — subject + body + WhatsApp mode, provider never used', () async {
       final b = await call('api_staff_commGenerate', {'type': 'FEE_REMINDER'});
       expect(b['subject'], isNotEmpty);
       expect(b['body'], isNotEmpty);
-      expect(b['mode'], contains('COPY_ONLY'));
+      expect(b['mode'], 'WHATSAPP');
       expect(b['providerSend'], contains('DISABLED'));
+    });
+
+    test('demo WhatsApp send is marked DEMO, idempotent per key, and listed in history', () async {
+      const args = {'studentId': 'STU-1', 'kind': 'FEE_REMINDER', 'body': 'hi', 'clientIntentKey': 'K-demo-1'};
+      final first = await call('api_staff_sendWhatsApp', args);
+      final again = await call('api_staff_sendWhatsApp', args);
+      expect(first['demo'], true);
+      expect(asMap(first['message'])['status'], 'DEMO');
+      expect(again['messageId'], first['messageId']);
+      final hist = await call('api_staff_messageHistory', {'studentId': 'STU-1'});
+      expect((hist['rows'] as List).where((r) => (r as Map)['messageId'] == first['messageId']).length, 1);
     });
 
     test('api_staff_sessionRoster — rows', () async {
@@ -162,6 +210,32 @@ void main() {
       'api_founder_finalisePaymentDraft': '{"draftId":"D"}',
       'api_staff_finalisePaymentDraft': '{"draftId":"D"}',
       'api_founder_mergeStudentDraft': '{"draftId":"D"}',
+      'api_staff_submitPackageExtensionRequest': '{"studentId":"S1","extraMonths":1,"reason":"r"}',
+      'api_founder_packageExtensionApprove': '{"requestId":"R"}',
+      'api_founder_packageExtensionReject': '{"requestId":"R","reason":"r"}',
+      'api_staff_submitPaymentProfileChangeRequest': '{"entityId":"ENT-GOREGAON","requestedLabel":"L","reason":"r"}',
+      'api_founder_paymentProfileChangeApprove': '{"requestId":"R"}',
+      'api_founder_paymentProfileChangeReject': '{"requestId":"R","reason":"r"}',
+      'api_staff_proposeClosure': '{"scope":"BRANCH","branch":"GOREGAON","fromDate":"2026-10-02","toDate":"2026-10-02","reason":"r"}',
+      'api_founder_authoriseClosure': '{"closureId":"C"}',
+      'api_founder_closureReject': '{"closureId":"C","reason":"r"}',
+      'api_founder_revokeClosure': '{"closureId":"C","reason":"r"}',
+      'api_staff_requestClassCorrection': '{"eventId":"E-2026-10-02-T1","reason":"r"}',
+      'api_founder_approveClassCorrection': '{"correctionId":"CC"}',
+      'api_founder_rejectClassCorrection': '{"correctionId":"CC","reason":"r"}',
+      'api_staff_submitLateFeeWaiverRequest': '{"studentId":"S1","reason":"r"}',
+      'api_founder_lateFeeWaiverApprove': '{"requestId":"R"}',
+      'api_founder_lateFeeWaiverReject': '{"requestId":"R","reason":"r"}',
+      'api_staff_submitInstalmentPlanDraft': '{"studentId":"S1","totalAmount":1000,"instalmentCount":3,"firstDueDate":"2026-10-01"}',
+      'api_founder_instalmentPlanDraftApprove': '{"draftId":"D"}',
+      'api_founder_instalmentPlanDraftReject': '{"draftId":"D","reason":"r"}',
+      'api_staff_generateTermsToken': '{"studentId":"S1"}',
+      'api_staff_requestManualTermsAcceptance': '{"studentId":"S1","reason":"r"}',
+      'api_founder_manualTermsAcceptanceApprove': '{"requestId":"R"}',
+      'api_founder_manualTermsAcceptanceReject': '{"requestId":"R","reason":"r"}',
+      'api_founder_addAuthorizedEmail': '{"email":"new@example.com"}',
+      'api_founder_removeAuthorizedEmail': '{"email":"new@example.com"}',
+      'api_founder_revokeDeviceToken': '{"id":"DEV-1"}',
     };
 
     for (final entry in writes.entries) {
@@ -273,7 +347,8 @@ void main() {
       final m = CommMessage.fromApi(b);
       expect(m.subject, isNotEmpty);
       expect(m.body, isNotEmpty);
-      expect(m.copyOnly, true);
+      expect(m.canWhatsApp, true);
+      expect(m.kind, 'FEE_REMINDER');
     });
 
     test('DashboardMetrics.fromApi parses dashboard', () async {
@@ -291,11 +366,45 @@ void main() {
       expect(boot.classCodes, isNotEmpty);
     });
 
-    test('Inquiry.fromApi parses leads', () async {
+    test('Inquiry.fromApi parses leads with real server statuses (never NEW/FOLLOW_UP)', () async {
       final b = await call('api_staff_inquiryQueue', {'branch': 'GOREGAON'});
-      final q = Inquiry.fromApi((b['rows'] as List).cast<Map<String, dynamic>>().first);
+      final rows = (b['rows'] as List).cast<Map<String, dynamic>>();
+      final q = Inquiry.fromApi(rows.first);
       expect(q.inquiryId, isNotEmpty);
       expect(q.name, isNotEmpty);
+      expect(q.status, isNot(anyOf('NEW', 'FOLLOW_UP')));
+      expect(q.actionable, true, reason: 'a fresh OPEN inquiry must be actionable');
+      final dropped = rows.firstWhere((r) => r['status'] == 'DROPPED');
+      final d = Inquiry.fromApi(dropped);
+      expect(d.actionable, false);
+      expect(d.finalStatus, 'REJECTED');
+    });
+
+    test('InquiryDetail.fromApi parses contact profile + follow-up history', () async {
+      final b = await call('api_staff_inquiryDetail', {'inquiryId': 'INQ-501'});
+      final detail = InquiryDetail.fromApi(b);
+      expect(detail.inquiryId, isNotEmpty);
+      expect(detail.followups, isNotEmpty);
+      expect(detail.followups.first.description, isNotEmpty);
+    });
+
+    test('Inquiry.fromApi distinguishes a former-student win-back lead from a fresh one', () async {
+      final b = await call('api_staff_inquiryQueue', {'branch': 'KANDIVALI'});
+      final rows = (b['rows'] as List).cast<Map<String, dynamic>>();
+      final winBack = Inquiry.fromApi(rows.firstWhere((r) => r['source'] == 'Former Student'));
+      expect(winBack.isFormerStudent, true);
+      final fresh = Inquiry.fromApi(rows.firstWhere((r) => r['source'] != 'Former Student'));
+      expect(fresh.isFormerStudent, false);
+    });
+
+    test('Inquiry.fromApi treats a blank instrument as no preference, a DORMANT/TIMEOUT lead as never actionable', () async {
+      final b = await call('api_staff_inquiryQueue', {'branch': 'GOREGAON'});
+      final rows = (b['rows'] as List).cast<Map<String, dynamic>>();
+      final noPreference = Inquiry.fromApi(rows.firstWhere((r) => (r['instrument'] ?? '').toString().isEmpty));
+      expect(noPreference.hasInstrumentPreference, false);
+      final timedOut = Inquiry.fromApi(rows.firstWhere((r) => r['dormantReason'] == 'TIMEOUT'));
+      expect(timedOut.actionable, false, reason: 'DORMANT must be terminal client-side too, matching the server');
+      expect(timedOut.dormantReason, 'TIMEOUT');
     });
   });
 

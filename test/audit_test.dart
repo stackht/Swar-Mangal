@@ -84,7 +84,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Today loads from the demo backend (no cross-branch leakage path).
-      expect(find.text('Fees Due Today'), findsWidgets);
+      expect(find.text('due today'), findsWidgets);
     });
 
     testWidgets('founder: login -> shell -> logout returns to login',

@@ -23,6 +23,7 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amount = TextEditingController();
   final _txn = TextEditingController();
+  final _receiptBook = TextEditingController();
   final _dueDate = TextEditingController();
   final _feeFrom = TextEditingController();
   final _feeTo = TextEditingController();
@@ -34,6 +35,8 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
   Map<String, dynamic>? _resData;
   List<String> _paymentModes = const ['Cash', 'Online'];
   late final String _requestId;
+  Map<String, dynamic>? _pendingInstalment;
+  String? _instalmentItemId;
 
   @override
   void initState() {
@@ -44,14 +47,41 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
     final boot = context.read<AuthProvider>().boot;
     if (boot?.paymentModes.isNotEmpty == true) _paymentModes = boot!.paymentModes;
     _student = widget.prefill;
-    if (_student != null) {
-      _dueDate.text = _student!.nextDueDate;
+    // The date money came in: today unless changed. (It used to prefill the
+    // student's next DUE date, which is usually in the future.)
+    _dueDate.text = _today();
+    if (widget.staff && _student != null) _loadInstalmentPlan();
+  }
+
+  /// Brief §6.1: never compute an instalment amount on the device — only
+  /// display what the server's own schedule already says is due next.
+  Future<void> _loadInstalmentPlan() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null || _student == null) return;
+    try {
+      final r = await auth.service!.raw('api_instalmentPlanForStudent', {'studentId': _student!.studentId});
+      final m = r as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _pendingInstalment = (m['hasPlan'] == true && (m['nextPendingItemId'] ?? '').toString().isNotEmpty) ? m : null;
+        _instalmentItemId = null;
+      });
+    } catch (_) {
+      // Non-critical lookup — a failure here should never block a payment.
     }
+  }
+
+  void _useInstalment() {
+    if (_pendingInstalment == null) return;
+    setState(() {
+      _amount.text = (_pendingInstalment!['nextPendingAmount'] ?? '').toString();
+      _instalmentItemId = (_pendingInstalment!['nextPendingItemId'] ?? '').toString();
+    });
   }
 
   @override
   void dispose() {
-    for (final c in [_amount, _txn, _dueDate, _feeFrom, _feeTo, _notes]) {
+    for (final c in [_amount, _txn, _receiptBook, _dueDate, _feeFrom, _feeTo, _notes]) {
       c.dispose();
     }
     super.dispose();
@@ -79,8 +109,10 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
               'paymentReference': _txn.text.trim(),
               'receivingAccountRef': _accountFor(_mode),
               'notes': _notes.text.trim(),
-              'physicalReceiptNo': '',
+              'physicalReceiptNo': _mode.toUpperCase().contains('CASH') ? _receiptBook.text.trim() : '',
               'monthsPaid': '1',
+              'clientIntentKey': _requestId,
+              if (_instalmentItemId != null) 'instalmentItemId': _instalmentItemId,
             }
           : {
               'studentId': _student?.studentId ?? '',
@@ -90,7 +122,8 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
               'paymentMode': _mode,
               'mode': _accountFor(_mode),
               'account': _accountFor(_mode),
-              'txnId': _mode == 'Cash' ? '' : _txn.text.trim(),
+              'txnId': _mode.toUpperCase().contains('CASH') ? '' : _txn.text.trim(),
+              'physicalReceiptNo': _mode.toUpperCase().contains('CASH') ? _receiptBook.text.trim() : '',
               'amount': amount,
               'baseAmount': amount,
               'dueDate': _dueDate.text.trim(),
@@ -163,13 +196,27 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
         else
           Card(
             child: ListTile(
-              leading: const Icon(Icons.person, color: AppColors.primary),
+              leading: Icon(Icons.person, color: AppColors.adaptive(context, AppColors.primary)),
               title: Text(_student!.studentName, style: const TextStyle(fontWeight: FontWeight.w800)),
               subtitle: Text('${_student!.studentId} · ${_student!.classCode} · ${_student!.phone}'),
               trailing: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => setState(() => _student = null),
               ),
+            ),
+          ),
+        if (widget.staff && _pendingInstalment != null)
+          Card(
+            color: AppColors.adaptive(context, AppColors.okBg),
+            margin: const EdgeInsets.only(top: AppSpace.s3),
+            child: ListTile(
+              leading: Icon(Icons.calendar_view_month_outlined, color: AppColors.adaptive(context, AppColors.okFg)),
+              title: Text('Next instalment due: ₹${_pendingInstalment!['nextPendingAmount']}',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.adaptive(context, AppColors.okFg))),
+              subtitle: const Text('From this student\'s active instalment plan'),
+              trailing: _instalmentItemId == null
+                  ? TextButton(onPressed: _useInstalment, child: const Text('Use this'))
+                  : Icon(Icons.check_circle, color: AppColors.adaptive(context, AppColors.okFg)),
             ),
           ),
         const SizedBox(height: AppSpace.s3),
@@ -195,7 +242,7 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
                                 ? null
                                 : Icon(Icons.circle,
                                     size: 10,
-                                    color: p.toUpperCase().contains('CASH') ? AppColors.okFg : AppColors.focus),
+                                    color: p.toUpperCase().contains('CASH') ? AppColors.adaptive(context, AppColors.okFg) : AppColors.adaptive(context, AppColors.focus)),
                             selected: _mode == p,
                             onSelected: (_) => setState(() => _mode = p),
                           ),
@@ -231,9 +278,19 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
                     decoration: const InputDecoration(labelText: 'Payment date', prefixIcon: Icon(Icons.event_outlined)),
                   ),
                   const SizedBox(height: AppSpace.s3),
-                  if (_mode.toUpperCase().contains('CASH'))
-                    SizedBox.shrink()
-                  else ...[
+                  // Owner rule: every fee payment carries a UTR or a
+                  // receipt-book number — never neither.
+                  if (_mode.toUpperCase().contains('CASH')) ...[
+                    TextFormField(
+                      controller: _receiptBook,
+                      decoration: const InputDecoration(
+                          labelText: 'Receipt-book number', prefixIcon: Icon(Icons.menu_book_outlined)),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Cash payments need the receipt-book number'
+                          : null,
+                    ),
+                    const SizedBox(height: AppSpace.s3),
+                  ] else ...[
                     TextFormField(
                       controller: _txn,
                       decoration: const InputDecoration(
@@ -257,8 +314,12 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
                       if (d != null) {
                         _feeFrom.text =
                             '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+                        // One month later, rolling December into January.
+                        // (It used to skip zero-padding and keep December
+                        // in the same year.)
+                        final to = DateTime(d.year, d.month + 1, d.day);
                         _feeTo.text =
-                            '${d.year}-${(d.month + 1).clamp(1, 12)}-${d.day.toString().padLeft(2, '0')}';
+                            '${to.year}-${to.month.toString().padLeft(2, '0')}-${to.day.toString().padLeft(2, '0')}';
                       }
                     },
                     decoration: InputDecoration(
@@ -288,12 +349,12 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(AppSpace.s3),
                   decoration: BoxDecoration(
-                    color: _messageIsOk(_resData) ? AppColors.okBg : AppColors.blockBg,
+                    color: _messageIsOk(_resData) ? AppColors.adaptive(context, AppColors.okBg) : AppColors.adaptive(context, AppColors.blockBg),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Icon(_messageIsOk(_resData) ? Icons.check_circle_outline : Icons.error_outline,
-                        size: 18, color: _messageIsOk(_resData) ? AppColors.okFg : AppColors.blockFg),
+                        size: 18, color: _messageIsOk(_resData) ? AppColors.adaptive(context, AppColors.okFg) : AppColors.adaptive(context, AppColors.blockFg)),
                     const SizedBox(width: AppSpace.s2),
                     Expanded(child: Text(_result!, style: const TextStyle(fontSize: 13))),
                   ]),
@@ -319,11 +380,11 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
       child: Padding(
         padding: const EdgeInsets.all(AppSpace.s4),
         child: Column(children: [
-          const Text('No student selected',
-              style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.muted)),
+          Text('No student selected',
+              style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.muted))),
           const SizedBox(height: AppSpace.s2),
-          const Text('Open a student profile and tap "Collect / record fee", or search here.',
-              style: TextStyle(fontSize: 13, color: AppColors.muted)),
+          Text('Open a student profile and tap "Collect / record fee", or search here.',
+              style: TextStyle(fontSize: 13, color: AppColors.adaptive(context, AppColors.muted))),
           const SizedBox(height: AppSpace.s3),
           FilledButton.icon(
             onPressed: () async {
@@ -332,6 +393,7 @@ class _FeeCollectionScreenState extends State<FeeCollectionScreen> {
               );
               if (picked != null && mounted) {
                 setState(() => _student = picked);
+                if (widget.staff) _loadInstalmentPlan();
               }
             },
             icon: const Icon(Icons.person_search),

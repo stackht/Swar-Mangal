@@ -1,0 +1,25 @@
+# Keep the image small, and keep real data and secrets out of it.
+node_modules
+.next
+build
+.dart_tool
+android
+lib
+test
+integration_test
+test_driver
+maestro_app
+maestro-android
+website
+backend-tests
+deploy/secrets
+deploy/backups
+deploy/.env
+.env
+.env*.local
+*.zip
+*.log
+*.apk
+SwarMangal AcademyOS-*
+.git
+.idea

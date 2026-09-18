@@ -8,6 +8,7 @@ import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
+import 'closures_screen.dart';
 
 /// Branch timetable — day selector + per-day class cards, weekly view.
 /// Both roles edit (add/edit/enable-disable/delete).
@@ -103,6 +104,12 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
         title: const Text('Timetable'),
         actions: [
           TextButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ClosuresScreen(staff: widget.staff),
+            )),
+            child: const Text('Closures', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
             onPressed: () => setState(() => _weekly = !_weekly),
             child: Text(_weekly ? 'Day view' : 'Weekly view',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -111,7 +118,7 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
       ),
       floatingActionButton: canEdit
           ? FloatingActionButton.extended(
-              backgroundColor: AppColors.primary,
+              backgroundColor: AppColors.adaptive(context, AppColors.primary),
               foregroundColor: Colors.white,
               onPressed: () => _edit(_blankEntry()),
               icon: const Icon(Icons.add),
@@ -194,9 +201,9 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
                     color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
           ),
           if (list.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(bottom: AppSpace.s2),
-              child: Text('No classes', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.s2),
+              child: Text('No classes', style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
             )
           else
             for (final e in list) _card(e),
@@ -217,13 +224,13 @@ class _TimetableScreenState extends State<TimetableScreen> with SyncAware {
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
               Text(e.className, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               Text(e.teacherName.isNotEmpty ? e.teacherName : 'No teacher assigned',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                  style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
             ]),
           ),
-          if (e.teacherId.isNotEmpty) TagChip(e.teacherId, color: AppColors.focus),
+          if (e.teacherId.isNotEmpty) TagChip(e.teacherId, color: AppColors.adaptive(context, AppColors.focus)),
           if (canEdit)
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
+              icon: Icon(Icons.more_vert, size: 20, color: AppColors.adaptive(context, AppColors.muted)),
               onSelected: (v) {
                 if (v == 'edit') _edit(e);
                 if (v == 'del') _delete(e);
@@ -431,7 +438,7 @@ class _TimetableFormState extends State<_TimetableForm> {
             Expanded(
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.schedule, color: AppColors.muted),
+                leading: Icon(Icons.schedule, color: AppColors.adaptive(context, AppColors.muted)),
                 title: Text('Start: ${TimetableEntry.time12(_start)}'),
                 onTap: () => _pickTime(start: true),
               ),
@@ -439,7 +446,7 @@ class _TimetableFormState extends State<_TimetableForm> {
             Expanded(
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.schedule, color: AppColors.muted),
+                leading: Icon(Icons.schedule, color: AppColors.adaptive(context, AppColors.muted)),
                 title: Text('End: ${TimetableEntry.time12(_end)}'),
                 onTap: () => _pickTime(start: false),
               ),
@@ -481,7 +488,7 @@ class _TimetableFormState extends State<_TimetableForm> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: AppSpace.s2),
-              child: Text(_error!, style: const TextStyle(color: AppColors.blockFg, fontSize: 13)),
+              child: Text(_error!, style: TextStyle(color: AppColors.adaptive(context, AppColors.blockFg), fontSize: 13)),
             ),
         ]),
       ),

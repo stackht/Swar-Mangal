@@ -107,6 +107,7 @@ class DemoApiClient extends ApiClient {
     'api_founder_setStudentStatus': {'students', 'dashboard'},
     'api_updateTeacherStatus': {'teachers'},
     'api_founder_mergeStudentDraft': {'students', 'dashboard'},
+    'api_founder_studentDraftReject': {'students', 'approvals'},
     'api_updateTeacherCompensation': {'teachers', 'payouts'},
     'api_recordTeacherPayout': {'payouts', 'expenses', 'dashboard'},
     'api_assignSharedStudent': {'payouts', 'dashboard'},
@@ -114,6 +115,35 @@ class DemoApiClient extends ApiClient {
     'api_timetableCreate': {'timetable'},
     'api_timetableUpdate': {'timetable'},
     'api_timetableDelete': {'timetable'},
+    'api_staff_submitPackageExtensionRequest': {'approvals'},
+    'api_founder_packageExtensionApprove': {'approvals', 'students', 'dashboard'},
+    'api_founder_packageExtensionReject': {'approvals'},
+    'api_staff_submitPaymentProfileChangeRequest': {'approvals'},
+    'api_founder_paymentProfileChangeApprove': {'approvals'},
+    'api_founder_paymentProfileChangeReject': {'approvals'},
+    'api_staff_proposeClosure': {'approvals'},
+    'api_founder_authoriseClosure': {'approvals', 'sessions', 'dashboard'},
+    'api_founder_closureReject': {'approvals'},
+    'api_founder_revokeClosure': {'approvals', 'sessions', 'dashboard'},
+    'api_staff_requestClassCorrection': {'approvals'},
+    'api_founder_approveClassCorrection': {'approvals', 'sessions', 'dashboard'},
+    'api_founder_rejectClassCorrection': {'approvals'},
+    'api_staff_submitLateFeeWaiverRequest': {'approvals'},
+    'api_founder_lateFeeWaiverApprove': {'approvals', 'students', 'dashboard'},
+    'api_founder_lateFeeWaiverReject': {'approvals'},
+    'api_staff_submitInstalmentPlanDraft': {'approvals'},
+    'api_founder_instalmentPlanDraftApprove': {'approvals', 'students', 'payments'},
+    'api_founder_instalmentPlanDraftReject': {'approvals'},
+    'api_staff_generateTermsToken': {},
+    'api_staff_requestManualTermsAcceptance': {'approvals'},
+    'api_founder_manualTermsAcceptanceApprove': {'approvals'},
+    'api_founder_manualTermsAcceptanceReject': {'approvals'},
+    'api_founder_addAuthorizedEmail': {},
+    'api_founder_removeAuthorizedEmail': {},
+    'api_founder_revokeDeviceToken': {},
+    'api_staff_requestAddTeacher': {'approvals'},
+    'api_founder_addTeacherRequestApprove': {'approvals', 'teachers'},
+    'api_founder_addTeacherRequestReject': {'approvals'},
   };
 
   /// Write endpoints that must carry DEMO provenance (no real write happens).
@@ -141,11 +171,50 @@ class DemoApiClient extends ApiClient {
     'api_founder_finalisePaymentDraft',
     'api_staff_finalisePaymentDraft',
     'api_founder_mergeStudentDraft',
+    'api_founder_studentDraftReject',
+    'api_staff_sendWhatsApp',
+    'api_staff_sendWhatsAppDocument',
+    'api_staff_submitSchoolInvoiceDraft',
+    'api_founder_finaliseSchoolInvoiceDraft',
+    'api_founder_schoolInvoiceDraftReject',
+    'api_staff_requestReceiptCorrection',
+    'api_founder_voidReceipt',
+    'api_founder_correctionReject',
+    'api_founder_closeMonth',
     'api_updateTeacherCompensation',
     'api_generateSchoolInvoice',
     'api_timetableCreate',
     'api_timetableUpdate',
     'api_timetableDelete',
+    'api_staff_submitPackageExtensionRequest',
+    'api_founder_packageExtensionApprove',
+    'api_founder_packageExtensionReject',
+    'api_staff_submitPaymentProfileChangeRequest',
+    'api_founder_paymentProfileChangeApprove',
+    'api_founder_paymentProfileChangeReject',
+    'api_staff_proposeClosure',
+    'api_founder_authoriseClosure',
+    'api_founder_closureReject',
+    'api_founder_revokeClosure',
+    'api_staff_requestClassCorrection',
+    'api_founder_approveClassCorrection',
+    'api_founder_rejectClassCorrection',
+    'api_staff_submitLateFeeWaiverRequest',
+    'api_founder_lateFeeWaiverApprove',
+    'api_founder_lateFeeWaiverReject',
+    'api_staff_submitInstalmentPlanDraft',
+    'api_founder_instalmentPlanDraftApprove',
+    'api_founder_instalmentPlanDraftReject',
+    'api_staff_generateTermsToken',
+    'api_staff_requestManualTermsAcceptance',
+    'api_founder_manualTermsAcceptanceApprove',
+    'api_founder_manualTermsAcceptanceReject',
+    'api_founder_addAuthorizedEmail',
+    'api_founder_removeAuthorizedEmail',
+    'api_founder_revokeDeviceToken',
+    'api_staff_requestAddTeacher',
+    'api_founder_addTeacherRequestApprove',
+    'api_founder_addTeacherRequestReject',
   };
 
   @override
@@ -191,14 +260,7 @@ class DemoApiClient extends ApiClient {
       case 'api_staff_resolveTodaysClass':
         return _resolveTodaysClass(a);
       case 'api_staff_scheduleSession':
-        return {
-          'ok': true,
-          'scheduledSessionId': 'SCSS-DEMO-${DateTime.now().millisecondsSinceEpoch}',
-          'status': 'SCHEDULED',
-          'sessionDate': a['sessionDate'] ?? '',
-          'sessionCredit': a['sessionCredit'] ?? 1,
-          'durationMinutes': a['durationMinutes'] ?? 60,
-        };
+        return _scheduleSession(a);
       case 'api_staff_sessionRoster':
         return _sessionRoster();
       case 'api_staff_inquiryTransition':
@@ -343,11 +405,292 @@ class DemoApiClient extends ApiClient {
       case 'api_staff_listMyApprovals':
         return _staffMyRequests();
       case 'api_staff_commGenerate':
-        return _commGenerate();
+        return _commGenerate(a);
+      case 'api_whatsappStatus':
+        return {'ok': true, 'enabled': true, 'connected': false, 'note': 'demo — no gateway'};
+      case 'api_staff_sendWhatsApp':
+      case 'api_staff_sendWhatsAppDocument':
+        return _demoWhatsApp(api, a);
+      case 'api_staff_messageHistory':
+        final mine = _demoMessages.where((m) => m['studentId'] == a['studentId']).toList();
+        return {'ok': true, 'rows': mine, 'count': mine.length};
+      case 'api_founder_studentDraftReject':
+        return {
+          'ok': true,
+          'changed': true,
+          'draftId': a['draftId'] ?? '',
+          'status': 'REJECTED',
+          'note': 'demo rejection',
+        };
+      case 'api_staff_submitSchoolInvoiceDraft':
+        return {
+          'ok': true,
+          'draftId': 'SIDRAFT-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'SUBMITTED',
+          'persisted': true,
+          'note': 'Sent to Sharvil. He allocates the invoice number when he finalises it.',
+        };
+      case 'api_founder_finaliseSchoolInvoiceDraft':
+        return {
+          'ok': true,
+          'draftId': a['draftId'] ?? '',
+          'changed': true,
+          'invoiceId': 'SINV-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'invoiceNo': 'SMI-26-27-DEMO',
+          'note': 'demo — no real invoice issued',
+        };
+      case 'api_founder_schoolInvoiceDraftReject':
+        return {'ok': true, 'draftId': a['draftId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_staff_submitPackageExtensionRequest':
+        return {
+          'ok': true,
+          'requestId': 'PKGEXT-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'SUBMITTED',
+          'persisted': true,
+          'note': 'Sent to Sharvil.',
+        };
+      case 'api_founder_packageExtensionApprove':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'note': 'demo — package not really extended'};
+      case 'api_founder_packageExtensionReject':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_staff_submitPaymentProfileChangeRequest':
+        return {
+          'ok': true,
+          'requestId': 'PPCHG-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'SUBMITTED',
+          'persisted': true,
+          'note': 'Sent to Sharvil.',
+        };
+      case 'api_founder_paymentProfileChangeApprove':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'note': 'demo — profile not really changed'};
+      case 'api_founder_paymentProfileChangeReject':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_staff_proposeClosure':
+        return {
+          'ok': true,
+          'closureId': 'CLOSURE-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'state': 'PROPOSED',
+          'persisted': true,
+          'note': 'Sent to Sharvil. Classes stay as expected until he authorises it.',
+        };
+      case 'api_founder_authoriseClosure':
+        return {'ok': true, 'closureId': a['closureId'] ?? '', 'changed': true, 'note': 'demo — no real classes affected'};
+      case 'api_founder_closureReject':
+        return {'ok': true, 'closureId': a['closureId'] ?? '', 'changed': true, 'state': 'REVOKED'};
+      case 'api_founder_revokeClosure':
+        return {'ok': true, 'closureId': a['closureId'] ?? '', 'changed': true, 'note': 'demo — closure revoked'};
+      case 'api_staff_requestClassCorrection':
+        return {
+          'ok': true,
+          'id': 'CCORR-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'eventId': a['eventId'] ?? '',
+          'status': 'SUBMITTED',
+          'note': 'Sent to Sharvil. The class stays answered as it is until he decides.',
+        };
+      case 'api_founder_approveClassCorrection':
+        return {'ok': true, 'id': a['correctionId'] ?? '', 'changed': true, 'note': 'demo — class re-opened'};
+      case 'api_founder_rejectClassCorrection':
+        return {'ok': true, 'id': a['correctionId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_staff_submitLateFeeWaiverRequest':
+        return {
+          'ok': true,
+          'requestId': 'WAIVER-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'SUBMITTED',
+          'persisted': true,
+          'note': 'Sent to Sharvil.',
+        };
+      case 'api_founder_lateFeeWaiverApprove':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'note': 'demo — no real waiver applied'};
+      case 'api_founder_lateFeeWaiverReject':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_staff_submitInstalmentPlanDraft':
+        return {
+          'ok': true,
+          'draftId': 'INSTDRAFT-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'SUBMITTED',
+          'persisted': true,
+          'note': 'Sent to Sharvil.',
+        };
+      case 'api_founder_instalmentPlanDraftApprove':
+        return {'ok': true, 'draftId': a['draftId'] ?? '', 'changed': true, 'planId': 'INSTPLAN-DEMO-1', 'note': 'demo — no real plan created'};
+      case 'api_founder_instalmentPlanDraftReject':
+        return {'ok': true, 'draftId': a['draftId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_instalmentPlanForStudent':
+        return {'ok': true, 'hasPlan': false};
+      case 'api_staff_generateTermsToken':
+        return {
+          'ok': true,
+          'token': 'demotoken123',
+          'path': '/terms/demotoken123',
+          'url': '',
+          'expiresInDays': 7,
+          'note': 'DEMO — no real link generated.',
+        };
+      case 'api_staff_requestManualTermsAcceptance':
+        return {
+          'ok': true,
+          'requestId': 'MTERMS-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'status': 'SUBMITTED',
+          'persisted': true,
+          'note': 'Sent to Sharvil. This is an approval item, not a tick box.',
+        };
+      case 'api_founder_manualTermsAcceptanceApprove':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'status': 'APPROVED'};
+      case 'api_founder_manualTermsAcceptanceReject':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_founder_listAuthorizedEmails':
+        return {
+          'ok': true,
+          'rows': [
+            {'email': 'latika@example.com', 'role': 'OPS_USER', 'branches': '', 'addedBy': 'demo founder', 'addedAt': '2026-09-01', 'note': ''},
+          ],
+        };
+      case 'api_founder_addAuthorizedEmail':
+        return {'ok': true, 'email': a['email'] ?? '', 'changed': true, 'note': 'demo — no real access added'};
+      case 'api_founder_removeAuthorizedEmail':
+        return {'ok': true, 'email': a['email'] ?? '', 'changed': true, 'note': 'demo — no real access removed'};
+      case 'api_founder_listStaffTokens':
+        return {
+          'ok': true,
+          'rows': [
+            {
+              'id': 'DEV-DEMO-1',
+              'role': 'OPS_USER',
+              'label': 'latika@example.com',
+              'email': 'latika@example.com',
+              'branches': '',
+              'createdAt': '2026-09-01',
+              'lastUsedAt': '2026-09-17',
+              'revokedAt': '',
+              'stale': false,
+            },
+            {
+              'id': 'DEV-DEMO-2',
+              'role': 'OPS_USER',
+              'label': 'old-tablet@example.com',
+              'email': 'old-tablet@example.com',
+              'branches': '',
+              'createdAt': '2026-05-01',
+              'lastUsedAt': '2026-05-14',
+              'revokedAt': '',
+              'stale': true,
+            },
+          ],
+        };
+      case 'api_founder_revokeDeviceToken':
+        return {'ok': true, 'id': a['id'] ?? '', 'changed': true, 'note': 'demo — no real device revoked'};
+      case 'api_staff_requestAddTeacher':
+        return {
+          'ok': true,
+          'requestId': 'TCHREQ-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'changed': true,
+          'note': 'Sent to Sharvil for approval.',
+        };
+      case 'api_founder_addTeacherRequestApprove':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'status': 'APPROVED', 'teacherId': 'T-DEMO-NEW'};
+      case 'api_founder_addTeacherRequestReject':
+        return {'ok': true, 'requestId': a['requestId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_teacherAttendanceReport':
+        return {
+          'ok': true,
+          'from': a['from'] ?? '2026-09-01',
+          'to': a['to'] ?? '2026-09-18',
+          'scheduledToday': 24,
+          'unansweredToday': 2,
+          'teachers': [
+            {'teacherId': 'T-001', 'teacherName': 'Rahul Joshi', 'scheduled': 10, 'held': 8, 'cancelled': 1, 'substituted': 0, 'unanswered': 1},
+            {'teacherId': 'T-002', 'teacherName': 'Meera Nair', 'scheduled': 8, 'held': 7, 'cancelled': 0, 'substituted': 1, 'unanswered': 0},
+            {'teacherId': 'T-003', 'teacherName': 'Vikram Singh', 'scheduled': 6, 'held': 5, 'cancelled': 0, 'substituted': 0, 'unanswered': 1},
+          ],
+        };
+      case 'api_termsStatusForStudent':
+        return {
+          'ok': true,
+          'tokens': [
+            {
+              'token': 'DEMO-TERMS-TOKEN',
+              'status': 'OPEN',
+              'issuedAt': '2026-09-17',
+              'expiresAt': '2026-10-01',
+              'acceptedAt': '',
+              'url': 'https://demo.swarmangal.app/terms/DEMO-TERMS-TOKEN',
+            },
+          ],
+          'manualRequests': const [],
+        };
+      case 'api_closureCalendarList':
+        return {
+          'ok': true,
+          'rows': [
+            {
+              'closureId': 'CLOSURE-DEMO-1',
+              'scope': 'BRANCH',
+              'branch': 'GOREGAON',
+              'fromDate': '2026-10-02',
+              'toDate': '2026-10-02',
+              'reason': 'Gandhi Jayanti',
+              'state': 'AUTHORISED',
+              'backdated': false,
+              'recordedBy': 'demo staff',
+              'authorisedBy': 'demo founder',
+            },
+          ],
+        };
+      case 'api_staff_requestReceiptCorrection':
+        return {
+          'ok': true,
+          'id': 'RCORR-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+          'receiptNo': a['receiptNo'] ?? '',
+          'status': 'SUBMITTED',
+          'note': 'Sent to Sharvil. The receipt stays as it is until he decides. (DEMO — not persisted)',
+        };
+      case 'api_founder_voidReceipt':
+        return {
+          'ok': true,
+          'receiptNo': a['receiptNo'] ?? '',
+          'changed': true,
+          'status': 'VOID',
+          'dueDateRestored': '',
+          'note': 'demo void — nothing was actually changed',
+        };
+      case 'api_founder_correctionReject':
+        return {'ok': true, 'id': a['correctionId'] ?? '', 'changed': true, 'status': 'REJECTED'};
+      case 'api_founder_periodLocks':
+        return {
+          'ok': true,
+          'rows': [
+            {'month': '2026-08', 'label': 'August 2026', 'closedBy': 'demo@founder', 'closedAt': '2026-09-02 10:00', 'note': ''},
+          ],
+          'nextToClose': '',
+          'nextToCloseLabel': '',
+          'unansweredCount': 0,
+          'unanswered': [],
+          'expectedEventsFloor': '2026-10',
+        };
+      case 'api_founder_closeMonth':
+        return {
+          'ok': true,
+          'month': a['month'] ?? '',
+          'changed': true,
+          'closedBy': 'demo@founder',
+          'note': 'demo close — nothing was actually locked',
+        };
+      case 'api_registerPushToken':
+        return (a['fcmToken'] ?? '').toString().isEmpty
+            ? {'ok': false, 'code': 'TOKEN_REQUIRED', 'error': 'No push token given.'}
+            : {'ok': true, 'registered': true};
+      case 'api_unregisterPushToken':
+        return (a['fcmToken'] ?? '').toString().isEmpty
+            ? {'ok': false, 'code': 'TOKEN_REQUIRED', 'error': 'No push token given.'}
+            : {'ok': true, 'unregistered': true};
+      case 'api_pushStatus':
+        return {'ok': true, 'enabled': false};
       case 'api_staff_attendanceRoster':
         return _attendanceRoster(a);
       case 'api_staff_inquiryQueue':
         return _inquiries();
+      case 'api_staff_inquiryDetail':
+        return _inquiryDetail(a);
       // write endpoints: demo returns success envelopes only
       case 'api_addStudent':
       case 'api_staff_saveStudentDraft':
@@ -553,13 +896,113 @@ class DemoApiClient extends ApiClient {
         'onlineToday': 18000,
         'scope': 'ALL',
         'consolidated': true,
+        'approvalsCount': 5,
+        'cards': _taskCards(forFounder: true),
         'metrics': {
           'dueTodayCount': 3,
           'overdueCount': 2,
           'termsPendingCount': 4,
         },
+        ..._dashboardOverview(),
         'recent': _receiptRows().take(6).toList(),
       };
+
+  /// The sections shared by the staff "Today" screen and the founder "Home"
+  /// screen — one demo body for both, matching the real server's shape.
+  Map<String, dynamic> _dashboardOverview() {
+    final classes = (_todaysClasses({'date': '2026-09-11'})['rows'] as List).cast<Map<String, dynamic>>();
+    final byTeacher = <String, Map<String, dynamic>>{};
+    for (final c in classes) {
+      final id = (c['teacherId'] ?? '').toString();
+      if (id.isEmpty) continue;
+      final row = byTeacher.putIfAbsent(id, () => {
+            'teacherId': id,
+            'teacherName': c['teacherName'] ?? '',
+            'scheduled': 0,
+            'held': 0,
+            'cancelled': 0,
+            'substituted': 0,
+            'unanswered': 0,
+          });
+      row['scheduled'] = (row['scheduled'] as int) + 1;
+      final outcome = (c['outcome'] ?? '').toString().toUpperCase();
+      final resolved = c['resolved'] == true;
+      if (!resolved) {
+        row['unanswered'] = (row['unanswered'] as int) + 1;
+      } else if (outcome == 'HELD') {
+        row['held'] = (row['held'] as int) + 1;
+      } else if (outcome == 'SUBSTITUTE_DELIVERED') {
+        row['substituted'] = (row['substituted'] as int) + 1;
+      } else if (outcome.contains('CANCELLED')) {
+        row['cancelled'] = (row['cancelled'] as int) + 1;
+      }
+    }
+    final activeStudents = _studentRows().where((r) => r['status'] == 'ACTIVE').toList();
+    return {
+      'feesDueToday': {
+        'count': 3,
+        'overdueCount': 2,
+        'dueSoonCount': 2,
+        'rows': activeStudents.take(3).map((s) => {
+              'studentId': s['studentId'],
+              'studentName': s['studentName'],
+              'classCode': s['classCode'],
+              'phone': s['phone'],
+            }).toList(),
+      },
+      'todaysLectures': {
+        'count': classes.length,
+        'unanswered': classes.where((c) => c['resolved'] != true).length,
+        'rows': classes,
+      },
+      'attendanceSummary': {
+        'date': '2026-09-11',
+        'totalActive': activeStudents.length,
+        'marked': 3,
+        'notMarked': activeStudents.length - 3,
+        'present': 2,
+        'absent': 1,
+        'excused': 0,
+        'late': 0,
+      },
+      'enquiries': {
+        'openCount': 2,
+        'callTodayCount': 1,
+        'rows': [
+          {'inquiryId': 'INQ-501', 'name': 'Riya Kapoor', 'phone': '9860011223'},
+        ],
+      },
+      'teacherAttendance': {
+        'scheduledToday': classes.length,
+        'unansweredToday': classes.where((c) => c['resolved'] != true).length,
+        'teachers': byTeacher.values.toList(),
+      },
+    };
+  }
+
+  Map<String, dynamic> _scheduleSession(Map<String, dynamic> a) {
+    final kind = (a['customKind'] ?? '').toString().toUpperCase();
+    if (!['SUBSTITUTE', 'REPLACEMENT', 'GOODWILL_RECOVERY'].contains(kind)) {
+      return {'ok': false, 'code': 'CUSTOM_KIND_REQUIRED', 'error': 'Choose what this extra class is: a substitute, a replacement, or goodwill recovery.'};
+    }
+    if ((a['reason'] ?? '').toString().trim().isEmpty) {
+      return {'ok': false, 'code': 'REASON_REQUIRED', 'error': 'Say why this extra class is being held.'};
+    }
+    if (kind != 'GOODWILL_RECOVERY' && (a['originalEventId'] ?? '').toString().trim().isEmpty) {
+      return {'ok': false, 'code': 'ORIGINAL_EVENT_REQUIRED', 'error': 'A ${kind.toLowerCase()} must name the class it stands in for.'};
+    }
+    return {
+      'ok': true,
+      'scheduledSessionId': 'SCSS-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+      'status': 'SCHEDULED',
+      'sessionDate': a['sessionDate'] ?? '',
+      'customKind': kind,
+      'payable': false,
+      'note': kind == 'GOODWILL_RECOVERY'
+          ? 'Goodwill class scheduled. It discharges nothing and is not payable.'
+          : '${kind == 'SUBSTITUTE' ? 'Substitute' : 'Replacement'} class scheduled. Not payable unless Sharvil decides.',
+    };
+  }
 
   Map<String, dynamic> _dueReminders() => {
         'ok': true,
@@ -582,6 +1025,7 @@ class DemoApiClient extends ApiClient {
       };
 
   Map<String, dynamic> _reminder(Map<String, dynamic> s) => {
+        'studentId': s['studentId'],
         'studentName': s['studentName'],
         'phone': s['phone'],
         'classCode': s['classCode'],
@@ -594,6 +1038,7 @@ class DemoApiClient extends ApiClient {
   List<Map<String, dynamic>> _receiptRows() => [
         {
           'receiptNo': 'RCP-2401',
+          'studentId': 'STU-55DCD622',
           'date': '2026-09-05',
           'student': 'Aarav Mehta',
           'studentName': 'Aarav Mehta',
@@ -610,6 +1055,7 @@ class DemoApiClient extends ApiClient {
         },
         {
           'receiptNo': 'RCP-2400',
+          'studentId': 'STU-77FA91C0',
           'date': '2026-09-04',
           'student': 'Diya Shah',
           'studentName': 'Diya Shah',
@@ -626,6 +1072,7 @@ class DemoApiClient extends ApiClient {
         },
         {
           'receiptNo': 'RCP-2398',
+          'studentId': 'STU-31B84E07',
           'date': '2026-09-03',
           'student': 'Ishaan Verma',
           'studentName': 'Ishaan Verma',
@@ -642,6 +1089,7 @@ class DemoApiClient extends ApiClient {
         },
         {
           'receiptNo': 'RCP-2395',
+          'studentId': 'STU-A9C3D2F1',
           'date': '2026-09-01',
           'student': 'Kaia Roy',
           'studentName': 'Kaia Roy',
@@ -740,6 +1188,7 @@ class DemoApiClient extends ApiClient {
             'status': 'INACTIVE',
             'phone': '9833044556',
             'email': '',
+            'missingFields': ['email', 'payout rule'],
           },
         ],
       };
@@ -783,13 +1232,39 @@ class DemoApiClient extends ApiClient {
         ],
       };
 
-  List<Map<String, dynamic>> _taskCards() => [
+  // Keys match the real server (src/lib/rpc/handlers2.ts buildTodoCards) so
+  // the app's key-based filtering (fee-bucket taps, the staff to-do grid)
+  // works identically in demo mode.
+  List<Map<String, dynamic>> _taskCards({bool forFounder = false}) => [
+        {
+          'key': 'DELIVERY_NOT_MARKED',
+          'title': 'Classes not answered',
+          'label': 'Classes not answered',
+          'priority': 'HIGH',
+          'count': 2,
+          'state': 'ATTENTION',
+          'targetView': 'todayClasses',
+          'emptyText': 'Every class this week is answered',
+          'actionable': true,
+        },
+        {
+          'key': 'FEES_OVERDUE',
+          'title': 'Fees Overdue',
+          'label': 'Fees Overdue',
+          'priority': 'HIGH',
+          'count': _studentRows().where((r) => r['feeStatus'] == 'OVERDUE').length,
+          'state': 'ATTENTION',
+          'targetView': 'students',
+          'emptyText': 'Nothing overdue',
+          'actionable': true,
+          'bucket': 'OVERDUE',
+        },
         {
           'key': 'FEES_DUE_TODAY',
           'title': 'Fees Due Today',
           'label': 'Fees Due Today',
           'priority': 'HIGH',
-          'count': 3,
+          'count': _studentRows().where((r) => r['feeStatus'] == 'DUE_TODAY').length,
           'state': 'ATTENTION',
           'targetView': 'students',
           'emptyText': 'No fees due today',
@@ -801,7 +1276,7 @@ class DemoApiClient extends ApiClient {
           'title': 'Fees Upcoming',
           'label': 'Fees Upcoming',
           'priority': 'MEDIUM',
-          'count': 2,
+          'count': _studentRows().where((r) => r['feeStatus'] == 'DUE_SOON').length,
           'state': 'OPEN',
           'targetView': 'students',
           'emptyText': 'Nothing upcoming',
@@ -820,60 +1295,62 @@ class DemoApiClient extends ApiClient {
           'actionable': true,
         },
         {
-          'key': 'CAP_REVIEW',
-          'title': 'Cap Review',
-          'label': 'Cap Review — status check',
-          'priority': 'HIGH',
+          'key': 'CALL_TODAY',
+          'title': 'Call these today',
+          'label': 'Call these today',
+          'priority': 'MEDIUM',
+          'count': 1,
+          'state': 'ATTENTION',
+          'targetView': 'inquiries',
+          'emptyText': 'Nobody to call today',
+          'actionable': true,
+        },
+        {
+          'key': 'FEE_PLAN_MISSING',
+          'title': 'Fee plan not set',
+          'label': 'Fee plan not set',
+          'priority': 'LOW',
+          'count': _studentRows().where((r) => (r['feeStatus'] ?? '') == '').length,
+          'state': 'OPEN',
+          'targetView': 'students',
+          'emptyText': 'Every student has a plan',
+          'actionable': true,
+          'bucket': 'UNKNOWN',
+        },
+        {
+          'key': 'TERMS_NOT_ACCEPTED',
+          'title': 'Terms not accepted',
+          'label': 'Terms not accepted',
+          'priority': 'LOW',
+          'count': 2,
+          'state': 'OPEN',
+          'targetView': 'students',
+          'emptyText': 'Every active student has accepted terms',
+          'actionable': true,
+        },
+        {
+          'key': 'PAUSED_TOO_LONG',
+          'title': 'Paused a while — review?',
+          'label': 'Paused a while',
+          'priority': 'LOW',
           'count': 1,
           'state': 'OPEN',
           'targetView': 'students',
-          'emptyText': 'No cap review',
+          'emptyText': 'No long-paused students',
           'actionable': true,
         },
-        {
-          'key': 'TERMS_PENDING',
-          'title': 'Terms Pending',
-          'label': 'Terms Pending',
-          'priority': 'MEDIUM',
-          'count': 4,
-          'state': 'OPEN',
-          'targetView': 'students',
-          'emptyText': 'All terms accepted',
-          'actionable': true,
-        },
-        {
-          'key': 'INQUIRIES_FOLLOW_UP',
-          'title': 'Inquiries to follow up',
-          'label': 'Inquiries to follow up',
-          'priority': 'MEDIUM',
-          'count': 2,
-          'state': 'OPEN',
-          'targetView': 'inquiries',
-          'emptyText': 'No inquiries',
-          'actionable': true,
-        },
-        {
-          'key': 'FINANCIAL_EXCEPTIONS_PENDING',
-          'title': 'Financial Exceptions',
-          'label': 'Financial Exceptions Pending',
-          'priority': 'HIGH',
-          'count': 0,
-          'state': 'CLEAR',
-          'targetView': 'approvals',
-          'emptyText': 'None',
-          'actionable': false,
-        },
-        {
-          'key': 'MY_REQUESTS',
-          'title': 'My Requests',
-          'label': 'My Requests',
-          'priority': 'MEDIUM',
-          'count': 0,
-          'state': 'CLEAR',
-          'targetView': 'myRequests',
-          'emptyText': 'Nothing waiting',
-          'actionable': false,
-        },
+        if (!forFounder)
+          {
+            'key': 'WAITING_FOR_SHARVIL',
+            'title': 'Waiting for Sharvil',
+            'label': 'Waiting for Sharvil',
+            'priority': 'LOW',
+            'count': 5,
+            'state': 'OPEN',
+            'targetView': 'requests',
+            'emptyText': 'Nothing waiting',
+            'actionable': true,
+          },
       ];
 
   Map<String, dynamic> _todaysClasses(Map<String, dynamic> a) {
@@ -890,6 +1367,7 @@ class DemoApiClient extends ApiClient {
           'classDate': date,
           'startTime': '18:00',
           'teacherId': 'T-003',
+          'teacherName': 'Vikram Singh',
           'branch': 'KANDIVALI',
           'course': 'Tabla',
           'outcome': '',
@@ -912,6 +1390,7 @@ class DemoApiClient extends ApiClient {
           'classDate': date,
           'startTime': '17:00',
           'teacherId': 'T-001',
+          'teacherName': 'Rahul Joshi',
           'branch': 'GOREGAON',
           'course': 'Keyboard',
           'outcome': '',
@@ -934,6 +1413,7 @@ class DemoApiClient extends ApiClient {
           'classDate': date,
           'startTime': '16:00',
           'teacherId': 'T-002',
+          'teacherName': 'Meera Nair',
           'branch': 'GOREGAON',
           'course': 'Violin',
           'outcome': 'HELD',
@@ -1071,13 +1551,18 @@ class DemoApiClient extends ApiClient {
         'ok': true,
         'build': 'RC2.57',
         'branch': 'CONSOLIDATED',
-        'count': 3,
-        'counts': {'total': 3, 'WAITING_ON_TERMS': 1, 'PAYMENT_DRAFT': 2, 'STUDENT_DRAFT': 1, 'SCHOOL_MASTER': 0, 'WAIVER': 1, 'UNKNOWN_STATUS': 0},
+        'count': 5,
+        'counts': {
+          'total': 5, 'WAITING_ON_TERMS': 1, 'PAYMENT_DRAFT': 2, 'STUDENT_DRAFT': 1, 'SCHOOL_MASTER': 0, 'WAIVER': 1,
+          'RECEIPT_CORRECTION': 1, 'SCHOOL_INVOICE_DRAFT': 1, 'UNKNOWN_STATUS': 0,
+        },
         'empty': false,
         'items': _approvalItems(),
         'groups': [
           {'type': 'PAYMENT_DRAFT', 'label': 'Payment drafts', 'items': _approvalItems().where((i) => i['type'] == 'PAYMENT_DRAFT').toList()},
           {'type': 'STUDENT_DRAFT', 'label': 'Student drafts', 'items': _approvalItems().where((i) => i['type'] == 'STUDENT_DRAFT').toList()},
+          {'type': 'RECEIPT_CORRECTION', 'label': 'Receipt corrections', 'items': _approvalItems().where((i) => i['type'] == 'RECEIPT_CORRECTION').toList()},
+          {'type': 'SCHOOL_INVOICE_DRAFT', 'label': 'School invoices needing you', 'items': _approvalItems().where((i) => i['type'] == 'SCHOOL_INVOICE_DRAFT').toList()},
           {'type': 'WAIVER', 'label': 'Late-fee waivers', 'items': _approvalItems().where((i) => i['type'] == 'WAIVER').toList()},
         ],
         'note': 'demo approvals',
@@ -1148,28 +1633,99 @@ class DemoApiClient extends ApiClient {
           'termsStatus': '',
           'actions': ['details', 'approve', 'reject'],
         },
+        {
+          'type': 'RECEIPT_CORRECTION',
+          'itemId': 'RCORR-DEMO-401',
+          'entity': 'RCP-2401 · Aarav Mehta',
+          'studentId': '',
+          'noStudentLinked': false,
+          'paymentMode': '',
+          'feesPeriod': '',
+          'amount': '5000',
+          'branch': 'GOREGAON',
+          'date': '2026-09-11',
+          'reason': 'wrong amount entered',
+          'flags': {'backdated': false, 'incomplete': false, 'junk': false},
+          'termsStatus': '',
+          'receiptNo': 'RCP-2401',
+          'actions': ['details', 'void', 'reject'],
+        },
+        {
+          'type': 'SCHOOL_INVOICE_DRAFT',
+          'itemId': 'SIDRAFT-DEMO-501',
+          'entity': 'Keyboard',
+          'studentId': '',
+          'noStudentLinked': false,
+          'paymentMode': '',
+          'feesPeriod': '6 Months',
+          'amount': '18000',
+          'branch': 'KANDIVALI',
+          'date': '2026-09-12',
+          'reason': 'school invoice',
+          'flags': {'backdated': false, 'incomplete': false, 'junk': false},
+          'termsStatus': '',
+          'actions': ['details', 'finalise', 'reject'],
+        },
       ];
 
-  Map<String, dynamic> _commGenerate() => {
-        'ok': true,
-        'type': 'FEE_REMINDER',
-        'subject': 'Fees due — Swar Mangal',
-        'body': 'Namaste, reminder that Aarav Mehta\'s fees of ₹5,000 are due on 5 September 2026. '
-            'Please pay via the link shared. — Swar Mangal Music Academy',
-        'recipientName': 'Parent of Aarav Mehta',
-        'recipientType': 'parent',
-        'typeRequested': 'FEE_REMINDER',
-        'typeResolved': 'FEE_REMINDER',
-        'typeCorrected': false,
-        'typeNote': '',
-        'warnings': [],
-        'mode': 'COPY_ONLY',
-        'providerSend': 'DISABLED',
-        'termsLink': '',
-        'termsTokenId': '',
-        'termsTokenMinted': false,
-        'termsAuditIncomplete': false,
-      };
+  // Demo never reaches a gateway: "sent" messages live only in this list and
+  // carry status DEMO so nobody mistakes them for a real send.
+  static final List<Map<String, dynamic>> _demoMessages = [];
+
+  Map<String, dynamic> _demoWhatsApp(String api, Map<String, dynamic> a) {
+    final key = (a['clientIntentKey'] ?? '').toString();
+    final existing = _demoMessages.where((m) => m['intent'] == key && key.isNotEmpty);
+    if (existing.isNotEmpty) {
+      return {'ok': true, 'duplicate': true, 'messageId': existing.first['messageId'], 'message': existing.first};
+    }
+    final now = DateTime.now().toIso8601String();
+    final msg = <String, dynamic>{
+      'messageId': 'WAM-DEMO-${DateTime.now().millisecondsSinceEpoch}',
+      'intent': key,
+      'studentId': a['studentId'] ?? '',
+      'kind': a['kind'] ?? (api == 'api_staff_sendWhatsAppDocument' ? 'RECEIPT' : 'CUSTOM'),
+      'status': 'DEMO',
+      'to': 'demo',
+      'body': a['body'] ?? a['caption'] ?? '',
+      'fileName': a['fileName'] ?? '',
+      'error': '',
+      'createdAt': now,
+      'sentAt': now,
+      'deliveredAt': '',
+      'readAt': '',
+    };
+    _demoMessages.insert(0, msg);
+    return {'ok': true, 'messageId': msg['messageId'], 'message': msg};
+  }
+
+  Map<String, dynamic> _commGenerate(Map<String, dynamic> a) {
+    final id = (a['studentId'] ?? '').toString();
+    final st = _studentRows().firstWhere((r) => r['studentId'] == id, orElse: () => _studentRows().first);
+    final name = st['studentName'];
+    final phone = (st['phone'] ?? '').toString();
+    return {
+      'ok': true,
+      'type': 'FEE_REMINDER',
+      'subject': 'Fees due — Swar Mangal',
+      'body': 'Namaste, reminder that $name\'s fees are due on ${st['nextDueDate']}. '
+          'Please pay via the link shared. — Swar Mangal Music Academy',
+      'recipientName': 'Parent of $name',
+      'recipientType': 'parent',
+      'typeRequested': 'FEE_REMINDER',
+      'typeResolved': 'FEE_REMINDER',
+      'typeCorrected': false,
+      'typeNote': '',
+      'warnings': [],
+      'kind': 'FEE_REMINDER',
+      'recipientPhone': phone.length == 10 ? '${phone.substring(0, 2)}••••${phone.substring(6)}' : '',
+      'mode': 'WHATSAPP',
+      'providerSend': 'DISABLED',
+      'termsLink': '',
+      'termsTokenId': '',
+      'termsTokenMinted': false,
+      'termsAuditIncomplete': false,
+    };
+  }
 
   Map<String, dynamic> _attendanceRoster(Map<String, dynamic> a) {
     final inst = ((a['instrument'] ?? '') as String).trim();
@@ -1182,19 +1738,27 @@ class DemoApiClient extends ApiClient {
       'count': rows.length,
       'instruments': ['Keyboard', 'Violin', 'Guitar', 'Tabla'],
       'students': rows
-          .map((s) => {
-                'studentId': s['studentId'],
-                'name': s['studentName'],
-                'instrument': s['instrument'],
+          .asMap()
+          .entries
+          .map((e) => {
+                'studentId': e.value['studentId'],
+                'name': e.value['studentName'],
+                'instrument': e.value['instrument'],
                 'teacherId': 'T-001',
-                'teacherName': s['teacher'],
-                'phone': s['phone'],
+                'teacherName': e.value['teacher'],
+                'phone': e.value['phone'],
                 'expectedToday': true,
+                // A couple of rows already marked, so the badge and the
+                // "already marked" button state are visible in demo mode too.
+                'state': e.key == 0 ? 'PRESENT' : (e.key == 1 ? 'ABSENT' : 'NOT_MARKED'),
               })
           .toList(),
     };
   }
 
+  // Real statuses only (OPEN/CONTACTED/DORMANT/TRIAL_SCHEDULED/TRIAL_DONE/
+  // DROPPED/CONVERTED) — the server never sends NEW/FOLLOW_UP, and a demo
+  // fixture using those hid a real bug in Inquiry.actionable for a while.
   Map<String, dynamic> _inquiries() => {
         'ok': true,
         'rows': [
@@ -1204,7 +1768,10 @@ class DemoApiClient extends ApiClient {
             'phone': '9860011223',
             'instrument': 'Guitar',
             'branch': 'GOREGAON',
-            'status': 'NEW',
+            'source': 'Walk-in',
+            'status': 'OPEN',
+            'finalStatus': 'PENDING',
+            'dormantReason': '',
             'next_contact_date': '2026-09-11',
             'created_at': '2026-09-10',
           },
@@ -1214,7 +1781,10 @@ class DemoApiClient extends ApiClient {
             'phone': '9860022334',
             'instrument': 'Keyboard',
             'branch': 'GOREGAON',
-            'status': 'FOLLOW_UP',
+            'source': 'Referral',
+            'status': 'CONTACTED',
+            'finalStatus': 'PENDING',
+            'dormantReason': '',
             'next_contact_date': '2026-09-12',
             'created_at': '2026-09-09',
           },
@@ -1224,12 +1794,94 @@ class DemoApiClient extends ApiClient {
             'phone': '9860033445',
             'instrument': 'Violin',
             'branch': 'KANDIVALI',
+            'source': 'Online/Social',
             'status': 'DROPPED',
+            'finalStatus': 'REJECTED',
+            'dormantReason': '',
             'next_contact_date': '',
             'created_at': '2026-09-06',
           },
+          {
+            'inquiry_id': 'INQ-497',
+            'name': 'Karan Mehta',
+            'phone': '9860044556',
+            'instrument': '', // no instrument preference — a "random" general inquiry
+            'branch': 'GOREGAON',
+            'source': 'Walk-in',
+            'status': 'OPEN',
+            'finalStatus': 'PENDING',
+            'dormantReason': '',
+            'next_contact_date': '2026-09-13',
+            'created_at': '2026-09-08',
+          },
+          {
+            'inquiry_id': 'INQ-495',
+            'name': 'Priya Nair',
+            'phone': '9860055667',
+            'instrument': 'Guitar',
+            'branch': 'KANDIVALI',
+            'source': 'Former Student',
+            'status': 'OPEN',
+            'finalStatus': 'PENDING',
+            'dormantReason': '',
+            'next_contact_date': '2026-09-14',
+            'created_at': '2026-09-05',
+          },
+          {
+            'inquiry_id': 'INQ-490',
+            'name': 'Rahul Deshmukh',
+            'phone': '9860066778',
+            'instrument': 'Tabla',
+            'branch': 'GOREGAON',
+            'source': 'Walk-in',
+            'status': 'DORMANT',
+            'finalStatus': 'PENDING',
+            'dormantReason': 'TIMEOUT',
+            'next_contact_date': '',
+            'created_at': '2026-08-01',
+          },
         ],
       };
+
+  Map<String, dynamic> _inquiryDetail(Map<String, dynamic> a) {
+    final id = (a['inquiryId'] ?? 'INQ-501').toString();
+    final byId = {
+      for (final r in (_inquiries()['rows'] as List).cast<Map<String, dynamic>>()) r['inquiry_id']: r,
+    };
+    final row = byId[id] ?? byId['INQ-501']!;
+    return {
+      'ok': true,
+      'inquiryId': id,
+      'name': row['name'],
+      'phone': row['phone'],
+      'course': row['instrument'],
+      'branch': row['branch'],
+      'source': row['source'] ?? 'Walk-in',
+      'notes': '',
+      'status': row['status'],
+      'finalStatus': row['finalStatus'],
+      'createdAt': row['created_at'],
+      'nextContactDate': row['next_contact_date'],
+      'trialDate': '',
+      'dropReason': row['status'] == 'DROPPED' ? 'Chose a different academy' : '',
+      'convertedStudentId': '',
+      'noAnswerCount': 0,
+      'lastContactedAt': '',
+      'dormantReason': row['dormantReason'] ?? '',
+      'formerStudentId': row['source'] == 'Former Student' ? 'S-DEMO-1' : '',
+      'followups': [
+        {
+          'id': 'FOLLOWUP-DEMO-1',
+          'action': 'LOG_CONTACT',
+          'description': 'Spoke to the parent; interested but comparing fees with another academy.',
+          'resultingStatus': row['status'],
+          'nextContactDate': row['next_contact_date'],
+          'createdBy': 'demo staff',
+          'createdAt': '2026-09-10T11:00:00',
+        },
+      ],
+    };
+  }
 
   Map<String, dynamic> _staffStudentHub(Map<String, dynamic> a) {
     final sid = _s(a['studentId'] ?? '');
@@ -1461,8 +2113,13 @@ class DemoApiClient extends ApiClient {
     };
   }
 
-  Map<String, dynamic> _todaysTasks() =>
-      {'ok': true, 'cards': _taskCards(), 'mode': 'COPY_ONLY', 'today': '2026-09-11'};
+  Map<String, dynamic> _todaysTasks() => {
+        'ok': true,
+        'cards': _taskCards(),
+        'mode': 'COPY_ONLY',
+        'today': '2026-09-11',
+        ..._dashboardOverview(),
+      };
 
   Map<String, dynamic> _payoutPreview(Map<String, dynamic> a) => {
         'ok': true,
@@ -1518,11 +2175,27 @@ class DemoApiClient extends ApiClient {
             'preCutover': true,
             'note': 'Pre-cutover manual settlement — balance forced to zero.',
           },
+          {
+            'teacherId': 'T-004',
+            'teacherName': 'Sana Qureshi',
+            'month': a['month'] ?? '2026-09',
+            'entityId': 'ENT-KANDIVALI',
+            'receiptCount': 0,
+            'payable': null,
+            'alreadyPaid': 0,
+            'status': 'NOT_PRICED',
+            'preCutover': false,
+            'note': '',
+            'reasons': [
+              {'code': 'RATE_RULE_MISSING', 'message': 'No payout rule is set for this teacher.'}
+            ],
+          },
         ],
         'byEntity': {
           'ENT-GOREGAON': {'payable': 18500, 'paid': 5000, 'balance': 13500},
           'ENT-KANDIVALI': {'payable': 16000, 'paid': 16000, 'balance': 0},
         },
+        'earningBaseDefined': true,
         'note': 'demo payout preview',
       };
 

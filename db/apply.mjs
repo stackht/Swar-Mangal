@@ -166,6 +166,17 @@ export const MIGRATIONS = [
       );
     },
   },
+  {
+    // The server used to fill an empty timetable with invented classes (every
+    // teacher, every day, hash-picked times). Remove those, then load the real
+    // Kandivali timetable — only if nothing real is left, so staff edits stay.
+    id: "2026-09-17-real-timetable",
+    run: async (c) => {
+      await c.query(`delete from timetable where id ~ '^TT-TCH-[0-9A-F]+-[0-6]$'`);
+      const { rows } = await c.query(`select count(*)::int as n from timetable`);
+      if (rows[0].n === 0) await c.query(readFileSync(join(here, "timetable_seed.sql"), "utf8"));
+    },
+  },
 ];
 
 export async function runMigrations(client) {
@@ -199,7 +210,8 @@ async function main() {
   try {
     client = new Client({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      // A Postgres on the same VPS/Docker network has no TLS; managed hosts do.
+      ssl: process.env.DATABASE_SSL === "disable" ? false : { rejectUnauthorized: false },
     });
     await client.connect();
     console.log("connected");

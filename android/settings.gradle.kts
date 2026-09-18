@@ -21,6 +21,10 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.11.1" apply false
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // Push notifications (Firebase Cloud Messaging). Declared here but only
+    // ever APPLIED in app/build.gradle.kts, and only when a real
+    // google-services.json is present — see that file for why.
+    id("com.google.gms.google-services") version "4.4.3" apply false
 }
 
 include(":app")

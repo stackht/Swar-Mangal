@@ -7,8 +7,13 @@ import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
 import 'fee_collection_screen.dart';
+import 'instalment_plan_screen.dart';
+import 'late_fee_waiver_screen.dart';
 import 'message_compose_screen.dart';
+import 'package_extension_screen.dart';
+import 'pause_membership_screen.dart';
 import 'teacher_profile_screen.dart';
+import 'terms_screen.dart';
 
 /// Student profile — the shared one-screen view of a student for both apps.
 class StudentProfileScreen extends StatefulWidget {
@@ -243,18 +248,18 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 child: Column(children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: AppColors.primary.withValues(alpha: .08),
+                    backgroundColor: AppColors.adaptive(context, AppColors.primary).withValues(alpha: .08),
                     child: Text(s.studentName.isNotEmpty ? s.studentName[0].toUpperCase() : '?',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.primary))),
                   ),
                   const SizedBox(height: AppSpace.s3),
                   Text(s.studentName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: AppSpace.s1),
-                  Text(s.studentId, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                  Text(s.studentId, style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                   const SizedBox(height: AppSpace.s2),
                   Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
                     TagChip(s.classCode),
-                    if (s.instrument.isNotEmpty) TagChip(s.instrument, color: AppColors.focus),
+                    if (s.instrument.isNotEmpty) TagChip(s.instrument, color: AppColors.adaptive(context, AppColors.focus)),
                     StatusBadge(s.status.isEmpty ? s.feeStatus : s.status),
                   ]),
                 ]),
@@ -271,6 +276,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   InfoRow('Fee cycle', s.feeCycleType.isNotEmpty ? s.feeCycleType : '—'),
                   InfoRow('Next due', s.nextDueDate.isNotEmpty ? s.nextDueDate : '—'),
                   InfoRow('Last receipt', s.lastReceiptNo.isNotEmpty ? '${s.lastReceiptNo} · ₹${s.lastReceiptAmount}' : '—'),
+                  InfoRow('Admission via', admissionSourceLabel(s.admissionSource).isEmpty ? '—' : admissionSourceLabel(s.admissionSource)),
                 ]),
               ),
             ),
@@ -279,7 +285,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             Card(
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: 6),
-                leading: const Icon(Icons.person_pin_circle_outlined, color: AppColors.primary),
+                leading: Icon(Icons.person_pin_circle_outlined, color: AppColors.adaptive(context, AppColors.primary)),
                 title: Text(
                   _detail?.hasAssignedTeacher == true
                       ? (_detail!.hasTeacherName ? _detail!.teacherName : 'Teacher')
@@ -287,10 +293,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                 ),
                 subtitle: _detail?.hasTeacherId == true
-                    ? Text(_detail!.teacherId, style: const TextStyle(fontSize: 12, color: AppColors.muted))
+                    ? Text(_detail!.teacherId, style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted)))
                     : null,
                 trailing: _detail?.hasTeacherId == true
-                    ? const Icon(Icons.chevron_right, color: AppColors.muted)
+                    ? Icon(Icons.chevron_right, color: AppColors.adaptive(context, AppColors.muted))
                     : null,
                 onTap: _detail?.hasTeacherId == true
                     ? () => Navigator.of(context).push(MaterialPageRoute(
@@ -312,7 +318,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             ),
             const SizedBox(height: AppSpace.s3),
             OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(foregroundColor: AppColors.focus),
+              style: OutlinedButton.styleFrom(foregroundColor: AppColors.adaptive(context, AppColors.focus)),
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => MessageComposeScreen(
                   staff: widget.staff,
@@ -325,6 +331,48 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               icon: const Icon(Icons.chat_outlined, size: 18),
               label: const Text('Message parent'),
             ),
+            if (widget.staff) ...[
+              const SizedBox(height: AppSpace.s3),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PackageExtensionScreen(student: s),
+                )),
+                icon: const Icon(Icons.event_repeat_outlined, size: 18),
+                label: const Text('Request package extension'),
+              ),
+              const SizedBox(height: AppSpace.s3),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => LateFeeWaiverScreen(student: s),
+                )),
+                icon: const Icon(Icons.money_off_outlined, size: 18),
+                label: const Text('Request late-fee waiver'),
+              ),
+              const SizedBox(height: AppSpace.s3),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => InstalmentPlanScreen(student: s),
+                )),
+                icon: const Icon(Icons.calendar_view_month_outlined, size: 18),
+                label: const Text('Request instalment plan'),
+              ),
+              const SizedBox(height: AppSpace.s3),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => TermsScreen(student: s),
+                )),
+                icon: const Icon(Icons.description_outlined, size: 18),
+                label: const Text('Admission terms'),
+              ),
+              const SizedBox(height: AppSpace.s3),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PauseMembershipScreen(student: s),
+                )),
+                icon: Icon(s.status.toUpperCase() == 'PAUSED' ? Icons.play_circle_outline : Icons.pause_circle_outline, size: 18),
+                label: Text(s.status.toUpperCase() == 'PAUSED' ? 'Request resume' : 'Request pause'),
+              ),
+            ],
             if (widget.staff && _hub != null && _hub!.pending.isNotEmpty) ...[
               const SizedBox(height: AppSpace.s3),
               const SectionTitle('Approved payments'),
@@ -339,7 +387,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text('₹${d.amount} · ${d.paymentDate}',
                                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                            Text(d.draftId, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                            Text(d.draftId, style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                           ]),
                         ),
                         StatusBadge(d.repairRequired ? 'REPAIR REQUIRED' : d.status),
@@ -347,13 +395,13 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       if (d.label.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: AppSpace.s2),
-                          child: Text(d.label, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                          child: Text(d.label, style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                         ),
                       if (d.blockedReason.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: AppSpace.s2),
                           child: Text(d.blockedReason,
-                              style: const TextStyle(fontSize: 12, color: AppColors.warnFg)),
+                              style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.warnFg))),
                         ),
                       if (d.canFinalise)
                         Padding(
@@ -361,7 +409,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                           child: SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
-                              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                              style: FilledButton.styleFrom(backgroundColor: AppColors.adaptive(context, AppColors.primary)),
                               onPressed: _busy ? null : () => _staffFinalise(d),
                               icon: const Icon(Icons.receipt_long_outlined, size: 18),
                               label: const Text('Create receipt now'),
@@ -388,12 +436,12 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   child: ListTile(
                     dense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: 4),
-                    leading: const Icon(Icons.receipt_long_outlined, color: AppColors.muted),
+                    leading: Icon(Icons.receipt_long_outlined, color: AppColors.adaptive(context, AppColors.muted)),
                     title: Text(r.receiptNo, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                     subtitle: Text('${r.date} · ${r.mode}${r.excluded ? ' · EXCLUDED' : ''}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                        style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                     trailing: Text(inr(r.amount),
-                        style: TextStyle(fontWeight: FontWeight.w800, color: r.excluded ? AppColors.muted : AppColors.primary)),
+                        style: TextStyle(fontWeight: FontWeight.w800, color: r.excluded ? AppColors.adaptive(context, AppColors.muted) : AppColors.adaptive(context, AppColors.primary))),
                   ),
                 ),
           ],

@@ -144,8 +144,30 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
       if (action == 'reject') {
         final reason = await _ask('Reject ${item.itemId}', 'Reason (required)');
         if (reason == null) return;
-        if (isExpense) {
+        if (item.type == 'STUDENT_DRAFT') {
+          await auth.service!.founderStudentDraftReject(item.itemId, reason);
+        } else if (isExpense) {
           await auth.service!.founderExpenseDraftReject(item.itemId, reason);
+        } else if (item.type == 'RECEIPT_CORRECTION') {
+          await auth.service!.raw('api_founder_correctionReject', {'correctionId': item.itemId, 'reason': reason});
+        } else if (item.type == 'SCHOOL_INVOICE_DRAFT') {
+          await auth.service!.raw('api_founder_schoolInvoiceDraftReject', {'draftId': item.itemId, 'reason': reason});
+        } else if (item.type == 'PACKAGE_EXTENSION') {
+          await auth.service!.raw('api_founder_packageExtensionReject', {'requestId': item.itemId, 'reason': reason});
+        } else if (item.type == 'PAYMENT_PROFILE_CHANGE') {
+          await auth.service!.raw('api_founder_paymentProfileChangeReject', {'requestId': item.itemId, 'reason': reason});
+        } else if (item.type == 'CLOSURE') {
+          await auth.service!.raw('api_founder_closureReject', {'closureId': item.itemId, 'reason': reason});
+        } else if (item.type == 'CLASS_CORRECTION') {
+          await auth.service!.raw('api_founder_rejectClassCorrection', {'correctionId': item.itemId, 'reason': reason});
+        } else if (item.type == 'LATE_FEE_WAIVER') {
+          await auth.service!.raw('api_founder_lateFeeWaiverReject', {'requestId': item.itemId, 'reason': reason});
+        } else if (item.type == 'INSTALMENT_PLAN') {
+          await auth.service!.raw('api_founder_instalmentPlanDraftReject', {'draftId': item.itemId, 'reason': reason});
+        } else if (item.type == 'MANUAL_TERMS_ACCEPTANCE') {
+          await auth.service!.raw('api_founder_manualTermsAcceptanceReject', {'requestId': item.itemId, 'reason': reason});
+        } else if (item.type == 'TEACHER_ADD_REQUEST') {
+          await auth.service!.raw('api_founder_addTeacherRequestReject', {'requestId': item.itemId, 'reason': reason});
         } else {
           await auth.service!.founderPaymentDraftReject(item.itemId, reason);
         }
@@ -155,6 +177,42 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
               'Record "${item.reason}" as a real expense and post it to the cashbook?');
           if (!confirmed) return;
           await auth.service!.founderExpenseDraftApprove(item.itemId);
+        } else if (item.type == 'PACKAGE_EXTENSION') {
+          final confirmed = await _confirm('Approve package extension',
+              'Extend "${item.entity}"\'s package by ${item.feesPeriod}?');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_packageExtensionApprove', {'requestId': item.itemId});
+        } else if (item.type == 'PAYMENT_PROFILE_CHANGE') {
+          final confirmed = await _confirm('Approve payment profile change', 'Update "${item.entity}"?');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_paymentProfileChangeApprove', {'requestId': item.itemId});
+        } else if (item.type == 'CLOSURE') {
+          final confirmed = await _confirm('Authorise closure',
+              '${item.entity} · ${item.feesPeriod}. Classes in this range become not required. This has financial effect.');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_authoriseClosure', {'closureId': item.itemId});
+        } else if (item.type == 'CLASS_CORRECTION') {
+          final confirmed = await _confirm('Approve class correction',
+              '${item.entity} was answered as "${item.feesPeriod}". Re-open it so staff can answer it again?');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_approveClassCorrection', {'correctionId': item.itemId});
+        } else if (item.type == 'LATE_FEE_WAIVER') {
+          final confirmed = await _confirm('Approve late-fee waiver', 'Waive the late fee for "${item.entity}"?');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_lateFeeWaiverApprove', {'requestId': item.itemId});
+        } else if (item.type == 'INSTALMENT_PLAN') {
+          final confirmed = await _confirm('Approve instalment plan',
+              'Create a ${item.feesPeriod} plan for "${item.entity}" totalling ₹${item.amount}?');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_instalmentPlanDraftApprove', {'draftId': item.itemId});
+        } else if (item.type == 'MANUAL_TERMS_ACCEPTANCE') {
+          final confirmed = await _confirm('Approve manual terms acceptance', 'Record terms as accepted for "${item.entity}"?');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_manualTermsAcceptanceApprove', {'requestId': item.itemId});
+        } else if (item.type == 'TEACHER_ADD_REQUEST') {
+          final confirmed = await _confirm('Add teacher', 'Add "${item.entity}" as a teacher (${item.reason})?');
+          if (!confirmed) return;
+          await auth.service!.raw('api_founder_addTeacherRequestApprove', {'requestId': item.itemId});
         } else {
           await auth.service!.founderPaymentDraftApprove(item.itemId);
         }
@@ -162,6 +220,18 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
         final ok = await _confirm('Merge student draft', 'Merge "${item.entity}" into the STUDENTS master?');
         if (!ok) return;
         await auth.service!.founderMergeStudentDraft(item.itemId);
+      } else if (action == 'void') {
+        // Pattern C: never edit a receipt. This voids it (permanent, keeps the
+        // number) so a corrected one can be issued.
+        final ok = await _confirm('Void ${item.receiptNo}',
+            'This permanently voids the receipt. It is excluded from every total; a new payment issues a new receipt. This cannot be undone.');
+        if (!ok) return;
+        await auth.service!.raw('api_founder_voidReceipt', {'correctionId': item.itemId});
+      } else if (action == 'finalise') {
+        final ok = await _confirm('Issue invoice',
+            'Allocate the next SMI- number and issue "${item.entity}" for ₹${item.amount}?');
+        if (!ok) return;
+        await auth.service!.raw('api_founder_finaliseSchoolInvoiceDraft', {'draftId': item.itemId});
       } else {
         return;
       }
@@ -227,12 +297,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
       child: ListView(
         padding: const EdgeInsets.all(AppSpace.s4),
         children: [
-          Row(children: [
-            const Icon(Icons.fact_check_outlined, color: AppColors.primary),
-            const SizedBox(width: AppSpace.s2),
-            Text('${d.count} awaiting your authority',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          ]),
+          PageHero(eyebrow: 'Approvals', headline: '${d.count} awaiting your authority', fontSize: 22),
           const SizedBox(height: AppSpace.s4),
           if (d.empty)
             const Card(
@@ -246,18 +311,18 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
             for (final item in g.items) _itemCard(item),
           ],
           const SectionTitle('Receipts pending'),
-          const Text(
+          Text(
             'Approved payments that have not been turned into a receipt yet. '
             'Finalising writes real money records server-side.',
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
+            style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted)),
           ),
           const SizedBox(height: AppSpace.s3),
           if (_queue.isEmpty)
-            const Card(
+            Card(
               child: Padding(
-                padding: EdgeInsets.all(AppSpace.s4),
+                padding: const EdgeInsets.all(AppSpace.s4),
                 child: Text('No payment drafts in the queue.',
-                    style: TextStyle(color: AppColors.muted, fontSize: 13)),
+                    style: TextStyle(color: AppColors.adaptive(context, AppColors.muted), fontSize: 13)),
               ),
             )
           else
@@ -281,28 +346,28 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(row.studentName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                 Text('${row.draftId} · ${row.branch}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                    style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
               ]),
             ),
             if (row.amount.isNotEmpty)
               Text('₹${row.amount}',
-                  style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+                  style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.primary))),
           ]),
           const SizedBox(height: AppSpace.s2),
           Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
             StatusBadge(row.status),
             if (row.repairRequired) const StatusBadge('REPAIR REQUIRED'),
-            if (row.paymentMode.isNotEmpty) TagChip(row.paymentMode, color: AppColors.focus),
+            if (row.paymentMode.isNotEmpty) TagChip(row.paymentMode, color: AppColors.adaptive(context, AppColors.focus)),
             if (row.projectNextDueDate.isNotEmpty)
-              TagChip('→ due ${row.projectNextDueDate}', color: AppColors.muted),
+              TagChip('→ due ${row.projectNextDueDate}', color: AppColors.adaptive(context, AppColors.muted)),
             if (authLabel.isNotEmpty)
-              TagChip(authLabel, color: AppColors.muted),
+              TagChip(authLabel, color: AppColors.adaptive(context, AppColors.muted)),
           ]),
           const SizedBox(height: AppSpace.s3),
           Row(children: [
             _actionBtn(
               row.repairRequired ? 'Repair (founder web)' : 'Create receipt',
-              AppColors.primary,
+              AppColors.adaptive(context, AppColors.primary),
               busy,
               row.repairRequired
                   ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -327,40 +392,43 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(item.entity, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                 Text('${item.itemId} · ${item.date}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                    style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
               ]),
             ),
             if (item.amount.isNotEmpty)
-              Text('₹${item.amount}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
+              Text('₹${item.amount}', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.primary))),
           ]),
           const SizedBox(height: AppSpace.s2),
           Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
             if (item.noStudentLinked)
               const StatusBadge('NO STUDENT LINKED')
             else if (item.studentId.isNotEmpty)
-              TagChip(item.studentId, color: AppColors.focus),
+              TagChip(item.studentId, color: AppColors.adaptive(context, AppColors.focus)),
             if (item.backdated) const StatusBadge('BACKDATED'),
             if (item.incomplete) const StatusBadge('INCOMPLETE'),
             if (item.junk) const StatusBadge('QA/JUNK'),
             if (item.termsStatus.isNotEmpty)
-              TagChip(item.termsStatus, color: AppColors.muted),
+              TagChip(item.termsStatus, color: AppColors.adaptive(context, AppColors.muted)),
             StatusBadge(item.reason),
           ]),
           if (item.feesPeriod.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: AppSpace.s2),
               child: Text('Period: ${item.feesPeriod}',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                  style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
             ),
           const SizedBox(height: AppSpace.s3),
-          Row(children: [
+          Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
             if (item.actions.contains('approve'))
-              _actionBtn('Approve', AppColors.okFg, busy, () => _act(item, 'approve')),
+              _actionBtn('Approve', AppColors.adaptive(context, AppColors.okFg), busy, () => _act(item, 'approve')),
             if (item.actions.contains('merge'))
-              _actionBtn('Merge', AppColors.okFg, busy, () => _act(item, 'merge')),
-            const SizedBox(width: AppSpace.s2),
+              _actionBtn('Merge', AppColors.adaptive(context, AppColors.okFg), busy, () => _act(item, 'merge')),
+            if (item.actions.contains('void'))
+              _actionBtn('Void receipt', AppColors.adaptive(context, AppColors.blockFg), busy, () => _act(item, 'void')),
+            if (item.actions.contains('finalise'))
+              _actionBtn('Issue invoice', AppColors.adaptive(context, AppColors.okFg), busy, () => _act(item, 'finalise')),
             if (item.actions.contains('reject'))
-              _actionBtn('Reject', AppColors.blockFg, busy, () => _act(item, 'reject')),
+              _actionBtn('Reject', AppColors.adaptive(context, AppColors.blockFg), busy, () => _act(item, 'reject')),
           ]),
         ]),
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme.dart';
 import 'anim.dart';
 
 /// Subtle music identity — a quiet waveform mark. Used selectively
@@ -23,8 +24,8 @@ class WaveformMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final c = color ?? scheme.primary;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final c = color ?? (dark ? AppColors.dPrimary : AppColors.brass);
     return SizedBox(
       height: height,
       child: Row(
@@ -89,10 +90,7 @@ class Eyebrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.6,
+        style: AppType.eyebrow.copyWith(
           color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       );

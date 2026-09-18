@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'core/theme.dart';
@@ -11,6 +12,9 @@ import 'widgets/music_mark.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Draw the app's own background under the status/navigation bars instead
+  // of leaving the OS's opaque bar colour as dead space at the edges.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   final mode = await ThemeController.restore();
   runApp(AcademyApp(initialTheme: mode));
 }
@@ -28,13 +32,26 @@ class AcademyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SyncManager()),
       ],
       child: Consumer<ThemeController>(
-        builder: (context, theme, _) => MaterialApp(
-          title: 'Swar Mangal',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          themeMode: theme.mode,
-          home: const SyncBinder(child: StartupGate()),
+        builder: (context, theme, _) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: theme.isDark
+              ? SystemUiOverlayStyle.light.copyWith(
+                  statusBarColor: Colors.transparent,
+                  systemNavigationBarColor: Colors.transparent,
+                  systemNavigationBarContrastEnforced: false,
+                )
+              : SystemUiOverlayStyle.dark.copyWith(
+                  statusBarColor: Colors.transparent,
+                  systemNavigationBarColor: Colors.transparent,
+                  systemNavigationBarContrastEnforced: false,
+                ),
+          child: MaterialApp(
+            title: 'Swar Mangal',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: theme.mode,
+            home: const SyncBinder(child: StartupGate()),
+          ),
         ),
       ),
     );

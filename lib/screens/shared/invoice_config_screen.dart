@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../services/invoice_pdf.dart';
 import '../../widgets/atoms.dart';
+import 'payment_profile_change_screen.dart';
 
 /// School-level invoice editor. Fields are class/amount/tenure/date — NO
 /// student identity. One primary "Generate PDF" action; one intent key per
@@ -26,6 +27,9 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
   String _invoiceDate = '';
   bool _busy = false;
   String? _error;
+  // Staff must see the rendered preview before it can be sent (brief P11.3).
+  bool _previewed = false;
+  String? _draftNote;
 
   static const _tenures = ['1 Month', '3 Months', '6 Months', '12 Months'];
 
@@ -43,24 +47,32 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
     super.dispose();
   }
 
-  Future<void> _generate() async {
-    final auth = context.read<AuthProvider>();
-    if (auth.service == null) return;
+  ({bool ok, num? amount})? _validate() {
     final a = InvoiceValidator.amount(_amount.text);
     if (!a.ok) {
       setState(() => _error = a.error);
-      return;
+      return null;
     }
     final tErr = InvoiceValidator.tenure(_tenure);
     if (tErr != null) {
       setState(() => _error = tErr);
-      return;
+      return null;
     }
     final cErr = InvoiceValidator.className(_class.text);
     if (cErr != null) {
       setState(() => _error = cErr);
-      return;
+      return null;
     }
+    return (ok: true, amount: a.amount);
+  }
+
+  /// Founder: one step, issues the invoice immediately (server-authoritative
+  /// number). Founder-only server-side.
+  Future<void> _generate() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final v = _validate();
+    if (v == null) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -68,7 +80,7 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
     try {
       final inv = await auth.service!.generateSchoolInvoice(
         className: _class.text.trim(),
-        amount: a.amount!,
+        amount: v.amount!,
         tenure: _tenure,
         invoiceDate: _invoiceDate,
         branch: auth.branch ?? 'ALL',
@@ -100,6 +112,77 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
     }
   }
 
+  /// Staff: preview the exact PDF first (nothing persisted), then send the
+  /// draft to Sharvil. Only the founder can allocate an SMI- number.
+  Future<void> _preview() async {
+    final auth = context.read<AuthProvider>();
+    final v = _validate();
+    if (v == null) return;
+    final preview = SchoolInvoice(
+      invoiceId: '',
+      invoiceNo: 'PREVIEW — not issued',
+      invoiceDate: _invoiceDate,
+      branch: auth.branch ?? 'ALL',
+      className: _class.text.trim(),
+      amount: v.amount!,
+      tenure: _tenure,
+      owner1: InvoiceOwner(name: 'Sharvil Vaidya', id: 'OWNER-1', signatureUrl: ''),
+      owner2: InvoiceOwner(name: 'Piyush Kashyap', id: 'OWNER-2', signatureUrl: ''),
+      pdfUrl: '',
+      demo: false,
+    );
+    setState(() {
+      _error = null;
+      _draftNote = null;
+    });
+    final bytes = await buildInvoicePdf(preview, demo: false);
+    if (!mounted) return;
+    await showInvoicePdf(bytes, 'preview.pdf');
+    if (!mounted) return;
+    setState(() => _previewed = true);
+  }
+
+  Future<void> _sendDraft() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final v = _validate();
+    if (v == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final res = await auth.service!.raw('api_staff_submitSchoolInvoiceDraft', {
+        'className': _class.text.trim(),
+        'amount': v.amount,
+        'tenure': _tenure,
+        'invoiceDate': _invoiceDate,
+        'branch': auth.branch ?? 'ALL',
+        'previewConfirmed': true,
+        'clientIntentKey': _intent,
+      });
+      final m = res as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _draftNote = m['ok'] == true ? (m['note'] ?? 'Sent to Sharvil.').toString() : null;
+        _error = m['ok'] == true ? null : (m['error'] ?? 'Could not send the invoice.').toString();
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = e.message;
+      });
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = e.message;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -120,6 +203,7 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
                 const SizedBox(height: AppSpace.s2),
                 TextFormField(
                   controller: _class,
+                  onChanged: (_) => setState(() => _previewed = false),
                   decoration: const InputDecoration(
                     labelText: 'Class name *',
                     hintText: 'e.g. Keyboard',
@@ -129,6 +213,7 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
                 const SizedBox(height: AppSpace.s3),
                 TextFormField(
                   controller: _amount,
+                  onChanged: (_) => setState(() => _previewed = false),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Invoice amount (INR) *',
@@ -149,7 +234,10 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
                     return ChoiceChip(
                       label: Text(t),
                       selected: sel,
-                      onSelected: (_) => setState(() => _tenure = t),
+                      onSelected: (_) => setState(() {
+                        _tenure = t;
+                        _previewed = false;
+                      }),
                     );
                   }).toList(),
                 ),
@@ -192,17 +280,68 @@ class _InvoiceConfigScreenState extends State<InvoiceConfigScreen> {
               ),
             ),
           const SizedBox(height: AppSpace.s4),
-          LoadingButton(
-            label: 'Generate PDF',
-            icon: Icons.picture_as_pdf_outlined,
-            busy: _busy,
-            onPressed: _generate,
-          ),
-          const SizedBox(height: AppSpace.s3),
-          Text(
-            'School-level invoice — no student is attached. The backend assigns the number and persists '
-            'an immutable snapshot; the app only renders the PDF.',
-            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+          if (widget.staff) ...[
+            LoadingButton(
+              label: _previewed ? 'Preview again' : 'Preview',
+              icon: Icons.visibility_outlined,
+              secondary: _previewed,
+              busy: _busy,
+              onPressed: _preview,
+            ),
+            const SizedBox(height: AppSpace.s3),
+            LoadingButton(
+              label: 'Send to Sharvil',
+              icon: Icons.send_outlined,
+              busy: _busy,
+              onPressed: _previewed ? _sendDraft : null,
+            ),
+            if (!_previewed)
+              const Padding(
+                padding: EdgeInsets.only(top: AppSpace.s2),
+                child: Text('Preview the invoice before sending it.',
+                    style: TextStyle(fontSize: 12, color: AppColors.muted)),
+              ),
+            if (_draftNote != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpace.s3),
+                child: Card(
+                  color: AppColors.okBg,
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpace.s3),
+                    child: Text(_draftNote!, style: const TextStyle(fontSize: 12, color: AppColors.okFg)),
+                  ),
+                ),
+              ),
+            const SizedBox(height: AppSpace.s3),
+            Text(
+              'Only Sharvil can issue the invoice number. This sends a draft for his review.',
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+            ),
+          ] else ...[
+            LoadingButton(
+              label: 'Generate PDF',
+              icon: Icons.picture_as_pdf_outlined,
+              busy: _busy,
+              onPressed: _generate,
+            ),
+            const SizedBox(height: AppSpace.s3),
+            Text(
+              'School-level invoice — no student is attached. The backend assigns the number and persists '
+              'an immutable snapshot; the app only renders the PDF.',
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+            ),
+          ],
+          const SizedBox(height: AppSpace.s4),
+          OutlinedButton.icon(
+            onPressed: () {
+              final auth = context.read<AuthProvider>();
+              final entityId = (auth.branch ?? '').toUpperCase() == 'GOREGAON' ? 'ENT-GOREGAON' : 'ENT-KANDIVALI';
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => PaymentProfileChangeScreen(entityId: entityId),
+              ));
+            },
+            icon: const Icon(Icons.account_balance_outlined, size: 18),
+            label: const Text('Request payment profile change'),
           ),
         ],
       ),

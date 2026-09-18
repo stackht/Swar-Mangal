@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../config.dart';
@@ -7,6 +9,7 @@ import '../core/url_config.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/demo_api.dart';
+import '../services/push_service.dart';
 
 /// App-level session state. One provider drives login/logout for both the
 /// founder and staff surfaces; which surface renders is decided by the role
@@ -113,6 +116,9 @@ class AuthProvider extends ChangeNotifier {
       _demo = false;
       _restoring = false;
       notifyListeners();
+      // Fire-and-forget: a restored session re-registers this device's push
+      // token (it may have rotated since the app last ran).
+      unawaited(PushService.instance.start(svc));
     } catch (e) {
       // Part 6: network/temporary errors keep the token.
       // Only AUTH_FAILED/INVALID_TOKEN clears it.
@@ -170,6 +176,7 @@ class AuthProvider extends ChangeNotifier {
       await saveSession(endpoint: endpoint, apiUrl: apiUrl.trim());
 
       notifyListeners();
+      unawaited(PushService.instance.start(svc));
     } on ApiException catch (e) {
       if (e.code == kErrAuthFailed || e.code == kErrWrongBackend) {
         await SessionStorage.deleteToken();
@@ -187,6 +194,7 @@ class AuthProvider extends ChangeNotifier {
 
   // ------------------------------------------------ logout (Part 8)
   Future<void> logout() async {
+    final wasDemo = _demo;
     _api?.dispose();
     _api = null;
     _service = null;
@@ -196,6 +204,9 @@ class AuthProvider extends ChangeNotifier {
     _demo = false;
     await SessionStorage.clearSession();
     notifyListeners();
+    // Demo never registered a token (start() is only ever called for a real
+    // session), so there is nothing to unregister.
+    if (!wasDemo) unawaited(PushService.instance.stop());
   }
 
   // ---------------------------------------------- branch

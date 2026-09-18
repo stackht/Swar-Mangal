@@ -52,24 +52,35 @@ test("authorizeRpc: staff -> api_addTeacher ROLE_FORBIDDEN", () => {
   assert.equal(r.code, "ROLE_FORBIDDEN");
 });
 
-test("authorizeRpc: staff -> api_timetableCreate ALLOWED", () => {
-  const r = authorizeRpc(staff, "api_timetableCreate");
-  assert.equal(r.ok, true);
+// Brief P6.1: the timetable is the founder's; staff read it.
+for (const fn of ["api_timetableCreate", "api_timetableUpdate", "api_timetableDelete"]) {
+  test(`authorizeRpc: staff -> ${fn} ROLE_FORBIDDEN`, () => {
+    const r = authorizeRpc(staff, fn);
+    assert.equal(r.ok, false);
+    assert.equal(r.code, "ROLE_FORBIDDEN");
+    assert.equal(authorizeRpc(founder, fn).ok, true);
+  });
+}
+
+test("authorizeRpc: staff reads the timetable", () => {
+  assert.equal(authorizeRpc(staff, "api_timetableList").ok, true);
 });
 
-test("authorizeRpc: staff -> api_timetableUpdate ALLOWED", () => {
-  const r = authorizeRpc(staff, "api_timetableUpdate");
-  assert.equal(r.ok, true);
+// Brief P11: only the founder allocates an SMI- number; staff send a draft.
+test("authorizeRpc: staff cannot issue a school invoice, only propose one", () => {
+  assert.equal(authorizeRpc(staff, "api_generateSchoolInvoice").ok, false);
+  assert.equal(authorizeRpc(staff, "api_founder_finaliseSchoolInvoiceDraft").ok, false);
+  assert.equal(authorizeRpc(staff, "api_staff_submitSchoolInvoiceDraft").ok, true);
+  assert.equal(authorizeRpc(founder, "api_founder_finaliseSchoolInvoiceDraft").ok, true);
 });
 
-test("authorizeRpc: staff -> api_timetableDelete ALLOWED", () => {
-  const r = authorizeRpc(staff, "api_timetableDelete");
-  assert.equal(r.ok, true);
-});
-
-test("authorizeRpc: staff -> api_generateSchoolInvoice ALLOWED", () => {
-  const r = authorizeRpc(staff, "api_generateSchoolInvoice");
-  assert.equal(r.ok, true);
+// Pattern C and §11.7: voids and month closes are founder decisions.
+test("authorizeRpc: staff request corrections; only the founder voids or closes a month", () => {
+  assert.equal(authorizeRpc(staff, "api_staff_requestReceiptCorrection").ok, true);
+  for (const fn of ["api_founder_voidReceipt", "api_founder_correctionReject", "api_founder_closeMonth", "api_founder_periodLocks"]) {
+    assert.equal(authorizeRpc(staff, fn).ok, false, fn);
+    assert.equal(authorizeRpc(founder, fn).ok, true, fn);
+  }
 });
 
 test("authorizeRpc: staff -> founder approval endpoint ROLE_FORBIDDEN", () => {
@@ -194,6 +205,9 @@ test("WRITE_FUNCTIONS covers every money-moving endpoint", () => {
     "api_founder_paymentDraftApprove",
     "api_addExpenseEntry",
     "api_generateSchoolInvoice",
+    "api_founder_finaliseSchoolInvoiceDraft",
+    "api_founder_voidReceipt",
+    "api_founder_closeMonth",
     "api_updateTeacherCompensation",
   ]) {
     assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
@@ -226,4 +240,103 @@ test("expense drafts: staff submit, founder decides", () => {
   for (const fn of ["api_staff_submitExpenseDraft", "api_founder_expenseDraftApprove", "api_founder_expenseDraftReject"]) {
     assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
   }
+});
+
+test("package extension requests: staff submit, founder decides", () => {
+  assert.equal(RPC_POLICY["api_staff_submitPackageExtensionRequest"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_packageExtensionApprove"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_packageExtensionReject"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_staff_submitPackageExtensionRequest").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_packageExtensionApprove").ok, false);
+  assert.equal(authorizeRpc(staff, "api_founder_packageExtensionReject").ok, false);
+  for (const fn of ["api_staff_submitPackageExtensionRequest", "api_founder_packageExtensionApprove", "api_founder_packageExtensionReject"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});
+
+test("payment profile change requests: staff submit, founder decides", () => {
+  assert.equal(RPC_POLICY["api_staff_submitPaymentProfileChangeRequest"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_paymentProfileChangeApprove"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_paymentProfileChangeReject"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_staff_submitPaymentProfileChangeRequest").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_paymentProfileChangeApprove").ok, false);
+  assert.equal(authorizeRpc(staff, "api_founder_paymentProfileChangeReject").ok, false);
+  for (const fn of ["api_staff_submitPaymentProfileChangeRequest", "api_founder_paymentProfileChangeApprove", "api_founder_paymentProfileChangeReject"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});
+
+test("closures: staff propose, founder authorises or revokes", () => {
+  assert.equal(RPC_POLICY["api_staff_proposeClosure"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_authoriseClosure"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_closureReject"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_revokeClosure"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_staff_proposeClosure").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_authoriseClosure").ok, false);
+  assert.equal(authorizeRpc(staff, "api_founder_revokeClosure").ok, false);
+  for (const fn of ["api_staff_proposeClosure", "api_founder_authoriseClosure", "api_founder_closureReject", "api_founder_revokeClosure"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});
+
+test("class outcome corrections: staff request, founder decides", () => {
+  assert.equal(RPC_POLICY["api_staff_requestClassCorrection"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_approveClassCorrection"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_rejectClassCorrection"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_staff_requestClassCorrection").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_approveClassCorrection").ok, false);
+  for (const fn of ["api_staff_requestClassCorrection", "api_founder_approveClassCorrection", "api_founder_rejectClassCorrection"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});
+
+test("late-fee waivers: staff submit, founder decides", () => {
+  assert.equal(RPC_POLICY["api_staff_submitLateFeeWaiverRequest"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_lateFeeWaiverApprove"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_lateFeeWaiverReject"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_staff_submitLateFeeWaiverRequest").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_lateFeeWaiverApprove").ok, false);
+  for (const fn of ["api_staff_submitLateFeeWaiverRequest", "api_founder_lateFeeWaiverApprove", "api_founder_lateFeeWaiverReject"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});
+
+test("instalment plans: staff submit, founder decides", () => {
+  assert.equal(RPC_POLICY["api_staff_submitInstalmentPlanDraft"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_instalmentPlanDraftApprove"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_instalmentPlanDraftReject"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_staff_submitInstalmentPlanDraft").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_instalmentPlanDraftApprove").ok, false);
+  for (const fn of ["api_staff_submitInstalmentPlanDraft", "api_founder_instalmentPlanDraftApprove", "api_founder_instalmentPlanDraftReject"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});
+
+test("admission terms: staff mint tokens or request manual acceptance, founder decides the manual path", () => {
+  assert.equal(RPC_POLICY["api_staff_generateTermsToken"], "STAFF");
+  assert.equal(RPC_POLICY["api_staff_requestManualTermsAcceptance"], "STAFF");
+  assert.equal(RPC_POLICY["api_founder_manualTermsAcceptanceApprove"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_manualTermsAcceptanceReject"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_staff_generateTermsToken").ok, true);
+  assert.equal(authorizeRpc(staff, "api_founder_manualTermsAcceptanceApprove").ok, false);
+  for (const fn of ["api_staff_generateTermsToken", "api_staff_requestManualTermsAcceptance", "api_founder_manualTermsAcceptanceApprove", "api_founder_manualTermsAcceptanceReject"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+});
+
+test("staff access management (email allow-list + issued device tokens): founder only", () => {
+  assert.equal(RPC_POLICY["api_founder_listAuthorizedEmails"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_addAuthorizedEmail"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_removeAuthorizedEmail"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_listStaffTokens"], "FOUNDER");
+  assert.equal(RPC_POLICY["api_founder_revokeDeviceToken"], "FOUNDER");
+  assert.equal(authorizeRpc(staff, "api_founder_addAuthorizedEmail").ok, false);
+  assert.equal(authorizeRpc(staff, "api_founder_revokeDeviceToken").ok, false);
+  assert.equal(authorizeRpc(founder, "api_founder_addAuthorizedEmail").ok, true);
+  for (const fn of ["api_founder_addAuthorizedEmail", "api_founder_removeAuthorizedEmail", "api_founder_revokeDeviceToken"]) {
+    assert.ok(WRITE_FUNCTIONS.has(fn), `${fn} must be audited`);
+  }
+  // Reading the list is not itself an audited write.
+  assert.ok(!WRITE_FUNCTIONS.has("api_founder_listAuthorizedEmails"));
+  assert.ok(!WRITE_FUNCTIONS.has("api_founder_listStaffTokens"));
 });

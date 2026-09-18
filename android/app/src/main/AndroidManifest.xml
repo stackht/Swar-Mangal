@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required for the app to reach the Railway RPC gateway (https). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ (API 33) requires this at runtime before a notification
+         can be shown at all — including one FCM delivers while the app is
+         killed. Requested explicitly from push_service.dart on first launch. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Swar Mangal"
         android:name="${applicationName}"
@@ -37,6 +41,17 @@
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
+        <!-- Push notifications: the channel FCM posts to when the app is
+             backgrounded or killed (must match fcm.ts's android.notification.channelId
+             server-side), and the small icon it uses for that notification.
+             Both work with no Firebase project configured — they only matter
+             once google-services.json is added. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="swarmangal_updates" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

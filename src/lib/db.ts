@@ -1,8 +1,15 @@
-import { Pool, type PoolClient, type QueryResultRow } from "pg";
+import { Pool, types, type PoolClient, type QueryResultRow } from "pg";
+
+// Keep `date` columns as the "YYYY-MM-DD" string Postgres sends. The default
+// parser builds a JS Date at the server's local midnight, which then renders
+// as the previous day in IST (brief §5.7) or as "Wed Sep 17" after String().
+types.setTypeParser(1082, (v) => v);
 
 const connectionString = process.env.DATABASE_URL;
 
-export const pool = connectionString ? new Pool({ connectionString, max: 5 }) : null;
+const poolMax = Number(process.env.DATABASE_POOL_MAX) || 5;
+
+export const pool = connectionString ? new Pool({ connectionString, max: poolMax }) : null;
 
 export const isDbConfigured = Boolean(connectionString);
 

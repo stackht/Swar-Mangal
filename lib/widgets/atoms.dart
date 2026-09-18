@@ -2,8 +2,32 @@ import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
 import '../models/models.dart';
+import 'music_mark.dart';
 
 /// Tiny building blocks shared across every screen.
+
+/// The eyebrow + headline pair every screen opens with (e.g. "TODAY" ·
+/// "Good morning."). `fontSize` overrides the headline size only; several
+/// screens use a slightly smaller 22 than the 28 in `AppType.display`.
+class PageHero extends StatelessWidget {
+  const PageHero({super.key, required this.eyebrow, required this.headline, this.fontSize});
+  final String eyebrow;
+  final String headline;
+  final double? fontSize;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Eyebrow(eyebrow),
+      const SizedBox(height: 4),
+      Text(headline,
+          style: AppType.display.copyWith(
+            color: scheme.onSurface,
+            fontSize: fontSize,
+          )),
+    ]);
+  }
+}
 
 class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {super.key});
@@ -21,14 +45,16 @@ class SectionTitle extends StatelessWidget {
 
 class StatTile extends StatelessWidget {
   const StatTile(
-      {super.key, required this.label, required this.value, this.icon, this.accent = AppColors.primary});
+      {super.key, required this.label, required this.value, this.icon, this.accent, this.onTap});
   final String label;
   final String value;
   final IconData? icon;
-  final Color accent;
+  final Color? accent;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedAccent = accent ?? AppColors.adaptive(context, AppColors.primary);
     return Card(
       color: Theme.of(context).colorScheme.surface,
       shadowColor: AppShadows.card.color,
@@ -36,34 +62,38 @@ class StatTile extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.s4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              if (icon != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: .10),
-                    borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.s4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                if (icon != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: resolvedAccent.withValues(alpha: .10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, size: 15, color: resolvedAccent),
                   ),
-                  child: Icon(icon, size: 15, color: accent),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(label.toUpperCase(),
+                      style: AppType.eyebrow.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(label.toUpperCase(),
-                    style: AppType.eyebrow.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ),
-            ]),
-            const SizedBox(height: AppSpace.s2),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.w800, color: accent)),
-          ],
+              ]),
+              const SizedBox(height: AppSpace.s2),
+              Text(value,
+                  style: TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w800, color: resolvedAccent)),
+            ],
+          ),
         ),
       ),
     );
@@ -148,9 +178,8 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paint(text);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final fg = dark ? _darkFg(p.fg) : p.fg;
-    final bg = dark ? _darkBg(p.bg) : p.bg;
+    final fg = AppColors.adaptive(context, p.fg);
+    final bg = AppColors.adaptive(context, p.bg);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3, vertical: 4),
       decoration: BoxDecoration(
@@ -165,24 +194,6 @@ class StatusBadge extends StatelessWidget {
               color: fg)),
     );
   }
-
-  static Color _darkFg(Color light) {
-    if (light == AppColors.okFg) return AppColors.dOkFg;
-    if (light == AppColors.warnFg) return AppColors.dWarnFg;
-    if (light == AppColors.blockFg) return AppColors.dBlockFg;
-    if (light == AppColors.infoFg) return AppColors.dInfoFg;
-    if (light == AppColors.muted) return AppColors.dMuted;
-    return light;
-  }
-
-  static Color _darkBg(Color light) {
-    if (light == AppColors.okBg) return AppColors.dOkBg;
-    if (light == AppColors.warnBg) return AppColors.dWarnBg;
-    if (light == AppColors.blockBg) return AppColors.dBlockBg;
-    if (light == AppColors.infoBg) return AppColors.dInfoBg;
-    if (light == AppColors.pageBg) return AppColors.dPageBg;
-    return light;
-  }
 }
 
 class AmountText extends StatelessWidget {
@@ -194,7 +205,7 @@ class AmountText extends StatelessWidget {
       style: TextStyle(
           fontSize: 16,
           fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-          color: AppColors.primary));
+          color: AppColors.adaptive(context, AppColors.primary)));
 }
 
 class EmptyState extends StatelessWidget {
@@ -215,7 +226,7 @@ class EmptyState extends StatelessWidget {
               color: AppColors.lavenderSoft.withValues(alpha: .7),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 30, color: AppColors.primary),
+            child: Icon(icon, size: 30, color: AppColors.adaptive(context, AppColors.primary)),
           ),
           const SizedBox(height: AppSpace.s4),
           Text(message,
@@ -235,12 +246,12 @@ class ErrorView extends StatelessWidget {
   final bool compact;
   @override
   Widget build(BuildContext context) => compact
-      ? _row()
-      : Center(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(AppSpace.s5), child: _row())));
-  Widget _row() => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Icon(Icons.error_outline, color: AppColors.blockFg, size: 22),
+      ? _row(context)
+      : Center(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(AppSpace.s5), child: _row(context))));
+  Widget _row(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.error_outline, color: AppColors.adaptive(context, AppColors.blockFg), size: 22),
         const SizedBox(width: AppSpace.s2),
-        Expanded(child: Text(message, style: const TextStyle(color: AppColors.blockFg))),
+        Expanded(child: Text(message, style: TextStyle(color: AppColors.adaptive(context, AppColors.blockFg)))),
         if (onRetry != null)
           TextButton.icon(
             onPressed: onRetry,
@@ -273,14 +284,14 @@ class LoadingButton extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final isPrimary = !secondary && !destructive;
     final bg = destructive
-        ? AppColors.blockFg
+        ? AppColors.adaptive(context, AppColors.blockFg)
         : secondary
             ? scheme.surface
-            : AppColors.primary;
+            : AppColors.adaptive(context, AppColors.primary);
     final fg = secondary
         ? scheme.onSurface.withValues(alpha: .85)
         : Colors.white;
-    final border = secondary ? BorderSide(color: AppColors.line) : BorderSide.none;
+    final border = secondary ? BorderSide(color: AppColors.adaptive(context, AppColors.line)) : BorderSide.none;
     return LayoutBuilder(builder: (context, c) {
       final btn = OutlinedButton(
         style: OutlinedButton.styleFrom(
@@ -360,7 +371,7 @@ class TagChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: AppRadius.s, vertical: 5),
         decoration: BoxDecoration(
-          color: (color ?? AppColors.focus),
+          color: (color ?? AppColors.adaptive(context, AppColors.focus)),
           borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text(text,
@@ -379,7 +390,7 @@ class RefreshScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) => RefreshIndicator(
         onRefresh: onRefresh,
-        color: AppColors.primary,
+        color: AppColors.adaptive(context, AppColors.primary),
         child: child,
       );
 }

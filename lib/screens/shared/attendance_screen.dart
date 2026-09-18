@@ -20,6 +20,7 @@ class AttendanceRosterRow {
     required this.instrument,
     required this.teacherName,
     required this.phone,
+    this.state = '',
   });
   factory AttendanceRosterRow.fromApi(Map<String, dynamic> b) =>
       AttendanceRosterRow(
@@ -28,12 +29,18 @@ class AttendanceRosterRow {
         instrument: _sv(b['instrument']),
         teacherName: _sv(b['teacherName']),
         phone: _sv(b['phone']),
+        state: _sv(b['state']),
       );
   final String studentId;
   final String name;
   final String instrument;
   final String teacherName;
   final String phone;
+  /// PRESENT / ABSENT / EXCUSED / LATE / NOT_MARKED — what the server
+  /// actually has on file for today, not a guess.
+  final String state;
+
+  bool get isMarked => state.isNotEmpty && state != 'NOT_MARKED';
 }
 
 String _sv(dynamic v) => v == null ? '' : v.toString();
@@ -94,9 +101,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
+  final Set<String> _marking = {};
+
   Future<void> _mark(AttendanceRosterRow s, String state) async {
     final auth = context.read<AuthProvider>();
-    if (auth.service == null) return;
+    if (auth.service == null || _marking.contains(s.studentId)) return;
+    setState(() => _marking.add(s.studentId));
     try {
       await auth.service!.staffMarkAttendance({
         'branch': auth.branch ?? '',
@@ -104,6 +114,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         'state': state,
         'workDate': _today(),
       });
+      if (!mounted) return;
+      // Never optimistic: re-read the roster so the badge reflects what the
+      // server actually recorded, including on a correction (re-marking).
+      await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -114,6 +128,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     } on ApiUnreachable catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _marking.remove(s.studentId));
     }
   }
 
@@ -175,7 +191,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     const SizedBox(width: AppSpace.s3),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                        Row(children: [
+                          Flexible(child: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
+                          if (s.isMarked) ...[const SizedBox(width: AppSpace.s2), StatusBadge(s.state)],
+                        ]),
                         Text(
                             [s.instrument, s.teacherName, s.phone].where((e) => e.isNotEmpty).join(' · '),
                             style: const TextStyle(fontSize: 12, color: AppColors.muted)),
@@ -191,25 +210,33 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _markButtons(AttendanceRosterRow s) {
+    final busy = _marking.contains(s.studentId);
+    final isPresent = s.state == 'PRESENT';
+    final isAbsent = s.state == 'ABSENT';
+    if (busy) {
+      return const SizedBox(width: 32, height: 32, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    }
     return Column(children: [
       FilledButton(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.okFg,
+          backgroundColor: isPresent ? AppColors.okFg : AppColors.okFg.withValues(alpha: .35),
           minimumSize: const Size(0, 32),
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3),
         ),
+        // Marking again re-sends the same state — the server's upsert makes
+        // that a harmless no-op, so there's no need to disable it.
         onPressed: () => _mark(s, 'PRESENT'),
-        child: const Text('PRESENT', style: TextStyle(fontSize: 11)),
+        child: Text(isPresent ? 'PRESENT ✓' : 'PRESENT', style: const TextStyle(fontSize: 11)),
       ),
       const SizedBox(height: 4),
       TextButton(
         style: TextButton.styleFrom(
           minimumSize: const Size(0, 30),
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3),
-          foregroundColor: AppColors.muted,
+          foregroundColor: isAbsent ? AppColors.blockFg : AppColors.muted,
         ),
         onPressed: () => _mark(s, 'ABSENT'),
-        child: const Text('ABSENT', style: TextStyle(fontSize: 11)),
+        child: Text(isAbsent ? 'ABSENT ✓' : 'ABSENT', style: const TextStyle(fontSize: 11)),
       ),
     ]);
   }

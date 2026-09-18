@@ -36,6 +36,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   String _classCode = 'GMC';
   String _feeCycle = 'Monthly';
   String _plan = '';
+  String _admissionSource = '';
   int _feeDueDay = 5;
   bool _busy = false;
   String? _result; // server message after a save
@@ -55,6 +56,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       _batch.text = e.batch;
       _classCode = e.classCode == 'KMC' ? 'KMC' : 'GMC';
       _plan = e.feePlan;
+      _admissionSource = e.admissionSource ?? '';
       if (e.feeDueDay.isNotEmpty) _feeDueDay = int.tryParse(e.feeDueDay) ?? 5;
     }
   }
@@ -93,6 +95,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               'notes': _notes.text.trim(),
               'lenient': true,
               if (_plan.isNotEmpty) 'feeCycleType': _plan,
+              if (_admissionSource.isNotEmpty) 'admissionSource': _admissionSource,
             }
           : {
               'studentName': _name.text.trim(),
@@ -106,6 +109,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 'feeCycleType': _feeCycle,
               'feeDueDay': _feeDueDay,
               'instrument': _instrument.text.trim(),
+              if (_admissionSource.isNotEmpty) 'admissionSource': _admissionSource,
             };
       final r = _editing
           ? await auth.service!.saveStudentDraft(payload) // EDIT draft → founder merge
@@ -119,14 +123,16 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       setState(() {
         _busy = false;
         _success = m['ok'] == true || m.containsKey('studentId');
+        // Staff changes are drafts until the founder merges them — never "Saved".
         _result = _success
-            ? dup
-                ? (_editing
-                    ? 'Saved as an EDIT draft — duplicate flagged; founder reviews the merge.'
-                    : 'Saved. Possible duplicate flagged — founder will review the merge.')
-                : _editing
-                    ? 'Changes saved as an EDIT draft. Founder merges it into the master — refresh keeps the change once merged.'
-                    : 'Saved. ${widget.staff ? 'Founder will merge it into the master.' : ''}'
+            ? !widget.staff && _editing
+                ? 'Edit draft created — merge it from Approvals to update the student.'
+                : widget.staff
+                ? 'Sent to Sharvil for approval.${dup ? ' A possible duplicate was flagged for review.' : ''}'
+                    ' It appears in the student list once merged.'
+                : dup
+                    ? 'Student added. A student with this phone may already exist — check before collecting fees.'
+                    : 'Student added.'
             : (m['error'] ?? 'Could not save.').toString();
       });
     } on ApiException catch (e) {
@@ -189,6 +195,25 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(labelText: 'Instrument / course', prefixIcon: Icon(Icons.music_note_outlined)),
                   ),
+                  const SizedBox(height: AppSpace.s3),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('HOW DID THEY COME TO US?',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.adaptive(context, AppColors.muted))),
+                  ),
+                  const SizedBox(height: AppSpace.s2),
+                  Wrap(
+                    spacing: AppSpace.s2,
+                    runSpacing: AppSpace.s2,
+                    children: [
+                      for (final src in admissionSources)
+                        ChoiceChip(
+                          label: Text(src.label),
+                          selected: _admissionSource == src.value,
+                          onSelected: (_) => setState(() => _admissionSource = _admissionSource == src.value ? '' : src.value),
+                        ),
+                    ],
+                  ),
                 ]),
               ),
             ),
@@ -196,8 +221,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(AppSpace.s4),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('PLAN',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
+                  Text('PLAN',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.adaptive(context, AppColors.muted))),
                   const SizedBox(height: AppSpace.s2),
                   DropdownButtonFormField<String>(
                     initialValue: _plan.isEmpty ? null : _plan,
@@ -227,7 +252,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: AppSpace.s2),
                       child: Text(planSummary(_plan),
-                          style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                          style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                     ),
                 ]),
               ),
@@ -237,7 +262,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 padding: const EdgeInsets.all(AppSpace.s4),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   if (!widget.staff) ...[
-                    const Text('CLASS CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
+                    Text('CLASS CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.adaptive(context, AppColors.muted))),
                     const SizedBox(height: AppSpace.s2),
                     SegmentedButton<String>(
                       segments: const [
@@ -271,7 +296,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                       },
                     ),
                   ] else ...[
-                    const Text('BRANCH', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.muted)),
+                    Text('BRANCH', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.adaptive(context, AppColors.muted))),
                     const SizedBox(height: AppSpace.s2),
                     Text(auth.branch ?? '—', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                     const SizedBox(height: AppSpace.s3),
@@ -307,14 +332,14 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(AppSpace.s3),
                   decoration: BoxDecoration(
-                    color: _success ? AppColors.okBg : AppColors.blockBg,
+                    color: _success ? AppColors.adaptive(context, AppColors.okBg) : AppColors.adaptive(context, AppColors.blockBg),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Icon(_success ? Icons.check_circle_outline : Icons.error_outline, size: 18,
-                        color: _success ? AppColors.okFg : AppColors.blockFg),
+                        color: _success ? AppColors.adaptive(context, AppColors.okFg) : AppColors.adaptive(context, AppColors.blockFg)),
                     const SizedBox(width: AppSpace.s2),
-                    Expanded(child: Text(_result!, style: TextStyle(color: _success ? AppColors.okFg : AppColors.blockFg, fontSize: 13))),
+                    Expanded(child: Text(_result!, style: TextStyle(color: _success ? AppColors.adaptive(context, AppColors.okFg) : AppColors.adaptive(context, AppColors.blockFg), fontSize: 13))),
                   ]),
                 ),
               ),

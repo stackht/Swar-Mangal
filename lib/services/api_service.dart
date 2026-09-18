@@ -204,6 +204,12 @@ class ApiService {
   Future<dynamic> addTeacher(Map<String, dynamic> form) =>
       _api.call('api_addTeacher', form);
 
+  Future<dynamic> requestAddTeacher(Map<String, dynamic> form) =>
+      _api.call('api_staff_requestAddTeacher', form);
+
+  Future<dynamic> teacherAttendanceReport(Map<String, dynamic> form) =>
+      _api.call('api_teacherAttendanceReport', form);
+
   /// Authoritative teacher profile incl. assigned students (profile contract).
   Future<TeacherProfile> teacherProfile(String teacherId, {String branch = 'ALL'}) async {
     final b = await _api.call('api_teacherProfile', {'teacherId': teacherId, 'branch': branch});
@@ -280,13 +286,9 @@ class ApiService {
     return b;
   }
 
-  Future<List<TaskCard>> staffTodaysTasks({String branch = 'ALL'}) async {
+  Future<StaffToday> staffTodaysTasks({String branch = 'ALL'}) async {
     final b = await _api.call('api_staff_todaysTasks', {'branch': branch});
-    return ((b as Map)['cards'] as List?)
-            ?.whereType<Map<String, dynamic>>()
-            .map(TaskCard.fromApi)
-            .toList() ??
-        [];
+    return StaffToday.fromApi(b as Map<String, dynamic>);
   }
 
   // ------------------------------------------------------- today's classes
@@ -310,6 +312,11 @@ class ApiService {
   // --------------------------------------------------------------- leads
   Future<dynamic> staffInquiryTransition(Map<String, dynamic> payload) =>
       _api.call('api_staff_inquiryTransition', payload);
+
+  Future<InquiryDetail> staffInquiryDetail(String inquiryId) async {
+    final b = await _api.call('api_staff_inquiryDetail', {'inquiryId': inquiryId});
+    return InquiryDetail.fromApi(b as Map<String, dynamic>);
+  }
 
   // ------------------------------------------------------------ approvals
   Future<ApprovalsData> founderApprovals({String branch = ''}) async {
@@ -473,10 +480,80 @@ class ApiService {
   Future<dynamic> founderMergeStudentDraft(String draftId) =>
       _api.call('api_founder_mergeStudentDraft', {'draftId': draftId});
 
+  Future<dynamic> founderStudentDraftReject(String draftId, String reason) =>
+      _api.call('api_founder_studentDraftReject', {'draftId': draftId, 'reason': reason});
+
+  // ------------------------------------------------------------ whatsapp
+  /// One tap, one message, to the student's REGISTERED number (the server
+  /// looks it up). Reuse [clientIntentKey] on retry so it can never send twice.
+  Future<WaMessage> sendWhatsApp({
+    required String studentId,
+    required String kind,
+    required String body,
+    required String clientIntentKey,
+  }) async {
+    final b = await _api.call('api_staff_sendWhatsApp', {
+      'studentId': studentId,
+      'kind': kind.isEmpty ? 'CUSTOM' : kind,
+      'body': body,
+      'clientIntentKey': clientIntentKey,
+    });
+    return WaMessage.fromApi((b as Map)['message'] as Map<String, dynamic>);
+  }
+
+  /// Send a PDF (e.g. a receipt) as a WhatsApp document.
+  Future<WaMessage> sendWhatsAppDocument({
+    required String studentId,
+    required String fileName,
+    required String fileBase64,
+    required String caption,
+    required String clientIntentKey,
+    String kind = 'RECEIPT',
+  }) async {
+    final b = await _api.call('api_staff_sendWhatsAppDocument', {
+      'studentId': studentId,
+      'kind': kind,
+      'fileName': fileName,
+      'fileBase64': fileBase64,
+      'mimeType': 'application/pdf',
+      'caption': caption,
+      'clientIntentKey': clientIntentKey,
+    });
+    return WaMessage.fromApi((b as Map)['message'] as Map<String, dynamic>);
+  }
+
+  Future<List<WaMessage>> messageHistory(String studentId) async {
+    final b = await _api.call('api_staff_messageHistory', {'studentId': studentId});
+    return ((b as Map)['rows'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(WaMessage.fromApi)
+            .toList() ??
+        [];
+  }
+
   // ----------------------------------------------------------- messaging
   Future<CommMessage> staffCommGenerate(Map<String, dynamic> params) async {
     final b = await _api.call('api_staff_commGenerate', params);
     return CommMessage.fromApi(b as Map<String, dynamic>);
+  }
+
+  // ------------------------------------------------------------- push
+  /// Registers (or refreshes) this device's push token against the signed-in
+  /// session. Safe to call every launch — the server upserts on the token.
+  Future<bool> registerPushToken({required String fcmToken, String platform = 'android'}) async {
+    final b = await _api.call('api_registerPushToken', {'fcmToken': fcmToken, 'platform': platform});
+    return (b as Map)['ok'] == true;
+  }
+
+  /// Called on sign-out so a shared/reset device stops receiving this
+  /// session's notifications.
+  Future<void> unregisterPushToken(String fcmToken) => _api.call('api_unregisterPushToken', {'fcmToken': fcmToken});
+
+  /// Whether the server has a Firebase project configured at all. Lets the
+  /// app skip asking for notification permission when push can't work yet.
+  Future<bool> pushEnabled() async {
+    final b = await _api.call('api_pushStatus');
+    return (b as Map)['enabled'] == true;
   }
 
   // ---------------------------------------------------------------- misc

@@ -104,17 +104,6 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
         body: Padding(
           padding: const EdgeInsets.all(AppSpace.s4),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Card(
-              color: AppColors.infoBg,
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpace.s3),
-                child: Text(
-                    'The teacher profile backend endpoint is not available in this deployment. '
-                    'Demo mode simulates it; production requires the held profile endpoint.',
-                    style: const TextStyle(fontSize: 12, color: AppColors.infoFg)),
-              ),
-            ),
-            const SizedBox(height: AppSpace.s3),
             Expanded(child: ErrorView(_error!, onRetry: _load)),
           ]),
         ),
@@ -136,19 +125,19 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
                 child: Column(children: [
                   CircleAvatar(
                     radius: 30,
-                    backgroundColor: AppColors.primary.withValues(alpha: .1),
+                    backgroundColor: AppColors.adaptive(context, AppColors.primary).withValues(alpha: .1),
                     child: Text(t.teacherName.isNotEmpty ? t.teacherName[0].toUpperCase() : '?',
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.primary))),
                   ),
                   const SizedBox(height: AppSpace.s3),
                   Text(t.teacherName, style: AppType.title),
                   const SizedBox(height: AppSpace.s1),
-                  Text(t.teacherId, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                  Text(t.teacherId, style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                   const SizedBox(height: AppSpace.s2),
                   Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
                     if (t.primaryRole.isNotEmpty) TagChip(t.primaryRole),
                     StatusBadge(t.status.isEmpty ? 'UNKNOWN' : t.status),
-                    if (t.shareLabel.isNotEmpty) TagChip(t.shareLabel, color: AppColors.focus),
+                    if (t.shareLabel.isNotEmpty) TagChip(t.shareLabel, color: AppColors.adaptive(context, AppColors.focus)),
                   ]),
                 ]),
               ),
@@ -176,16 +165,16 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpace.s4),
                   child: Row(children: [
-                    const Icon(Icons.payments_outlined, color: AppColors.primary),
+                    Icon(Icons.payments_outlined, color: AppColors.adaptive(context, AppColors.primary)),
                     const SizedBox(width: AppSpace.s3),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('Outstanding payable (this month)', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                        Text('Outstanding payable (this month)', style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                         Text(_payable ?? 'Payout data unavailable',
                             style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w800,
-                                color: _payable == null ? AppColors.muted : AppColors.primary)),
+                                color: _payable == null ? AppColors.adaptive(context, AppColors.muted) : AppColors.adaptive(context, AppColors.primary))),
                       ]),
                     ),
                   ]),
@@ -199,7 +188,7 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
                     Row(children: [
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Fee share', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                          Text('Fee share', style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                           Text(t.shareLabel.isNotEmpty ? t.shareLabel : 'Unset',
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                         ]),
@@ -211,10 +200,10 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
                       ),
                     ]),
                     const SizedBox(height: AppSpace.s2),
-                    const Text(
+                    Text(
                       'Percentage of student fees allocated to this teacher. The server computes the actual '
                       'earning basis; the app only sends the founder\'s requested change and displays the result.',
-                      style: TextStyle(fontSize: 11, color: AppColors.muted),
+                      style: TextStyle(fontSize: 11, color: AppColors.adaptive(context, AppColors.muted)),
                     ),
                   ]),
                 ),
@@ -230,15 +219,15 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s4, vertical: 6),
                     leading: CircleAvatar(
                       radius: 16,
-                      backgroundColor: AppColors.primary.withValues(alpha: .08),
+                      backgroundColor: AppColors.adaptive(context, AppColors.primary).withValues(alpha: .08),
                       child: Text(s.studentName.isNotEmpty ? s.studentName[0].toUpperCase() : '?',
-                          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary, fontSize: 13)),
+                          style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.adaptive(context, AppColors.primary), fontSize: 13)),
                     ),
                     title: Text(s.studentName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                     subtitle: Text(
                         [s.classCode, s.instrument, s.phone].where((e) => e.isNotEmpty).join(' · '),
-                        style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                    trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
+                        style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
+                    trailing: Icon(Icons.chevron_right, color: AppColors.adaptive(context, AppColors.muted)),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => StudentProfileScreen(student: s, staff: widget.staff),
                     )),
@@ -383,7 +372,7 @@ final messenger = ScaffoldMessenger.of(context);
           // Effective date
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.event, color: AppColors.muted),
+            leading: Icon(Icons.event, color: AppColors.adaptive(context, AppColors.muted)),
             title: Text(_effectiveFrom ?? 'Effective from', style: const TextStyle(fontSize: 14)),
             trailing: TextButton(
               onPressed: () async {
@@ -410,7 +399,7 @@ final messenger = ScaffoldMessenger.of(context);
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: AppSpace.s3),
-              child: Text(_error!, style: const TextStyle(color: AppColors.blockFg, fontSize: 13)),
+              child: Text(_error!, style: TextStyle(color: AppColors.adaptive(context, AppColors.blockFg), fontSize: 13)),
             ),
         ]),
       ),

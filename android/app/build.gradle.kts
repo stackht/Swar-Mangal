@@ -23,6 +23,16 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// Push notifications (Firebase Cloud Messaging). The google-services plugin
+// FAILS THE BUILD outright if google-services.json is missing, so it is only
+// applied when that file actually exists — the app builds and runs fine
+// without it, just with push disabled. Drop the real file (from the
+// Firebase console, Android app registered as in.swarmangal.academyos) at
+// android/app/google-services.json to turn push on; no other change needed.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "in.swarmangal.academyos"
     compileSdk = flutter.compileSdkVersion
@@ -31,6 +41,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications (used to show the
+        // in-foreground push banner Android otherwise suppresses).
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -66,6 +79,11 @@ android {
             }
         }
     }
+}
+
+dependencies {
+    // Required by flutter_local_notifications (isCoreLibraryDesugaringEnabled above).
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

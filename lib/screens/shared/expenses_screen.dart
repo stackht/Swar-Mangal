@@ -71,8 +71,10 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
   final _account = TextEditingController();
   final _notes = TextEditingController();
   final _ref = TextEditingController();
+  final _paidBy = TextEditingController();
   late final String _idemKey;
   bool _busy = false;
+  bool _reimbursement = false;
   String? _result;
   bool _ok = false;
 
@@ -88,7 +90,7 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
 
   @override
   void dispose() {
-    for (final c in [_amount, _category, _paidTo, _account, _notes, _ref]) {
+    for (final c in [_amount, _category, _paidTo, _account, _notes, _ref, _paidBy]) {
       c.dispose();
     }
     super.dispose();
@@ -122,6 +124,8 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
               'expenseDate': today,
               'reference': _ref.text.trim(),
               'notes': _notes.text.trim(),
+              'reimbursementRequired': _reimbursement,
+              if (_reimbursement) 'paidBy': _paidBy.text.trim(),
             }
           : {
               'entryDate': today,
@@ -232,6 +236,23 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
                   maxLines: 2,
                   decoration: const InputDecoration(labelText: 'Notes'),
                 ),
+                if (widget.staff) ...[
+                  const SizedBox(height: AppSpace.s2),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _reimbursement,
+                    onChanged: (v) => setState(() => _reimbursement = v),
+                    title: const Text('Someone paid out of pocket, needs reimbursing', style: TextStyle(fontSize: 13)),
+                  ),
+                  if (_reimbursement) ...[
+                    const SizedBox(height: AppSpace.s2),
+                    TextFormField(
+                      controller: _paidBy,
+                      decoration: const InputDecoration(labelText: 'Who paid *', prefixIcon: Icon(Icons.person_outline)),
+                      validator: (v) => (_reimbursement && (v == null || v.trim().isEmpty)) ? 'Say who paid, so they are reimbursed' : null,
+                    ),
+                  ],
+                ],
               ]),
             ),
           ),
@@ -241,14 +262,14 @@ class _ExpenseFormState extends State<_ExpenseForm> with SyncAware {
               child: Container(
                 padding: const EdgeInsets.all(AppSpace.s3),
                 decoration: BoxDecoration(
-                  color: _ok ? AppColors.okBg : AppColors.blockBg,
+                  color: _ok ? AppColors.adaptive(context, AppColors.okBg) : AppColors.adaptive(context, AppColors.blockBg),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Icon(_ok ? Icons.check_circle_outline : Icons.error_outline, size: 18,
-                      color: _ok ? AppColors.okFg : AppColors.blockFg),
+                      color: _ok ? AppColors.adaptive(context, AppColors.okFg) : AppColors.adaptive(context, AppColors.blockFg)),
                   const SizedBox(width: AppSpace.s2),
-                  Expanded(child: Text(_result!, style: TextStyle(fontSize: 13, color: _ok ? AppColors.okFg : AppColors.blockFg))),
+                  Expanded(child: Text(_result!, style: TextStyle(fontSize: 13, color: _ok ? AppColors.adaptive(context, AppColors.okFg) : AppColors.adaptive(context, AppColors.blockFg)))),
                 ]),
               ),
             ),
@@ -349,21 +370,21 @@ class _CashbookViewState extends State<_CashbookView> {
                           ? Icons.south_east
                           : Icons.north_west,
                           size: 18, color: _rows[i].type.toUpperCase().contains('INFLOW')
-                              ? AppColors.okFg
-                              : AppColors.blockFg),
+                              ? AppColors.adaptive(context, AppColors.okFg)
+                              : AppColors.adaptive(context, AppColors.blockFg)),
                       const SizedBox(width: AppSpace.s3),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('${_rows[i].category} · ${_rows[i].description}',
                               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                           Text('${_rows[i].date} · ${_rows[i].mode}',
-                              style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                              style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                         ]),
                       ),
                       Text(inr(_rows[i].amount),
                           style: TextStyle(fontWeight: FontWeight.w800, color: _rows[i].type.toUpperCase().contains('INFLOW')
-                              ? AppColors.okFg
-                              : AppColors.blockFg)),
+                              ? AppColors.adaptive(context, AppColors.okFg)
+                              : AppColors.adaptive(context, AppColors.blockFg))),
                     ]),
                   ),
             ),

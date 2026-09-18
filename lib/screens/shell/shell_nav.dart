@@ -7,6 +7,7 @@ import '../../state/sync_manager.dart';
 import '../../widgets/atmosphere.dart';
 import '../../widgets/anim.dart';
 import '../../widgets/atoms.dart';
+import '../shared/staff_access_screen.dart';
 
 /// Inherited handle letting a body screen switch the shell's current view.
 class ShellNavigator extends InheritedWidget {
@@ -184,29 +185,31 @@ Widget _drawer(BuildContext context, AuthProvider auth) {
               padding: const EdgeInsets.fromLTRB(AppSpace.s5, AppSpace.s6, AppSpace.s5, AppSpace.s4),
               child: Row(children: [
                 Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
+                  width: 46,
+                  height: 46,
+                  decoration: const BoxDecoration(
+                    gradient: AppGradients.brass,
                     shape: BoxShape.circle,
-                    boxShadow: const [AppShadows.subtle],
+                    boxShadow: [AppShadows.subtle],
                   ),
-                  child: const Icon(Icons.music_note, color: Colors.white, size: 22),
+                  child: const Icon(Icons.music_note, color: AppColors.navy, size: 23),
                 ),
                 const SizedBox(width: AppSpace.s3),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('SWAR MANGAL',
-                      style: AppType.title.copyWith(
-                          color: Colors.white, letterSpacing: 2, fontSize: 15)),
-                  Text('Music Academy',
-                      style: AppType.caption.copyWith(
-                          color: navText, fontSize: 10)),
+                  Text('Swar Mangal',
+                      style: TextStyle(
+                          fontFamily: AppFonts.display,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 18)),
+                  Text('MUSIC ACADEMY',
+                      style: AppType.eyebrow.copyWith(color: navText, fontSize: 9.5)),
                 ]),
               ]),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpace.s4),
-              child: Divider(color: AppColors.dLine, height: 1),
+              child: Divider(color: Colors.white.withValues(alpha: .08), height: 1),
             ),
             const SizedBox(height: AppSpace.s2),
             // Grouped navigation with quiet section labels.
@@ -262,16 +265,14 @@ padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3 + 2, vertical: 1),
             height: 42,
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3),
             decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.primary.withValues(alpha: dark ? .16 : .13)
-                  : Colors.transparent,
+              color: selected ? Colors.white.withValues(alpha: .08) : Colors.transparent,
               borderRadius: BorderRadius.circular(AppRadius.s),
             ),
             child: Row(children: [
               Icon(
                 item.icon,
                 size: 18,
-                color: selected ? Colors.white : AppColors.dMuted,
+                color: selected ? AppColors.brass : AppColors.dMuted,
               ),
               const SizedBox(width: AppSpace.s3),
               Expanded(
@@ -279,7 +280,7 @@ padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3 + 2, vertical: 1),
                   item.label,
                   style: TextStyle(
                     color: selected ? Colors.white : AppColors.dMuted,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                     fontSize: 13.5,
                   ),
                 ),
@@ -289,7 +290,7 @@ padding: const EdgeInsets.symmetric(horizontal: AppSpace.s3 + 2, vertical: 1),
                   width: 3,
                   height: 18,
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: AppColors.brass,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -380,6 +381,16 @@ class AboutScreen extends StatelessWidget {
             ]),
           ),
         ),
+        if (!staff) ...[
+          const SizedBox(height: AppSpace.s3),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const StaffAccessScreen(),
+            )),
+            icon: const Icon(Icons.badge_outlined, size: 18),
+            label: const Text('Manage staff access'),
+          ),
+        ],
         const Card(
           child: Padding(
             padding: EdgeInsets.all(AppSpace.s4),

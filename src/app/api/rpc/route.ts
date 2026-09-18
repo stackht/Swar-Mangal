@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateToken } from "@/lib/rpc/auth";
 import { rpcDispatch } from "@/lib/rpc/handlers";
 import { dispatch2 } from "@/lib/rpc/handlers2";
+import { dispatchMessaging, MESSAGING_FUNCTIONS } from "@/lib/rpc/messaging";
+import { dispatchGovernance, GOVERNANCE_FUNCTIONS } from "@/lib/rpc/governance";
+import { dispatchPush, PUSH_FUNCTIONS } from "@/lib/rpc/push";
 import { authorizeRpc, authorizeBranch, scopeForSession, WRITE_FUNCTIONS } from "@/lib/rpc/authorization";
 import { isDbConfigured, query } from "@/lib/db";
 import { impliedBranch } from "@/lib/rpc/authorization";
@@ -22,7 +25,7 @@ const rpcError = (code: string, message: string) =>
   rpcOkResponse({ ok: false, code, error: message });
 
 // Ids only — never names, amounts or phone numbers.
-const REF_KEYS = ["receiptNo", "draftId", "studentId", "teacherId", "invoiceId", "invoiceNo", "entryId", "inquiryId", "eventId", "id"];
+const REF_KEYS = ["receiptNo", "draftId", "studentId", "teacherId", "invoiceId", "invoiceNo", "entryId", "inquiryId", "eventId", "messageId", "month", "id"];
 
 function refOf(result: Record<string, unknown>): string {
   const parts: string[] = [];
@@ -132,11 +135,19 @@ export async function POST(req: NextRequest) {
     "api_staff_studentHub", "api_addStudent", "api_staff_saveStudentDraft", "api_founder_setStudentStatus", "api_founder_mergeStudentDraft",
     "api_searchReceipt", "api_receiptPreflight", "api_addFeePayment", "api_staff_prepareReceiptDraft",
     "api_founder_listPaymentDrafts", "api_founder_paymentDraftApprove", "api_founder_paymentDraftReject",
-    "api_founder_finalisePaymentDraft", "api_staff_finalisePaymentDraft",
+    "api_founder_finalisePaymentDraft", "api_staff_finalisePaymentDraft", "api_founder_studentDraftReject",
   ];
   try {
-    const handler = inHandlers1.includes(functionName) ? rpcDispatch : dispatch2;
-    const result = await handler(session.role, functionName, argMap, scopeForSession(session));
+    const scope = scopeForSession(session);
+    const result = MESSAGING_FUNCTIONS.has(functionName)
+      ? await dispatchMessaging(functionName, argMap, scope, session)
+      : GOVERNANCE_FUNCTIONS.has(functionName)
+        ? await dispatchGovernance(functionName, argMap, scope, session)
+        : PUSH_FUNCTIONS.has(functionName)
+          ? await dispatchPush(functionName, argMap, scope, session)
+          : inHandlers1.includes(functionName)
+            ? await rpcDispatch(session.role, functionName, argMap, scope, session)
+            : await dispatch2(session.role, functionName, argMap, scope, session);
     await recordAudit(session, functionName, argMap, result);
     return rpcOkResponse(result);
   } catch (e) {

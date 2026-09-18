@@ -1,22 +1,51 @@
 import { query, queryOne, withTransaction } from "@/lib/db";
-import { RpcRole } from "@/lib/rpc/auth";
+import type { RpcRole, RpcSession } from "@/lib/rpc/auth";
 import { s, n, d, newId, nextDocNo, bumpRevisions, currentRevisions, acadStudents, acadStudentById, acadTeachers, acadTeacherById, studentToRpc, studentsToRpc, teacherToRpc, classSummary } from "@/lib/rpc/shared";
 import { schoolInvoiceSeries } from "@/lib/rpc/numbering";
-import { feeState, todayIso, DEFAULT_ADVANCE_DAYS, type FeeState } from "@/lib/rpc/fees";
+import { amountRupees, feeState, todayIso, daysUntil, DEFAULT_ADVANCE_DAYS, type FeeState } from "@/lib/rpc/fees";
+import { normalizeIndianMobile } from "@/lib/whatsapp/phone";
+import { gatewayConfigFromEnv } from "@/lib/whatsapp/gateway";
 import { money, payoutStatus, payoutBalance, isServiceMonth } from "@/lib/rpc/payouts";
 import {
+  ALL_BRANCHES,
   branchForbidden,
   defaultBranch,
   inScope,
+  makeScope,
   matchesRequestedBranch,
   moneyInScope,
   recordBranch,
   type BranchScope,
 } from "@/lib/rpc/scope";
+import { notifyBranch, notifyFounderGeneric } from "@/lib/push/notify";
+import {
+  CUSTOM_KINDS,
+  DORMANT_RECALL_DAYS,
+  DORMANT_RECALL_LIMIT,
+  PAUSED_REVIEW_AFTER_DAYS,
+  EXPECTED_EVENTS_FLOOR,
+  TERMINAL_INQUIRY_STATUSES,
+  addDays,
+  customSessionRefusal,
+  earningBaseFromEnv,
+  excludedReceiptSql,
+  expenseCategoryRefusal,
+  inquiryFinalStatus,
+  INQUIRY_DORMANT_AFTER_DAYS,
+  isBackdated,
+  isExcludedReceiptStatus,
+  monthEndExclusive,
+  monthLabel,
+  noAnswerStep,
+  priceTeacherLine,
+  unsettleableClasses,
+} from "@/lib/rpc/rules";
+import { closedMonthRefusal, expectedClassesBetween, governanceApprovalItems } from "@/lib/rpc/governance";
+import { notifyFounderApproval, notifyStaffDecision } from "@/lib/push/notify";
 
 const ok = (extra: Record<string, unknown> = {}) => ({ ok: true, ...extra });
 
-export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, unknown>, scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
   switch (fn) {
     case "api_dashboard":
       return dashboard(arg, scope);
@@ -25,21 +54,29 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_cashbookReport":
       return cashbook(arg, scope);
     case "api_addExpenseEntry":
-      return addExpense(arg);
+      return addExpense(arg, scope);
     case "api_staff_submitExpenseDraft":
-      return submitExpenseDraft(arg, scope);
+      return submitExpenseDraft(arg, scope, session);
     case "api_founder_expenseDraftApprove":
-      return expenseDraftApprove(arg);
+      return expenseDraftApprove(arg, session);
     case "api_founder_expenseDraftReject":
-      return expenseDraftReject(arg);
+      return expenseDraftReject(arg, session);
     case "api_listTeachers":
       return listTeachers();
     case "api_addTeacher":
       return addTeacher(arg);
+    case "api_staff_requestAddTeacher":
+      return requestAddTeacher(arg, scope, session);
+    case "api_founder_addTeacherRequestApprove":
+      return addTeacherRequestApprove(arg, session);
+    case "api_founder_addTeacherRequestReject":
+      return addTeacherRequestReject(arg, session);
+    case "api_teacherAttendanceReport":
+      return teacherAttendanceReport(arg, scope);
     case "api_teacherProfile":
       return teacherProfile(arg, scope);
     case "api_updateTeacherStatus":
-      return updateTeacherStatus(arg);
+      return updateTeacherStatus(arg, session);
     case "api_updateTeacherCompensation":
       return updateTeacherCompensation(arg);
     case "api_teacherPayoutPreview":
@@ -67,14 +104,14 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_staff_attendanceRoster":
       return attendanceRoster(arg, scope);
     case "api_staff_markAttendance":
-      return markAttendance(arg, scope);
+      return markAttendance(arg, scope, session);
     case "api_staff_todaysTasks":
     case "api_staff_doToday":
       return todaysTasks(arg, scope);
     case "api_staff_todaysClasses":
       return todaysClasses(arg, scope);
     case "api_staff_resolveTodaysClass":
-      return resolveTodaysClass(arg, scope);
+      return resolveTodaysClass(arg, scope, session);
     case "api_staff_scheduleSession":
       return scheduleSession(arg, scope);
     case "api_staff_sessionRoster":
@@ -84,31 +121,67 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_staff_inquiryQueue":
       return inquiryQueue(arg, scope);
     case "api_staff_inquiryQuickAdd":
-      return inquiryQuickAdd(arg, scope);
+      return inquiryQuickAdd(arg, scope, session);
     case "api_staff_inquiryTransition":
-      return inquiryTransition(arg, scope);
+      return inquiryTransition(arg, scope, session);
+    case "api_staff_inquiryDetail":
+      return inquiryDetail(arg, scope);
     case "api_founder_approvalsList":
       return founderApprovals();
     case "api_founder_auditLog":
       return auditLog(arg);
     case "api_staff_listMyApprovals":
-      return staffMyRequests(scope);
+      return staffMyRequests(scope, session);
     case "api_staff_commGenerate":
-      return commGenerate(arg);
+      return commGenerate(arg, scope);
     case "api_syncChanges":
       return syncChanges(arg);
+    case "api_founder_sendDailyDigest":
+      return sendDailyDigest();
     default:
       return { ok: false, code: "UNKNOWN_API", error: `No gateway handler for ${fn}` };
   }
 }
 
+/**
+ * Fees due/overdue reminders, one push per branch plus a founder-wide total.
+ * Meant to be called once a day by an external cron hitting this RPC with
+ * the founder token (see deploy/README.md) — nothing in this app schedules
+ * anything itself (brief §2.4: no triggers). A no-op with no push tokens
+ * registered or no Firebase project configured; safe to call any time.
+ */
+async function sendDailyDigest(): Promise<Record<string, unknown>> {
+  let totalDueToday = 0;
+  let totalOverdue = 0;
+  for (const branch of ALL_BRANCHES) {
+    const { by } = await dueBuckets(makeScope([branch]));
+    totalDueToday += by.DUE_TODAY.length;
+    totalOverdue += by.OVERDUE.length;
+    if (by.DUE_TODAY.length === 0 && by.OVERDUE.length === 0) continue;
+    const parts = [
+      by.DUE_TODAY.length ? `${by.DUE_TODAY.length} due today` : "",
+      by.OVERDUE.length ? `${by.OVERDUE.length} overdue` : "",
+    ].filter(Boolean);
+    notifyBranch(branch, "Fees today", parts.join(" · "), branch);
+  }
+  if (totalDueToday || totalOverdue) {
+    notifyFounderGeneric(
+      "Fees today",
+      `Academy-wide: ${totalDueToday} due today, ${totalOverdue} overdue.`,
+      "ALL",
+    );
+  }
+  return ok({ sent: true, totalDueToday, totalOverdue });
+}
+
 // -------------------------------------------------------------- dashboard
 async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
   const [ledAll, receiptsAll] = await Promise.all([
     query<{ inflow: string; amount: string; entry_date: string; payment_mode: string; party_name: string; branch: string }>(
       `select inflow, amount, entry_date::text, payment_mode, party_name, branch from money_ledger
-       where entry_date >= date_trunc('month', current_date) order by entry_date desc`,
+       where entry_date >= date_trunc('month', current_date) and coalesce(upper(status),'ACTIVE') not like '%VOID%'
+       order by entry_date desc`,
     ),
     query<{ receipt_no: string; amount: string; payment_mode: string; status: string; party_name: string; branch: string; created_at: string }>(
       `select receipt_no, amount, payment_mode, status, party_name, branch, created_at::text from receipts order by id desc limit 100`,
@@ -126,17 +199,25 @@ async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Prom
     .filter((r) => s(r.payment_mode).toUpperCase() !== "CASH")
     .reduce((a, r) => a + inflowOf(r), 0);
   const cashToday = todayCollection - onlineToday;
-  const due = await dueReminders(scope);
+  const { by: founderBy } = await dueBuckets(scope);
+  const [due, approvalsCount, overview, cards] = await Promise.all([
+    dueReminders(scope),
+    pendingApprovalsCount(scope),
+    dashboardOverviewSections(scope, today),
+    buildTodoCards(scope, today, founderBy, true),
+  ]);
 
   return ok({
+    cards,
     todayCollection,
     monthCollection,
-    todayCount: receipts.length,
+    todayCount: todayRows.filter((r) => inflowOf(r) > 0).length,
     monthCount: led.filter((r) => inflowOf(r) > 0).length,
     cashToday,
     onlineToday,
     scope: s(arg["scope"] ?? "ALL"),
     consolidated: s(arg["scope"] ?? "ALL") === "ALL",
+    approvalsCount,
     metrics: {
       dueTodayCount: (due["dueToday"] as unknown[]).length,
       dueSoonCount: (due["dueSoon"] as unknown[]).length,
@@ -144,6 +225,7 @@ async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Prom
       feePlanMissingCount: Number(due["notRecorded"] ?? 0),
       termsPendingCount: 0,
     },
+    ...overview,
     recent: receipts.map((r) => ({
       receiptNo: s(r.receipt_no),
       date: d(r.created_at),
@@ -155,7 +237,7 @@ async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Prom
       status: s(r.status).toUpperCase(),
       entityId: recordBranch(r.branch) === "GOREGAON" ? "ENT-GOREGAON" : "ENT-KANDIVALI",
       pdfUrl: "",
-      excluded: false,
+      excluded: isExcludedReceiptStatus(r.status),
       feePeriodFrom: "",
       feePeriodTo: "",
       txnId: "",
@@ -209,6 +291,133 @@ async function dueReminders(scope: BranchScope): Promise<Record<string, unknown>
   });
 }
 
+// -------------------------------------------------------- dashboard overview
+// Shared by the staff "Today" screen and the founder "Home" screen, so both
+// read the exact same server-computed sections (brief: the client never
+// derives a business figure; it only renders what the server sent).
+
+/** How many staff drafts/requests are currently waiting on the founder. */
+async function pendingApprovalsCount(scope: BranchScope): Promise<number> {
+  const waiting = (
+    await query<{ branch: string }>(
+      `select branch from payment_drafts where status = 'SUBMITTED'
+       union all select branch from expense_drafts where status = 'SUBMITTED'
+       union all select branch from student_drafts where status = 'SUBMITTED'
+       union all select branch from receipt_corrections where status = 'SUBMITTED'
+       union all select branch from school_invoice_drafts where status = 'SUBMITTED'`,
+    )
+  ).filter((r) => inScope(scope, r.branch));
+  return waiting.length;
+}
+
+/** Today's attendance marks vs the active roster — honest counts, not a guess. */
+async function attendanceSummaryToday(scope: BranchScope, today: string): Promise<Record<string, unknown>> {
+  const active = (await acadStudents()).filter((x) => inScope(scope, x.branch) && s(x.status).toUpperCase() === "ACTIVE");
+  const marks = (
+    await query<{ student_id: string; status: string; branch: string }>(
+      `select a.student_id, a.status, coalesce(s.branch, '') as branch
+       from attendance_acad a left join students_acad s on s.id = a.student_id
+       where a.session_date = $1`,
+      [today],
+    )
+  ).filter((r) => inScope(scope, r.branch));
+  const byStudent = new Map(marks.map((m) => [m.student_id, s(m.status).toUpperCase()]));
+  const counts = { PRESENT: 0, ABSENT: 0, EXCUSED: 0, LATE: 0 } as Record<string, number>;
+  let marked = 0;
+  for (const st of active) {
+    const state = byStudent.get(st.id);
+    if (state && state in counts) {
+      counts[state]++;
+      marked++;
+    }
+  }
+  return {
+    date: today,
+    totalActive: active.length,
+    marked,
+    notMarked: Math.max(0, active.length - marked),
+    present: counts.PRESENT,
+    absent: counts.ABSENT,
+    excused: counts.EXCUSED,
+    late: counts.LATE,
+  };
+}
+
+/** Today's lectures, grouped by teacher, so a gap in delivery shows by name. */
+function teacherAttendanceFromClasses(rows: Record<string, unknown>[]): Record<string, unknown> {
+  const byTeacher = new Map<string, { teacherId: string; teacherName: string; scheduled: number; held: number; cancelled: number; substituted: number; unanswered: number }>();
+  for (const r of rows) {
+    const teacherId = s(r.teacherId) || s(r.teacherName);
+    if (!teacherId) continue;
+    const row = byTeacher.get(teacherId) ?? {
+      teacherId: s(r.teacherId), teacherName: s(r.teacherName), scheduled: 0, held: 0, cancelled: 0, substituted: 0, unanswered: 0,
+    };
+    row.scheduled++;
+    const outcome = s(r.outcome).toUpperCase();
+    if (!r.resolved) row.unanswered++;
+    else if (outcome === "HELD") row.held++;
+    else if (outcome === "SUBSTITUTE_DELIVERED") row.substituted++;
+    else if (outcome === "TEACHER_CANCELLED" || outcome === "ACADEMY_CANCELLED") row.cancelled++;
+    byTeacher.set(teacherId, row);
+  }
+  const teachers = [...byTeacher.values()].sort((a, b) => (a.teacherName < b.teacherName ? -1 : 1));
+  return { teachers, scheduledToday: rows.length, unansweredToday: rows.filter((r) => !r.resolved).length };
+}
+
+/**
+ * The dashboard's "Teacher attendance" card only ever shows today. This is
+ * the same computation over any date range — a dedicated screen for
+ * founder and staff alike, read-only, nothing to approve here.
+ */
+async function teacherAttendanceReport(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const today = todayIso();
+  const from = isoDate(arg["from"]) || today.slice(0, 8) + "01";
+  const to = isoDate(arg["to"]) || today;
+  const teacherId = s(arg["teacherId"]).trim() || undefined;
+  const classes = await expectedClassesBetween(from, addDays(to, 1), { scope, teacherId });
+  const rows = classes.map((c) => ({ ...c, teacherName: c.teacher }));
+  const report = teacherAttendanceFromClasses(rows as unknown as Record<string, unknown>[]);
+  return ok({ from, to, ...report });
+}
+
+/** The full set of sections both dashboards render. Read-only; writes nothing. */
+async function dashboardOverviewSections(scope: BranchScope, today: string) {
+  const [classesToday, inquiryRows, { by }] = await Promise.all([
+    todaysClasses({ date: today }, scope),
+    query<Record<string, unknown>>(
+      `select id, name, phone, branch, status, next_contact_date::text, last_contacted_at::text from inquiries`,
+    ).then((rows) => rows.filter((r) => inScope(scope, r.branch))),
+    dueBuckets(scope),
+  ]);
+  const classRows = (classesToday.rows as Record<string, unknown>[]) ?? [];
+  const [attendance, callToday, feesDueTodaySample] = await Promise.all([
+    attendanceSummaryToday(scope, today),
+    callTheseToday(scope, inquiryRows),
+    studentsToRpc(by.DUE_TODAY.slice(0, 5)),
+  ]);
+  const openInquiries = inquiryRows.filter((r) => !TERMINAL_INQUIRY_STATUSES.has(s(r.status).toUpperCase()));
+  return {
+    feesDueToday: {
+      count: by.DUE_TODAY.length,
+      overdueCount: by.OVERDUE.length,
+      dueSoonCount: by.DUE_SOON.length,
+      rows: feesDueTodaySample.map((st) => ({ studentId: st.studentId, studentName: st.studentName, classCode: st.classCode, phone: st.phone })),
+    },
+    todaysLectures: {
+      count: classRows.length,
+      unanswered: classRows.filter((r) => !r.resolved).length,
+      rows: classRows.slice(0, 8),
+    },
+    attendanceSummary: attendance,
+    enquiries: {
+      openCount: openInquiries.length,
+      callTodayCount: callToday.length,
+      rows: callToday.slice(0, 5).map((r) => ({ inquiryId: s(r.id), name: s(r.name), phone: s(r.phone) })),
+    },
+    teacherAttendance: teacherAttendanceFromClasses(classRows),
+  };
+}
+
 // ---------------------------------------------------------------- teachers
 async function listTeachers(): Promise<Record<string, unknown>> {
   const rows = await acadTeachers();
@@ -225,6 +434,72 @@ async function addTeacher(arg: Record<string, unknown>): Promise<Record<string, 
   );
   await bumpRevisions(["teachers"]);
   return ok({ teacherId: id, teacherName: name, note: "teacher created" });
+}
+
+/**
+ * addTeacher above is founder-direct; this is the staff-facing proposal —
+ * staff meet new teachers day to day, so they submit the details and the
+ * founder approves, same draft/approve shape as every other staff request.
+ */
+async function requestAddTeacher(arg: Record<string, unknown>, scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
+  const name = s(arg["teacherName"] ?? arg["name"]).trim();
+  const phone = s(arg["phone"]).trim();
+  const primaryRole = s(arg["primaryRole"] ?? arg["instrument"]).trim();
+  const branch = s(arg["branch"]).trim();
+  const intent = s(arg["clientIntentKey"]).trim() || null;
+  if (!name) return { ok: false, code: "NO_NAME", error: "Teacher name required" };
+  if (branch && !inScope(scope, branch)) return branchForbidden(recordBranch(branch));
+  if (intent) {
+    const earlier = await queryOne<{ id: string; status: string }>(`select id, status from teacher_add_requests where client_intent_key = $1`, [intent]);
+    if (earlier) return ok({ requestId: earlier.id, status: earlier.status, idempotent: true, note: "Already sent to Sharvil." });
+  }
+  const id = newId("TCHREQ");
+  await query(
+    `insert into teacher_add_requests (id, teacher_name, phone, primary_role, branch, submitted_by, client_intent_key)
+     values ($1,$2,$3,$4,$5,$6,$7)`,
+    [id, name, phone, primaryRole, branch, session?.deviceLabel || session?.email || "", intent],
+  );
+  await bumpRevisions(["approvals"]);
+  notifyFounderApproval("New teacher", `${name} — submitted for approval`, id);
+  return ok({ requestId: id, changed: true, note: "Sent to Sharvil for approval." });
+}
+
+async function addTeacherRequestApprove(arg: Record<string, unknown>, session?: RpcSession): Promise<Record<string, unknown>> {
+  const id = s(arg["requestId"] ?? arg["itemId"]).trim();
+  if (!id) return { ok: false, code: "REQUEST_ID_REQUIRED", error: "Pick the request." };
+  const req = await queryOne<{ id: string; teacher_name: string; phone: string; primary_role: string; status: string }>(
+    `select id, teacher_name, phone, primary_role, status from teacher_add_requests where id = $1`,
+    [id],
+  );
+  if (!req) return { ok: false, code: "NOT_FOUND", error: `No teacher request ${id}` };
+  if (req.status === "APPROVED") return ok({ requestId: id, changed: false, idempotent: true });
+  if (req.status !== "SUBMITTED") return { ok: false, code: "NOT_PENDING", error: `Request is already ${req.status}.` };
+  const teacherId = newId("TCH");
+  await query(
+    `insert into teachers_acad (id, name, phone, email, instrument, status) values ($1,$2,$3,'',$4,'ACTIVE') on conflict (id) do nothing`,
+    [teacherId, req.teacher_name, req.phone, req.primary_role || "Music"],
+  );
+  await query(
+    `update teacher_add_requests set status = 'APPROVED', decided_by = $2, decided_at = now(), teacher_id = $3 where id = $1`,
+    [id, session?.email ?? "", teacherId],
+  );
+  await bumpRevisions(["approvals", "teachers"]);
+  return ok({ requestId: id, changed: true, status: "APPROVED", teacherId });
+}
+
+async function addTeacherRequestReject(arg: Record<string, unknown>, session?: RpcSession): Promise<Record<string, unknown>> {
+  const id = s(arg["requestId"] ?? arg["itemId"]).trim();
+  const reason = s(arg["reason"]).trim();
+  if (!id) return { ok: false, code: "REQUEST_ID_REQUIRED", error: "Pick the request." };
+  if (!reason) return { ok: false, code: "REASON_REQUIRED", error: "Say why this teacher isn't being added." };
+  const rows = await query<{ id: string }>(
+    `update teacher_add_requests set status = 'REJECTED', decided_by = $2, decided_at = now(), decision_note = $3
+     where id = $1 and status = 'SUBMITTED' returning id`,
+    [id, session?.email ?? "", reason],
+  );
+  if (!rows.length) return { ok: false, code: "NOT_FOUND", error: `No pending teacher request ${id}` };
+  await bumpRevisions(["approvals"]);
+  return ok({ requestId: id, changed: true, status: "REJECTED" });
 }
 
 async function teacherProfile(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
@@ -255,13 +530,16 @@ async function teacherProfile(arg: Record<string, unknown>, scope: BranchScope):
   });
 }
 
-async function updateTeacherStatus(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function updateTeacherStatus(arg: Record<string, unknown>, session?: RpcSession): Promise<Record<string, unknown>> {
   const id = s(arg["teacherId"]);
-  const status = s(arg["newStatus"]);
-  const reason = s(arg["reason"]);
-  await query("update teachers_acad set status = $1 where id = $2", [status.toUpperCase(), id]);
+  const status = s(arg["newStatus"] ?? arg["status"]).toUpperCase();
+  const reason = s(arg["reason"]).trim();
+  if (!id || !status) return { ok: false, code: "MISSING", error: "teacherId and newStatus required" };
+  const before = await acadTeacherById(id);
+  if (!before) return { ok: false, code: "NOT_FOUND", error: `No teacher ${id}` };
+  await query("update teachers_acad set status = $1 where id = $2", [status, id]);
   await bumpRevisions(["teachers"]);
-  return ok({ teacherId: id, oldStatus: "ACTIVE", newStatus: status.toUpperCase(), message: reason || "updated" });
+  return ok({ teacherId: id, oldStatus: s(before.status), newStatus: status, message: reason || "updated", changedBy: session?.email ?? "" });
 }
 
 async function updateTeacherCompensation(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -313,7 +591,7 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
     ),
     query<{ id: string; student_id: string | null; amount: string; branch: string | null }>(
       `select id, student_id, amount, branch from receipts
-       where status <> 'VOID' and created_at >= $1::date and created_at < ($1::date + interval '1 month')`,
+       where not ${excludedReceiptSql("status")} and created_at >= $1::date and created_at < ($1::date + interval '1 month')`,
       [monthStart],
     ),
     query<{ teacher_id: string; payout_type: string; percentage: string }>(
@@ -426,50 +704,61 @@ async function payoutPreview(arg: Record<string, unknown>): Promise<Record<strin
     }
   }
 
+  // Brief §8 / §15.1: a percentage of WHAT has not been ruled. Until
+  // PAYOUT_EARNING_BASE names a base, no academy payout amount exists and each
+  // line carries a named refusal instead of a number.
+  const base = earningBaseFromEnv(process.env.PAYOUT_EARNING_BASE);
   const results = teachers.map((t) => {
-    const rule = ruleOf.get(t.id);
-    const pct = n(rule?.percentage);
+    const rule = ruleOf.get(t.id) ?? null;
     const own = creditOf.get(t.id) ?? { amount: 0, count: 0 };
-    const totalCollection = money(own.amount);
-    const receiptCount = own.count;
-    const sharedStudents = sharedOf.get(t.id) ?? 0;
-    const share = money(totalCollection * (pct / 100));
     const settled = paidOf.get(t.id) ?? { paid: 0, payments: 0 };
+    const pricing = priceTeacherLine({
+      rule: rule ? { payout_type: s(rule.payout_type), percentage: n(rule.percentage) } : null,
+      base,
+      baseAmount: money(own.amount),
+      hasAttendanceHistoryOnly: false,
+    });
+    const priced = pricing.payable !== null;
     return {
       teacherId: t.id,
       teacherName: t.name,
       month,
       entityId: "ENT-KANDIVALI",
-      receiptCount,
-      totalCollection,
-      sharePercent: pct,
-      // Shared students already decided by the founder and included above.
-      sharedStudentsAssigned: sharedStudents,
-      totalTeacherShare: share,
-      payable: share,
+      receiptCount: base ? own.count : 0,
+      // The attributed collection IS the base, so it is only shown once a base is ruled.
+      totalCollection: base ? money(own.amount) : null,
+      sharePercent: rule ? n(rule.percentage) : null,
+      payoutType: s(rule?.payout_type),
+      sharedStudentsAssigned: sharedOf.get(t.id) ?? 0,
+      totalTeacherShare: pricing.payable,
+      payable: pricing.payable,
+      priced,
       alreadyPaid: money(settled.paid),
-      balance: payoutBalance(share, settled.paid),
+      balance: priced ? payoutBalance(pricing.payable as number, settled.paid) : null,
       paymentCount: settled.payments,
-      status: payoutStatus(share, settled.paid),
+      status: priced ? payoutStatus(pricing.payable as number, settled.paid) : "NOT_PRICED",
+      reasons: pricing.reasons,
+      qualifications: pricing.qualifications,
       missingRule: rule == null,
-      preCutover: false,
-      note: rule == null ? "No payout rule set for this teacher" : "",
+      preCutover: month < EXPECTED_EVENTS_FLOOR,
+      note: pricing.reasons[0]?.message ?? "",
     };
   });
 
   return ok({
     results,
     month,
-    // Receipts inside the month that carry no student link (older rows), so
-    // the totals above can be reconciled against the cashbook.
-    unattributedReceipts: unattributed,
-    unattributedAmount,
-    // Students taught by more than one teacher this month. Their fee counts
-    // for NOBODY until the founder assigns it (api_assignSharedStudent), so
-    // the payout totals never exceed the money actually collected.
-    awaitingDecision,
-    awaitingDecisionAmount: money(awaitingDecision.reduce((a, r) => a + Number(r.remaining), 0)),
-    note: "payout preview computed from receipts in the month, one receipt counted once",
+    monthLabel: monthLabel(month),
+    earningBase: base ?? "",
+    earningBaseDefined: base != null,
+    unattributedReceipts: base ? unattributed : 0,
+    unattributedAmount: base ? unattributedAmount : 0,
+    // Shared students only matter once there is a base to split.
+    awaitingDecision: base ? awaitingDecision : [],
+    awaitingDecisionAmount: base ? money(awaitingDecision.reduce((a, r) => a + Number(r.remaining), 0)) : 0,
+    note: base
+      ? "preview only: writes nothing"
+      : "No academy payout amount exists until Sharvil rules what the percentage is a percentage of (EARNING_BASE_NOT_DEFINED).",
   });
 }
 
@@ -492,6 +781,47 @@ async function recordTeacherPayout(arg: Record<string, unknown>, scope: BranchSc
   const branch = defaultBranch(scope, arg["branch"]);
   if (!inScope(scope, branch)) return branchForbidden(branch);
   const paidOn = d(s(arg["paidOn"] ?? arg["date"])) || todayIso();
+  const lockedPaid = await closedMonthRefusal(paidOn);
+  if (lockedPaid) return lockedPaid;
+
+  // Brief P7.4 settlement gate. From the expected-events floor a month must be
+  // closed, and every class this teacher took in it must carry VERIFIED
+  // evidence. The payment re-checks; it never trusts the preview.
+  if (month >= EXPECTED_EVENTS_FLOOR) {
+    const closed = await queryOne<{ id: string }>(`select id from period_locks where id = $1`, [month]);
+    if (!closed) {
+      return { ok: false, code: "MONTH_NOT_CLOSED", error: `${monthLabel(month)} is not closed yet. Close the month before paying for it.` };
+    }
+  }
+  const monthClasses = (await expectedClassesBetween(`${month}-01`, monthEndExclusive(month)))
+    .filter((c) => !c.notRequired && (month >= EXPECTED_EVENTS_FLOOR || c.resolved));
+  // A class with no teacher ID could be this teacher's: joining on the name is
+  // not allowed (brief §5.4), so an unlinked class blocks rather than being skipped.
+  const unlinked = monthClasses.filter((c) => !c.teacherId && !c.payeeTeacherId);
+  if (unlinked.length) {
+    const named = unlinked.slice(0, 5).map((c) => `${c.date} ${c.startTime} ${c.course}${c.teacher ? ` (${c.teacher})` : ""}`).join("; ");
+    return {
+      ok: false,
+      code: "TIMETABLE_TEACHER_UNLINKED",
+      error: `${monthLabel(month)} cannot be settled: ${unlinked.length} class${unlinked.length === 1 ? " has" : "es have"} no teacher ID in the timetable. Pick the teacher on each: ${named}.`,
+      blocking: unlinked.slice(0, 20).map((c) => ({ date: c.date, why: "no teacher ID" })),
+    };
+  }
+  const classes = monthClasses.filter((c) => c.teacherId === teacherId || c.payeeTeacherId === teacherId);
+  const blocks = unsettleableClasses(
+    classes
+      .filter((c) => !c.resolved || ["HELD", "SUBSTITUTE_DELIVERED"].includes(c.outcome))
+      .map((c) => ({ date: c.date, resolved: c.resolved, evidenceClass: c.evidenceClass })),
+  );
+  if (blocks.length) {
+    const named = blocks.slice(0, 5).map((b) => `${b.date} (${b.why})`).join(", ");
+    return {
+      ok: false,
+      code: "SETTLEMENT_EVIDENCE_NOT_VERIFIED",
+      error: `${teacher.name}'s ${monthLabel(month)} cannot be settled: ${blocks.length} class${blocks.length === 1 ? "" : "es"} without VERIFIED evidence: ${named}.`,
+      blocking: blocks.slice(0, 20),
+    };
+  }
   const mode = s(arg["paymentMode"]) || "Bank Transfer";
   const reference = s(arg["reference"] ?? arg["note"]);
   const id = newId("TPO");
@@ -552,7 +882,7 @@ async function assignSharedStudent(arg: Record<string, unknown>): Promise<Record
   const monthStart = `${month}-01`;
   const collectedRow = await queryOne<{ total: string }>(
     `select coalesce(sum(amount),0)::text as total from receipts
-     where student_id = $1 and status <> 'VOID'
+     where student_id = $1 and not ${excludedReceiptSql("status")}
        and created_at >= $2::date and created_at < ($2::date + interval '1 month')`,
     [studentId, monthStart],
   );
@@ -653,60 +983,89 @@ async function cashbook(arg: Record<string, unknown>, scope: BranchScope): Promi
   return ok({ entries });
 }
 
-async function addExpense(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const amount = n(arg["amount"]);
-  const desc = s(arg["description"] ?? arg["narrative"]);
-  if (amount <= 0 || !desc) return { ok: false, code: "BAD_EXPENSE", error: "valid amount + description required" };
+const isoDate = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(s(v).trim()) ? s(v).trim() : "");
+
+async function addExpense(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const amount = amountRupees(arg);
+  const payee = s(arg["paidTo"] ?? arg["vendor"] ?? arg["payee"]).trim();
+  const desc = s(arg["description"] ?? arg["narrative"]).trim() || payee;
+  if (amount <= 0) return { ok: false, code: "BAD_AMOUNT", error: "Enter an amount greater than zero." };
+  if (!desc) return { ok: false, code: "BAD_EXPENSE", error: "Say who was paid or what it was for." };
+  const categoryRefusal = expenseCategoryRefusal(s(arg["category"]), desc);
+  if (categoryRefusal) return { ok: false, ...categoryRefusal };
+  const intent = s(arg["clientIntentKey"] ?? arg["requestId"]).trim() || null;
+  if (intent) {
+    const earlier = await queryOne<{ id: string }>(`select id from expenses where client_intent_key = $1`, [intent]);
+    if (earlier) return ok({ entryId: earlier.id, idempotent: true, note: "already recorded" });
+  }
+  const entryDate = isoDate(arg["entryDate"] ?? arg["expenseDate"]) || todayIso();
+  const lockedExpense = await closedMonthRefusal(entryDate);
+  if (lockedExpense) return lockedExpense;
+  const branch = scope.unrestricted ? recordBranch(s(arg["branch"]) || "KANDIVALI") : defaultBranch(scope, arg["branch"]);
   const id = newId("EXP");
   await withTransaction(async (tx) => {
     await tx.query(
-      `insert into expenses (id, expense_date, category, vendor, description, amount, approval_status)
-       values ($1, now(), $2, $3, $4, $5, 'APPROVED')`,
-      [id, s(arg["category"]) || "General", s(arg["vendor"] ?? arg["payee"]), desc, amount],
+      `insert into expenses (id, expense_date, category, vendor, description, amount, approval_status, payment_reference, client_intent_key)
+       values ($1, $2::date, $3, $4, $5, $6, 'APPROVED', $7, $8)`,
+      [id, entryDate, s(arg["category"]) || "General", payee, desc, amount, s(arg["reference"]).trim() || null, intent],
     );
     await tx.query(
-      `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, status)
-       values ($1, now(), $2, $3, $4, $5, $5, $6, 'ACTIVE')`,
-      [newId("LED"), s(arg["vendor"] ?? arg["payee"]) || "Office", s(arg["category"]) || "General", desc, amount, s(arg["paymentMode"] ?? "Cash")],
+      `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, account, status, branch)
+       values ($1, $2::date, $3, $4, $5, $6, $6, $7, $8, 'ACTIVE', $9)`,
+      [newId("LED"), entryDate, payee || "Office", s(arg["category"]) || "General", desc, amount, s(arg["paymentMode"]) || "Cash", s(arg["account"]).trim() || null, branch],
     );
   });
   await bumpRevisions(["expenses", "dashboard"]);
-  return ok({ entryId: id, expenseDraftId: newId("EDRAFT"), note: "expense recorded" });
+  return ok({ entryId: id, note: "expense recorded" });
 }
 
 /**
- * Staff submit an expense for the founder to approve. This used to return
- * "persisted: true" without writing anything, so the entry was lost.
+ * Staff submit an expense for the founder to approve. It used to return
+ * "persisted: true" without writing anything; then it read `amount` while
+ * the screen sends integer paise, so every submission was refused.
  */
-async function submitExpenseDraft(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
-  const amount = n(arg["amount"]);
-  const description = s(arg["description"] ?? arg["narrative"]);
-  if (amount <= 0 || !description) {
-    return { ok: false, code: "BAD_EXPENSE", error: "valid amount + description required" };
-  }
+async function submitExpenseDraft(arg: Record<string, unknown>, scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
+  const amount = amountRupees(arg);
+  const payee = s(arg["payee"] ?? arg["vendor"] ?? arg["paidTo"]).trim();
+  const description = s(arg["description"] ?? arg["narrative"]).trim() || payee;
+  if (amount <= 0) return { ok: false, code: "BAD_AMOUNT", error: "Enter an amount greater than zero." };
+  if (!description) return { ok: false, code: "BAD_EXPENSE", error: "Say who was paid or what it was for." };
+  const categoryRefusal = expenseCategoryRefusal(s(arg["category"]), description);
+  if (categoryRefusal) return { ok: false, ...categoryRefusal };
   const branch = defaultBranch(scope, arg["branch"]);
   if (!inScope(scope, branch)) return branchForbidden(branch);
+  const expenseDate = isoDate(arg["expenseDate"]) || todayIso();
+  if (expenseDate > todayIso()) return { ok: false, code: "FUTURE_EXPENSE_DATE", error: "The expense date is in the future. Enter the day it was paid." };
+  const lockedDraft = await closedMonthRefusal(expenseDate);
+  if (lockedDraft) return lockedDraft;
+  const reimbursement = arg["reimbursementRequired"] === true;
+  const paidBy = s(arg["paidBy"]).trim();
+  if (reimbursement && !paidBy) return { ok: false, code: "PAID_BY_REQUIRED", error: "Say who paid, so the right person is reimbursed." };
+  const intent = s(arg["clientIntentKey"] ?? arg["requestId"]).trim() || null;
+  if (intent) {
+    const earlier = await queryOne<{ id: string; status: string }>(`select id, status from expense_drafts where client_intent_key = $1`, [intent]);
+    if (earlier) return ok({ draftId: earlier.id, status: earlier.status, idempotent: true, persisted: true, note: "Already sent to Sharvil." });
+  }
   const id = newId("EDRAFT");
   await query(
-    `insert into expense_drafts (id, status, category, vendor, description, amount, payment_mode, branch, submitted_by)
-     values ($1,'SUBMITTED',$2,$3,$4,$5,$6,$7,$8)`,
+    `insert into expense_drafts
+       (id, status, category, vendor, description, amount, payment_mode, branch, submitted_by,
+        expense_date, payment_reference, paid_from_account, notes, client_intent_key, paid_by_person, reimbursement_required)
+     values ($1,'SUBMITTED',$2,$3,$4,$5,$6,$7,$8,$9::date,$10,$11,$12,$13,$14,$15)`,
     [
-      id,
-      s(arg["category"]) || "General",
-      s(arg["vendor"] ?? arg["payee"]),
-      description,
-      amount,
-      s(arg["paymentMode"]) || "Cash",
-      branch,
-      s(arg["submittedBy"]) || "staff",
+      id, s(arg["category"]) || "General", payee, description, amount, s(arg["mode"] ?? arg["paymentMode"]) || "Cash", branch,
+      session?.deviceLabel || session?.email || "",
+      expenseDate, s(arg["reference"]).trim() || null, s(arg["sourceAccount"]).trim() || null,
+      s(arg["notes"]).trim() || null, intent, paidBy || null, reimbursement,
     ],
   );
   await bumpRevisions(["expenses", "approvals", "tasks"]);
-  return ok({ draftId: id, persisted: true, status: "SUBMITTED", note: "expense draft submitted for approval" });
+  notifyFounderApproval("Expense", "an expense draft to approve", id);
+  return ok({ draftId: id, persisted: true, status: "SUBMITTED", amount, note: "Sent to Sharvil for approval." });
 }
 
 /** Founder approves: the draft becomes a real expense plus a cashbook outflow. */
-async function expenseDraftApprove(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function expenseDraftApprove(arg: Record<string, unknown>, session?: RpcSession): Promise<Record<string, unknown>> {
   const draftId = s(arg["draftId"] ?? arg["itemId"]);
   if (!draftId) return { ok: false, code: "NO_DRAFT", error: "draftId required" };
   const result: Record<string, unknown> = await withTransaction(async (tx) => {
@@ -721,42 +1080,49 @@ async function expenseDraftApprove(arg: Record<string, unknown>): Promise<Record
     if (s(draft.status) !== "SUBMITTED") {
       return { ok: false, code: "NOT_SUBMITTED", error: `Draft status ${s(draft.status)}` };
     }
+    const lockedApprove = await closedMonthRefusal(d(draft.expense_date) || todayIso(), tx);
+    if (lockedApprove) return lockedApprove;
+    const refusal = expenseCategoryRefusal(s(draft.category), s(draft.description));
+    if (refusal) return { ok: false, ...refusal };
     const expenseId = newId("EXP");
     const ledgerId = newId("LED");
     const amount = n(draft.amount);
     await tx.query(
-      `insert into expenses (id, expense_date, category, vendor, description, amount, approval_status)
-       values ($1, now(), $2, $3, $4, $5, 'APPROVED')`,
-      [expenseId, s(draft.category) || "General", s(draft.vendor), s(draft.description), amount],
+      `insert into expenses (id, expense_date, category, vendor, description, amount, approval_status, payment_reference)
+       values ($1, coalesce($6::date, current_date), $2, $3, $4, $5, 'APPROVED', $7)`,
+      [expenseId, s(draft.category) || "General", s(draft.vendor), s(draft.description), amount, s(draft.expense_date) || null, s(draft.payment_reference) || null],
     );
     await tx.query(
-      `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, status, branch)
-       values ($1, now(), $2, $3, $4, $5, $5, $6, 'ACTIVE', $7)`,
-      [ledgerId, s(draft.vendor) || "Office", s(draft.category) || "General", s(draft.description), amount, s(draft.payment_mode) || "Cash", s(draft.branch) || null],
+      `insert into money_ledger (id, entry_date, party_name, category, description, outflow, amount, payment_mode, account, status, branch)
+       values ($1, coalesce($8::date, current_date), $2, $3, $4, $5, $5, $6, $9, 'ACTIVE', $7)`,
+      [ledgerId, s(draft.vendor) || "Office", s(draft.category) || "General", s(draft.description), amount, s(draft.payment_mode) || "Cash", s(draft.branch) || null, s(draft.expense_date) || null, s(draft.paid_from_account) || null],
     );
     await tx.query(
       `update expense_drafts set status = 'APPROVED', decided_by = $2, decided_at = now(), expense_id = $3, ledger_id = $4 where id = $1`,
-      [draftId, s(arg["decidedBy"]) || "founder", expenseId, ledgerId],
+      [draftId, session?.email ?? "", expenseId, ledgerId],
     );
-    return ok({ changed: true, draftId, status: "APPROVED", expenseId, ledgerId, amount, note: "expense recorded and posted to the cashbook" });
+    return ok({ changed: true, draftId, status: "APPROVED", expenseId, ledgerId, amount, branch: s(draft.branch), note: "expense recorded and posted to the cashbook" });
   });
   if (result["ok"] === true && result["changed"] === true) {
     await bumpRevisions(["expenses", "approvals", "dashboard"]);
+    const branch = s(result["branch"]);
+    if (branch) notifyStaffDecision(recordBranch(branch), "Expense", "approved and posted", draftId);
   }
   return result;
 }
 
-async function expenseDraftReject(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function expenseDraftReject(arg: Record<string, unknown>, session?: RpcSession): Promise<Record<string, unknown>> {
   const draftId = s(arg["draftId"] ?? arg["itemId"]);
   const reason = s(arg["reason"] ?? arg["comment"]);
   if (!draftId) return { ok: false, code: "NO_DRAFT", error: "draftId required" };
-  const rows = await query<{ id: string }>(
+  const rows = await query<{ id: string; branch: string }>(
     `update expense_drafts set status = 'REJECTED', decided_by = $2, decided_at = now(), decision_note = $3
-     where id = $1 and status = 'SUBMITTED' returning id`,
-    [draftId, s(arg["decidedBy"]) || "founder", reason || null],
+     where id = $1 and status = 'SUBMITTED' returning id, branch`,
+    [draftId, session?.email ?? "", reason || null],
   );
   if (!rows.length) return { ok: false, code: "NOT_FOUND", error: `No pending expense draft ${draftId}` };
   await bumpRevisions(["expenses", "approvals"]);
+  if (rows[0].branch) notifyStaffDecision(recordBranch(rows[0].branch), "Expense", "rejected — see the reason", draftId);
   return ok({ changed: true, draftId, status: "REJECTED", note: reason || "rejected" });
 }
 
@@ -767,7 +1133,9 @@ async function generateSchoolInvoice(arg: Record<string, unknown>, scope: Branch
   const branch = defaultBranch(scope, arg["branch"]);
   if (!inScope(scope, branch)) return branchForbidden(branch);
   const id = newId("SINV");
-  const invoiceDate = s(arg["invoiceDate"]) || new Date().toISOString().slice(0, 10);
+  const invoiceDate = s(arg["invoiceDate"]) || todayIso();
+  const lockedInvoice = await closedMonthRefusal(invoiceDate);
+  if (lockedInvoice) return lockedInvoice;
   const no = await withTransaction(async (tx) => {
     const docNo = await nextDocNo(tx, "schoolInvoice", schoolInvoiceSeries(new Date(invoiceDate)));
     await tx.query(
@@ -832,58 +1200,16 @@ async function getSchoolInvoice(arg: Record<string, unknown>, scope: BranchScope
 }
 
 // -------------------------------------------------------------- timetable
-function ttSlot(seed: string, day: number): { start: string; end: string } {
-  let h = 10;
-  for (const ch of seed + "-" + day) h = (h * 31 + ch.codePointAt(0)!) % 10 + 10;
-  const start = `${String(h).padStart(2, "0")}:00`;
-  const end = `${String(h + 1).padStart(2, "0")}:00`;
-  return { start, end };
-}
-
 async function timetableList(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const branch = s(arg["branch"] ?? "ALL").toUpperCase();
-  const visible = (rows: Record<string, unknown>[]) =>
-    rows.filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(branch, r.branch));
-  let rows = visible(
+  // No auto-seeding here: an empty timetable stays empty rather than being
+  // filled with invented classes. The real Kandivali timetable is loaded once
+  // by a migration (db/apply.mjs).
+  const rows = (
     await query<Record<string, unknown>>(
       `select id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status from timetable order by day_of_week, start_time`,
-    ),
-  );
-  if (!rows.length) {
-    // seed from attendance-derived classes (real schedule)
-    const cls = await query<Record<string, unknown>>(
-      `select distinct teacher_id, teacher_name, instrument from attendance_acad where teacher_id <> '' order by instrument`,
-    );
-    const seeded: Record<string, unknown>[] = [];
-    for (const c of cls) {
-      for (let day = 0; day < 7; day++) {
-        const time = ttSlot(s(c.teacher_id) || s(c.instrument) || "x", day);
-        seeded.push({
-          id: `TT-${c.teacher_id}-${day}`,
-          branch: "KANDIVALI",
-          day_of_week: day,
-          start_time: time.start,
-          end_time: time.end,
-          class_name: s(c.instrument) || "Music",
-          teacher_id: s(c.teacher_id),
-          teacher_name: s(c.teacher_name),
-          status: "ENABLED",
-        });
-      }
-    }
-    for (const e of seeded) {
-      await query(
-        `insert into timetable (id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`,
-        [e.id, e.branch, e.day_of_week, e.start_time, e.end_time, e.class_name, e.teacher_id, e.teacher_name, e.status],
-      );
-    }
-    rows = visible(
-      await query<Record<string, unknown>>(
-        `select id, branch, day_of_week, start_time, end_time, class_name, teacher_id, teacher_name, status from timetable order by day_of_week, start_time`,
-      ),
-    );
-  }
+    )
+  ).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(branch, r.branch));
   return ok({
     entries: rows.map((r) => ({
       id: s(r.id),
@@ -897,7 +1223,6 @@ async function timetableList(arg: Record<string, unknown>, scope: BranchScope): 
       status: s(r.status),
     })),
     seeded: rows.length > 0,
-    note: "standalone timetable",
   });
 }
 
@@ -942,13 +1267,22 @@ async function timetableDelete(arg: Record<string, unknown>, scope: BranchScope)
 // -------------------------------------------------------- attendance / today
 async function attendanceRoster(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const instrument = s(arg["instrument"]).trim();
+  const date = isoDate(arg["date"]) || todayIso();
   const students = (await acadStudents()).filter(
     (x) => s(x.status).toUpperCase() === "ACTIVE" && inScope(scope, x.branch) && matchesRequestedBranch(arg["branch"], x.branch),
   );
   const rows = instrument ? students.filter((x) => s(x.instrument).toUpperCase() === instrument.toUpperCase()) : students;
   const instruments = Array.from(new Set(students.map((x) => s(x.instrument)).filter(Boolean)));
+  // The roster used to always claim "not marked" regardless of what was
+  // actually recorded — staff had no way to see who they'd already ticked
+  // off today without leaving the screen.
+  const marks = await query<{ student_id: string; status: string }>(
+    `select student_id, status from attendance_acad where session_date = $1`,
+    [date],
+  );
+  const stateOf = new Map(marks.map((m) => [m.student_id, s(m.status).toUpperCase()]));
   return ok({
-    date: d(s(arg["date"])) || new Date().toISOString().slice(0, 10),
+    date,
     branch: s(arg["branch"] ?? "ALL"),
     count: rows.length,
     instruments,
@@ -960,46 +1294,122 @@ async function attendanceRoster(arg: Record<string, unknown>, scope: BranchScope
       teacherName: st.teacher,
       phone: s(rows[i].phone),
       expectedToday: true,
+      state: stateOf.get(st.studentId) ?? "NOT_MARKED",
     })),
   });
 }
 
-async function markAttendance(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
-  const rows = (arg["state"] ?? arg["marks"] ?? arg["rows"]) as Record<string, unknown> | undefined;
-  const entries = Array.isArray(rows) ? rows : rows && typeof rows === "object" ? Object.entries(rows).map(([studentId, status]) => ({ studentId, status })) : [];
-  const date = d(s(arg["workDate"] ?? arg["date"])) || new Date().toISOString().slice(0, 10);
-  if (!scope.unrestricted) {
-    // Reject the whole batch rather than writing part of another branch's roster.
-    for (const e of entries) {
-      const sid = s(e.studentId ?? e["studentId"]);
-      if (!sid) continue;
-      const student = await acadStudentById(sid);
-      if (!student || !inScope(scope, student.branch)) return branchForbidden(recordBranch(student?.branch));
-    }
+const ATTENDANCE_STATES = new Set(["PRESENT", "ABSENT", "EXCUSED", "LATE"]);
+
+async function markAttendance(arg: Record<string, unknown>, scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
+  // The attendance screen sends ONE mark: { studentId, state: "PRESENT" }.
+  // Older callers send a map or a list. Reading only the map shape saved
+  // nothing while reporting success.
+  let entries: { studentId: string; status: string }[] = [];
+  const raw = arg["state"] ?? arg["marks"] ?? arg["rows"];
+  if (typeof raw === "string" && s(arg["studentId"])) {
+    entries = [{ studentId: s(arg["studentId"]), status: raw }];
+  } else if (Array.isArray(raw)) {
+    entries = raw.map((e) => ({ studentId: s((e as Record<string, unknown>).studentId), status: s((e as Record<string, unknown>).status ?? (e as Record<string, unknown>).state) }));
+  } else if (raw && typeof raw === "object") {
+    entries = Object.entries(raw as Record<string, unknown>).map(([studentId, status]) => ({ studentId, status: s(status) }));
   }
-  let count = 0;
+  entries = entries.filter((e) => e.studentId && e.status);
+  if (!entries.length) return { ok: false, code: "NOTHING_TO_MARK", error: "No attendance marks were sent." };
+  const bad = entries.find((e) => !ATTENDANCE_STATES.has(e.status.toUpperCase()));
+  if (bad) return { ok: false, code: "BAD_STATE", error: `Unknown attendance state ${bad.status}` };
+
+  const date = isoDate(arg["workDate"] ?? arg["date"]) || todayIso();
+  const today = todayIso();
+  if (date > today) return { ok: false, code: "FUTURE_DATE", error: "Attendance cannot be marked for a day that has not happened." };
+  const backdatedReason = s(arg["backdatedReason"] ?? arg["reason"]).trim();
+  if (date < today && !backdatedReason) {
+    return { ok: false, code: "BACKDATED_REASON_REQUIRED", error: `This mark is for ${date}, not today. Say why it is being entered late.` };
+  }
+  const lockedAttendance = await closedMonthRefusal(date);
+  if (lockedAttendance) return lockedAttendance;
+  const students = new Map<string, Awaited<ReturnType<typeof acadStudentById>>>();
   for (const e of entries) {
-    const sid = s(e.studentId ?? e["studentId"]);
-    const status = s(e.status ?? e["status"]);
-    if (!sid || !status) continue;
-    // student_name used to be filled with the id, which broke every later
-    // lookup that joins attendance by name.
-    const student = await acadStudentById(sid);
+    const student = await acadStudentById(e.studentId);
+    if (!student) return { ok: false, code: "STUDENT_NOT_FOUND", error: `No student ${e.studentId}` };
+    // Reject the whole batch rather than writing part of another branch's roster.
+    if (!inScope(scope, student.branch)) return branchForbidden(recordBranch(student.branch));
+    students.set(e.studentId, student);
+  }
+
+  for (const e of entries) {
+    const student = students.get(e.studentId)!;
     const teacher = await queryOne<{ teacher_id: string; teacher_name: string }>(
       `select teacher_id, teacher_name from attendance_acad
        where student_id = $1 and coalesce(teacher_id,'') <> '' order by session_date desc limit 1`,
-      [sid],
+      [e.studentId],
     );
-    const id = newId(`ATT-${sid}-${date}`);
+    // One mark per student per day: marking again corrects it instead of
+    // adding a second row.
     await query(
-      `insert into attendance_acad (id, session_date, student_id, student_name, teacher_id, teacher_name, instrument, status)
-       values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (id) do nothing`,
-      [id, date, sid, s(student?.name) || sid, s(teacher?.teacher_id), s(teacher?.teacher_name), s(student?.instrument), status.toUpperCase()],
+      `insert into attendance_acad (id, session_date, student_id, student_name, teacher_id, teacher_name, instrument, status,
+                                    backdated_reason, recorded_by, recorded_at)
+       values ($1,$2::date,$3,$4,$5,$6,$7,$8,$9,$10,now())
+       on conflict (id) do update set status = excluded.status, backdated_reason = coalesce(excluded.backdated_reason, attendance_acad.backdated_reason),
+         recorded_by = excluded.recorded_by, recorded_at = now()`,
+      [`ATT-${e.studentId}-${date}`, date, e.studentId, student!.name, s(teacher?.teacher_id), s(teacher?.teacher_name), s(student!.instrument), e.status.toUpperCase(),
+       backdatedReason || null, session?.deviceLabel || session?.email || ""],
     );
-    count++;
   }
   await bumpRevisions(["attendance", "sessions", "tasks", "dashboard"]);
-  return ok({ action: "CREATED", attendanceId: newId(`ATT-${date}`), state: entries, workDate: date, marked: count });
+  return ok({ workDate: date, marked: entries.length, markedBy: session?.deviceLabel ?? "", state: entries });
+}
+
+/**
+ * The to-do card grid — shared by the staff "Today" screen and the founder
+ * "Home" screen (the founder is asked for the same operational to-do list,
+ * plus approvals and revenue the staff screen doesn't carry).
+ */
+async function buildTodoCards(scope: BranchScope, today: string, by: Awaited<ReturnType<typeof dueBuckets>>["by"], forFounder: boolean) {
+  const drafts = (
+    await query<{ branch: string }>(`select branch from payment_drafts where status = 'SUBMITTED'`)
+  ).filter((r) => inScope(scope, r.branch));
+  const state = (n: number) => (n > 0 ? "ATTENTION" : "OPEN");
+  // Classes from the last week that nobody has answered (the mark that pays teachers).
+  const unmarked = (await expectedClassesBetween(addDays(today, -6), addDays(today, 1), { scope })).filter((c) => !c.resolved && !c.notRequired);
+  const inquiryRows = (await query<Record<string, unknown>>(
+    `select id, name, phone, branch, status, next_contact_date::text, last_contacted_at::text from inquiries`,
+  )).filter((r) => inScope(scope, r.branch));
+  const callToday = await callTheseToday(scope, inquiryRows);
+  // Both computed lazily on this same read — no cron, same shape as the
+  // dormancy sweep: nobody has to remember to check either of these.
+  const termsNotAccepted = (
+    await query<{ branch: string }>(
+      `select branch from students_acad s
+       where upper(coalesce(status,'')) = 'ACTIVE'
+         and not exists (select 1 from terms_acceptance_tokens t where t.student_id = s.id and t.status = 'ACCEPTED')
+         and not exists (select 1 from manual_terms_acceptance_requests m where m.student_id = s.id and m.status = 'APPROVED')`,
+    )
+  ).filter((r) => inScope(scope, r.branch));
+  const pausedTooLong = (
+    await query<{ branch: string }>(
+      `select branch from students_acad
+       where upper(coalesce(status,'')) = 'PAUSED' and status_changed_at is not null
+         and status_changed_at <= now() - ($1::int * interval '1 day')`,
+      [PAUSED_REVIEW_AFTER_DAYS],
+    )
+  ).filter((r) => inScope(scope, r.branch));
+  const cards = [
+    { key: "DELIVERY_NOT_MARKED", title: "Classes not answered", label: "Classes not answered", priority: "HIGH", count: unmarked.length, state: state(unmarked.length), targetView: "todayClasses", emptyText: "Every class this week is answered", actionable: true },
+    { key: "FEES_OVERDUE", title: "Fees Overdue", label: "Fees Overdue", priority: "HIGH", count: by.OVERDUE.length, state: state(by.OVERDUE.length), targetView: "students", emptyText: "Nothing overdue", actionable: true, bucket: "OVERDUE" },
+    { key: "FEES_DUE_TODAY", title: "Fees Due Today", label: "Fees Due Today", priority: "HIGH", count: by.DUE_TODAY.length, state: state(by.DUE_TODAY.length), targetView: "students", emptyText: "No fees due today", actionable: true, bucket: "DUE_TODAY" },
+    { key: "FEES_DUE_SOON", title: "Fees Upcoming", label: "Fees Upcoming", priority: "MEDIUM", count: by.DUE_SOON.length, state: "OPEN", targetView: "students", emptyText: "Nothing upcoming", actionable: true, bucket: "DUE_SOON" },
+    { key: "PAYMENT_PENDING", title: "Payment Pending", label: "Payment Pending", priority: "HIGH", count: drafts.length, state: state(drafts.length), targetView: "students", emptyText: "No pending payments", actionable: true },
+    { key: "CALL_TODAY", title: "Call these today", label: "Call these today", priority: "MEDIUM", count: callToday.length, state: state(callToday.length), targetView: "inquiries", emptyText: "Nobody to call today", actionable: true },
+    { key: "FEE_PLAN_MISSING", title: "Fee plan not set", label: "Fee plan not set", priority: "LOW", count: by.UNKNOWN.length, state: "OPEN", targetView: "students", emptyText: "Every student has a plan", actionable: true, bucket: "UNKNOWN" },
+    { key: "TERMS_NOT_ACCEPTED", title: "Terms not accepted", label: "Terms not accepted", priority: "LOW", count: termsNotAccepted.length, state: "OPEN", targetView: "students", emptyText: "Every active student has accepted terms", actionable: true },
+    { key: "PAUSED_TOO_LONG", title: "Paused a while — review?", label: "Paused a while", priority: "LOW", count: pausedTooLong.length, state: "OPEN", targetView: "students", emptyText: "No long-paused students", actionable: true },
+  ];
+  if (!forFounder) {
+    const waiting = await pendingApprovalsCount(scope);
+    cards.push({ key: "WAITING_FOR_SHARVIL", title: "Waiting for Sharvil", label: "Waiting for Sharvil", priority: "LOW", count: waiting, state: "OPEN", targetView: "requests", emptyText: "Nothing waiting", actionable: true });
+  }
+  return cards;
 }
 
 async function todaysTasks(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
@@ -1008,69 +1418,159 @@ async function todaysTasks(arg: Record<string, unknown>, scope: BranchScope): Pr
   const inquiries = (
     await query<{ branch: string; status: string }>(`select branch, status from inquiries`)
   ).filter((r) => inScope(scope, r.branch) && !["CONVERTED", "LOST", "CLOSED"].includes(s(r.status).toUpperCase()));
-  const drafts = (
-    await query<{ branch: string }>(`select branch from payment_drafts where status = 'SUBMITTED'`)
-  ).filter((r) => inScope(scope, r.branch));
+  const [cards, overview] = await Promise.all([
+    buildTodoCards(scope, today, by, false),
+    dashboardOverviewSections(scope, today),
+  ]);
+  return ok({ cards, mode: "COPY_ONLY", today, openInquiries: inquiries.length, readAt: new Date().toISOString(), ...overview });
+}
 
-  const state = (n: number) => (n > 0 ? "ATTENTION" : "OPEN");
-  const cards = [
-    { key: "FEES_OVERDUE", title: "Fees Overdue", label: "Fees Overdue", priority: "HIGH", count: by.OVERDUE.length, state: state(by.OVERDUE.length), targetView: "students", emptyText: "Nothing overdue", actionable: true, bucket: "OVERDUE" },
-    { key: "FEES_DUE_TODAY", title: "Fees Due Today", label: "Fees Due Today", priority: "HIGH", count: by.DUE_TODAY.length, state: state(by.DUE_TODAY.length), targetView: "students", emptyText: "No fees due today", actionable: true, bucket: "DUE_TODAY" },
-    { key: "FEES_DUE_SOON", title: "Fees Upcoming", label: "Fees Upcoming", priority: "MEDIUM", count: by.DUE_SOON.length, state: "OPEN", targetView: "students", emptyText: "Nothing upcoming", actionable: true, bucket: "DUE_SOON" },
-    { key: "PAYMENT_PENDING", title: "Payment Pending", label: "Payment Pending", priority: "HIGH", count: drafts.length, state: state(drafts.length), targetView: "students", emptyText: "No pending payments", actionable: true },
-    { key: "INQUIRIES_FOLLOW_UP", title: "Inquiries to follow up", label: "Inquiries to follow up", priority: "MEDIUM", count: inquiries.length, state: "OPEN", targetView: "inquiries", emptyText: "No inquiries", actionable: true },
-    { key: "FEE_PLAN_MISSING", title: "Fee plan not set", label: "Fee plan not set", priority: "LOW", count: by.UNKNOWN.length, state: "OPEN", targetView: "students", emptyText: "Every student has a plan", actionable: true, bucket: "UNKNOWN" },
-  ];
-  return ok({ cards, mode: "COPY_ONLY", today });
+const OUTCOMES = ["HELD", "TEACHER_CANCELLED", "ACADEMY_CANCELLED", "SUBSTITUTE_DELIVERED", "RESCHEDULED"];
+const LATE_HOURS = 48;
+
+/** Timetable rows use Monday = 0. */
+function mondayIndex(date: string): number {
+  return (new Date(`${date}T12:00:00Z`).getUTCDay() + 6) % 7;
 }
 
 async function todaysClasses(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
-  const date = d(s(arg["date"])) || new Date().toISOString().slice(0, 10);
+  const date = isoDate(arg["date"]) || todayIso();
   const branch = s(arg["branch"] ?? "ALL");
-  const tt = (await query<Record<string, unknown>>(`select * from timetable where status = 'ENABLED'`)).filter((r) => inScope(scope, r.branch));
-  const rows = tt.map((r, i) => ({
-    eventId: `E-${date}-${i + 1}`,
+  const [tt, sessions] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select * from timetable where status = 'ENABLED' and day_of_week = $1 order by start_time`,
+      [mondayIndex(date)],
+    ),
+    query<Record<string, unknown>>(`select * from scheduled_sessions where session_date = $1`, [date]),
+  ]);
+  const byId = new Map(sessions.map((r) => [s(r.id), r]));
+
+  const view = (eventId: string, base: Record<string, unknown>, rec: Record<string, unknown> | undefined) => ({
+    eventId,
     classDate: date,
-    startTime: s(r.start_time),
-    teacherId: s(r.teacher_id),
-    teacherName: s(r.teacher_name),
-    branch: s(r.branch),
-    course: s(r.class_name),
-    outcome: "",
-    deliveredBy: "",
-    payeeTeacherId: "",
-    entryDate: "",
-    recordedBy: "",
-    evidenceClass: "",
-    evidenceReason: "",
-    notRequired: false,
+    startTime: s(base.start_time),
+    teacherId: s(base.teacher_id),
+    teacherName: s(base.teacher_name),
+    branch: s(base.branch),
+    course: s(base.class_name ?? base.course),
+    outcome: s(rec?.outcome),
+    deliveredBy: s(rec?.delivered_by),
+    payeeTeacherId: s(rec?.payee_teacher_id),
+    entryDate: rec?.created_at ? String(rec.created_at).slice(0, 10) : "",
+    recordedBy: s(rec?.recorded_by),
+    evidenceClass: s(rec?.evidence_class),
+    evidenceReason: s(rec?.late_reason ?? rec?.evidence_reason),
+    notRequired: rec?.not_required === true,
     closureId: "",
-    closureReason: "",
-    customKind: "",
-    customReason: "",
-    resolved: false,
-    answerable: true,
-  }));
-  const filtered = branch === "ALL" ? rows : rows.filter((r) => s(r.branch).toUpperCase() === branch.toUpperCase());
-  return ok({ date, count: filtered.length, unanswered: filtered.length, outcomes: ["HELD", "TEACHER_CANCELLED", "ACADEMY_CANCELLED", "SUBSTITUTE_DELIVERED", "RESCHEDULED"], rows: filtered, lateHours: 48 });
+    closureReason: s(rec?.closure_reason),
+    customKind: s(rec?.custom_kind),
+    customReason: s(rec?.custom_reason),
+    payable: rec?.payable === true,
+    originalEventId: s(rec?.original_event_id),
+    replacementEventId: s(rec?.replacement_event_id),
+    resolved: rec?.resolved === true,
+    answerable: rec?.resolved !== true,
+  });
+
+  // Stable id: the timetable row, not its position in the list.
+  const rows = tt.map((r) => {
+    const eventId = `E-${date}-${s(r.id)}`;
+    return view(eventId, r, byId.get(eventId));
+  });
+  // Make-up / extra sessions scheduled for this date.
+  for (const sess of sessions) {
+    if (!s(sess.id).startsWith("SCSS-")) continue;
+    rows.push(view(s(sess.id), sess, sess));
+  }
+  const filtered = rows.filter((r) => inScope(scope, r.branch) && (branch === "ALL" || recordBranch(r.branch) === recordBranch(branch)));
+  return ok({
+    date,
+    count: filtered.length,
+    unanswered: filtered.filter((r) => !r.resolved).length,
+    outcomes: OUTCOMES,
+    rows: filtered,
+    lateHours: LATE_HOURS,
+  });
 }
 
-async function resolveTodaysClass(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+/**
+ * Record whether a class was taught. Answered ONCE (brief §P6.4): a second
+ * answer is refused, naming who answered and when. Evidence is derived, never
+ * typed: within 48 hours it is VERIFIED; later it must say why and is
+ * RECONSTRUCTED.
+ */
+async function resolveTodaysClass(arg: Record<string, unknown>, scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
   const eventId = s(arg["eventId"]);
-  const branch = defaultBranch(scope, arg["branch"]);
-  if (!inScope(scope, branch)) return branchForbidden(branch);
-  const outcome = s(arg["outcome"]);
-  const deliveredBy = s(arg["deliveredBy"]);
-  // eventId is E-<yyyy-mm-dd>-<n>; splitting on "-" used to yield just "2026".
-  const date = /^E-(\d{4}-\d{2}-\d{2})-\d+$/.exec(eventId)?.[1] ?? new Date().toISOString().slice(0, 10);
+  const outcome = s(arg["outcome"]).toUpperCase();
+  const deliveredBy = s(arg["deliveredBy"]).trim();
+  const lateReason = s(arg["lateReason"]).trim();
+  if (!OUTCOMES.includes(outcome)) return { ok: false, code: "BAD_OUTCOME", error: `Choose one of: ${OUTCOMES.join(", ")}` };
+  if (outcome === "SUBSTITUTE_DELIVERED" && !deliveredBy) {
+    return { ok: false, code: "SUBSTITUTE_REQUIRED", error: "Name the teacher who actually took the class." };
+  }
+
+  let base: Record<string, unknown> | null = null;
+  let date = "";
+  const generated = /^E-(\d{4}-\d{2}-\d{2})-(.+)$/.exec(eventId);
+  if (generated) {
+    date = generated[1];
+    base = await queryOne<Record<string, unknown>>(`select * from timetable where id = $1`, [generated[2]]);
+  } else if (eventId.startsWith("SCSS-")) {
+    base = await queryOne<Record<string, unknown>>(`select * from scheduled_sessions where id = $1`, [eventId]);
+    date = s(base?.session_date);
+  }
+  if (!base || !date) return { ok: false, code: "NOT_FOUND", error: `No class ${eventId}` };
+  if (!inScope(scope, base.branch)) return branchForbidden(recordBranch(base.branch));
+  if (date > todayIso()) return { ok: false, code: "CLASS_NOT_YET_DUE", error: `This class is on ${date}. Answer it on the day.` };
+  const lockedClass = await closedMonthRefusal(date);
+  if (lockedClass) return lockedClass;
+
+  // Brief §10.1: a substitute who cannot be identified BLOCKS; it is never guessed.
+  if (outcome === "SUBSTITUTE_DELIVERED") {
+    const sub = await acadTeacherById(deliveredBy);
+    if (!sub) return { ok: false, code: "SUBSTITUTE_UNIDENTIFIABLE", error: "Pick the substitute from the teacher list; a typed name cannot be paid." };
+    if (s(sub.status) && s(sub.status).toUpperCase() !== "ACTIVE") {
+      return { ok: false, code: "SUBSTITUTE_UNAUTHORISED", error: `${sub.name} is not an active teacher (${s(sub.status)}).` };
+    }
+    if (sub.id === s(base.teacher_id)) {
+      return { ok: false, code: "SUBSTITUTE_IS_ASSIGNED_TEACHER", error: `${sub.name} is the assigned teacher. Choose Held instead.` };
+    }
+  }
+
+  const existing = await queryOne<Record<string, unknown>>(`select resolved, outcome, recorded_by, created_at::text from scheduled_sessions where id = $1`, [eventId]);
+  if (existing?.resolved === true) {
+    return {
+      ok: false,
+      code: "ALREADY_ANSWERED",
+      error: `This class was already answered as ${s(existing.outcome)} by ${s(existing.recorded_by) || "someone"} on ${s(existing.created_at).slice(0, 16)}. Corrections go through Sharvil.`,
+    };
+  }
+
+  const hoursLate = -((daysUntil(date, todayIso()) ?? 0) * 24);
+  const late = hoursLate > LATE_HOURS;
+  if (late && !lateReason) {
+    return { ok: false, code: "LATE_REASON_REQUIRED", error: `This class was more than ${LATE_HOURS} hours ago. Say why it is being recorded late.` };
+  }
+  const evidence = late ? "RECONSTRUCTED" : "VERIFIED";
+  const payee = outcome === "SUBSTITUTE_DELIVERED" ? deliveredBy : outcome === "HELD" ? s(base.teacher_id) : "";
+
   await query(
-    `insert into scheduled_sessions (id, session_date, start_time, teacher_id, teacher_name, branch, course, outcome, delivered_by, payee_teacher_id, recorded_by, evidence_class, evidence_reason, resolved, answerable)
-     values ($1, $2, $3, $4, $5, $10, '', $6, $7, $7, $8, 'VERIFIED', $9, true, false)
-     on conflict (id) do update set outcome = excluded.outcome, delivered_by = excluded.delivered_by, evidence_class = 'VERIFIED', resolved = true`,
-    [eventId, date, s(arg["startTime"] ?? "17:00"), s(arg["teacherId"]), s(arg["teacherName"]), outcome, deliveredBy, s(arg["recordedBy"] ?? "latika@ops"), `outcome ${outcome} recorded`, branch],
+    `insert into scheduled_sessions
+       (id, session_date, start_time, teacher_id, teacher_name, branch, course, outcome, delivered_by, payee_teacher_id,
+        recorded_by, evidence_class, evidence_reason, late_reason, resolved, answerable, timetable_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,true,false,$15)
+     on conflict (id) do update set outcome = excluded.outcome, delivered_by = excluded.delivered_by,
+       payee_teacher_id = excluded.payee_teacher_id, recorded_by = excluded.recorded_by,
+       evidence_class = excluded.evidence_class, late_reason = excluded.late_reason, resolved = true, answerable = false`,
+    [
+      eventId, date, s(base.start_time), s(base.teacher_id), s(base.teacher_name), recordBranch(base.branch),
+      s(base.class_name ?? base.course), outcome, deliveredBy || null, payee || null,
+      session?.deviceLabel || session?.email || "", evidence, `${outcome} recorded`, lateReason || null,
+      generated ? generated[2] : null,
+    ],
   );
-  await bumpRevisions(["sessions", "attendance", "tasks"]);
-  return ok({ eventId, outcome, evidenceClass: "VERIFIED", payeeTeacherId: deliveredBy, note: "class resolved" });
+  await bumpRevisions(["sessions", "attendance", "tasks", "payouts"]);
+  return ok({ eventId, outcome, evidenceClass: evidence, payeeTeacherId: payee, note: late ? "recorded late (reconstructed)" : "class recorded" });
 }
 
 /** Schedule a session. The id used to be returned without storing anything,
@@ -1078,21 +1578,57 @@ async function resolveTodaysClass(arg: Record<string, unknown>, scope: BranchSco
 async function scheduleSession(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const branch = defaultBranch(scope, arg["branch"]);
   if (!inScope(scope, branch)) return branchForbidden(branch);
+  const kind = s(arg["customKind"] ?? arg["kind"]).toUpperCase();
+  const reason = s(arg["customReason"] ?? arg["reason"]).trim();
+  const originalEventId = s(arg["originalEventId"]).trim();
+  const original = originalEventId
+    ? await queryOne<{ outcome: string; replacement_event_id: string | null; resolved: boolean; branch: string }>(
+        `select outcome, replacement_event_id, resolved, branch from scheduled_sessions where id = $1`,
+        [originalEventId],
+      )
+    : null;
+  if (original && !inScope(scope, original.branch)) return branchForbidden(recordBranch(original.branch));
+  const refusal = customSessionRefusal({
+    kind,
+    reason,
+    originalEventId,
+    originalOutcome: original?.resolved ? s(original.outcome) : null,
+    originalHasReplacement: !!original?.replacement_event_id,
+  });
+  if (refusal) return { ok: false, ...refusal, kinds: CUSTOM_KINDS };
+
+  const sessionDate = isoDate(arg["sessionDate"]) || todayIso();
+  const lockedSession = await closedMonthRefusal(sessionDate);
+  if (lockedSession) return lockedSession;
+  const teacherId = s(arg["teacherId"]);
+  const teacher = teacherId ? await acadTeacherById(teacherId) : null;
+  if (teacherId && !teacher) return { ok: false, code: "TEACHER_NOT_FOUND", error: `No teacher ${teacherId}` };
   const id = newId("SCSS");
-  const sessionDate = d(s(arg["sessionDate"])) || todayIso();
-  await query(
-    `insert into scheduled_sessions (id, session_date, start_time, teacher_id, teacher_name, branch, course, resolved, answerable)
-     values ($1,$2,$3,$4,$5,$6,$7,false,true)`,
-    [id, sessionDate, s(arg["startTime"]), s(arg["teacherId"]), s(arg["teacherName"]), branch, s(arg["course"] ?? arg["className"])],
-  );
+  await withTransaction(async (tx) => {
+    // Payable is always NO here: an extra class that silently pays is money
+    // leaving on nobody's decision (brief §10.2).
+    await tx.query(
+      `insert into scheduled_sessions (id, session_date, start_time, teacher_id, teacher_name, branch, course, resolved, answerable,
+                                       custom_kind, custom_reason, payable, original_event_id)
+       values ($1,$2,$3,$4,$5,$6,$7,false,true,$8,$9,false,$10)`,
+      [id, sessionDate, s(arg["startTime"]), teacherId, s(teacher?.name) || s(arg["teacherName"]), branch, s(arg["course"] ?? arg["className"] ?? arg["instrument"]), kind, reason, originalEventId || null],
+    );
+    if (originalEventId && kind === "REPLACEMENT") {
+      await tx.query(`update scheduled_sessions set replacement_event_id = $2 where id = $1`, [originalEventId, id]);
+    }
+  });
   await bumpRevisions(["sessions", "tasks"]);
   return ok({
     scheduledSessionId: id,
     status: "SCHEDULED",
     sessionDate,
     branch,
+    customKind: kind,
+    payable: false,
+    originalEventId,
     sessionCredit: n(arg["sessionCredit"]) || 1,
     durationMinutes: n(arg["durationMinutes"]) || 60,
+    note: kind === "GOODWILL_RECOVERY" ? "Goodwill class scheduled. It discharges nothing and is not payable." : `${kind === "SUBSTITUTE" ? "Substitute" : "Replacement"} class scheduled. Not payable unless Sharvil decides.`,
   });
 }
 
@@ -1112,7 +1648,7 @@ async function sessionRoster(arg: Record<string, unknown>, scope: BranchScope): 
     teacherId: st.teacherId ?? "",
     teacherName: st.teacher,
   }));
-  return ok({ scheduledSessionId: s(arg["scheduledSessionId"]), status: "OPEN", closed: false, unanswered: true, sessionDate: s(session?.session_date) || new Date().toISOString().slice(0, 10), sessionCredit: 1, total: rows.length, present: 0, absent: 0, excused: 0, notMarked: rows.length, rows, note: "standalone roster" });
+  return ok({ scheduledSessionId: s(arg["scheduledSessionId"]), status: "OPEN", closed: false, unanswered: true, sessionDate: s(session?.session_date) || todayIso(), sessionCredit: 1, total: rows.length, present: 0, absent: 0, excused: 0, notMarked: rows.length, rows });
 }
 
 async function feeDueList(scope: BranchScope): Promise<Record<string, unknown>> {
@@ -1132,53 +1668,327 @@ async function feeDueList(scope: BranchScope): Promise<Record<string, unknown>> 
 }
 
 // -------------------------------------------------------------- inquiries
+const TERMINAL_INQUIRY = TERMINAL_INQUIRY_STATUSES;
+
+/**
+ * A lazy, read-triggered sweep (no cron exists in this system, by rule) —
+ * every time the queue is opened, any lead that's been open for
+ * INQUIRY_DORMANT_AFTER_DAYS without converting is timed out to DORMANT
+ * with dormant_reason='TIMEOUT', tagged distinctly from a NO_ANSWER dormant
+ * so it's never recalled into "call these today" (unlike that path).
+ */
+async function applyInquiryDormancyTimeouts(): Promise<void> {
+  const today = todayIso();
+  const stale = await query<{ id: string }>(
+    `select id from inquiries where status = any($1::text[]) and created_at <= $2::date - ($3::int * interval '1 day')`,
+    [["OPEN", "CONTACTED", "TRIAL_SCHEDULED", "TRIAL_DONE"], today, INQUIRY_DORMANT_AFTER_DAYS],
+  );
+  for (const row of stale) {
+    await query(
+      `update inquiries set status = 'DORMANT', dormant_reason = 'TIMEOUT', next_contact_date = null, updated_at = now() where id = $1`,
+      [row.id],
+    );
+    await query(
+      `insert into inquiry_followups (id, inquiry_id, action, description, resulting_status)
+       values ($1,$2,'AUTO_DORMANT','No conversion after 30 days of follow-up.','DORMANT')`,
+      [newId("FOLLOWUP"), row.id],
+    );
+  }
+}
+
 async function inquiryQueue(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  await applyInquiryDormancyTimeouts();
   const branch = s(arg["branch"] ?? "ALL");
-  const rows = await query<Record<string, unknown>>(`select id, name, phone, instrument, branch, source, notes, status, created_at::text from inquiries order by id desc limit 100`);
+  const rows = await query<Record<string, unknown>>(
+    `select id, name, phone, instrument, branch, source, notes, status, created_at::text, next_contact_date::text,
+            trial_date::text, drop_reason, converted_student_id, no_answer_count, last_contacted_at::text,
+            dormant_reason, former_student_id
+     from inquiries order by coalesce(next_contact_date, created_at, current_date), id desc limit 500`,
+  );
   const filtered = rows.filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(branch, r.branch));
+  const view = (r: Record<string, unknown>) => ({
+    inquiry_id: s(r.id),
+    name: s(r.name),
+    phone: s(r.phone),
+    instrument: s(r.instrument),
+    branch: s(r.branch),
+    source: s(r.source),
+    status: s(r.status),
+    finalStatus: inquiryFinalStatus(s(r.status)),
+    next_contact_date: s(r.next_contact_date),
+    trialDate: s(r.trial_date),
+    dropReason: s(r.drop_reason),
+    convertedStudentId: s(r.converted_student_id),
+    noAnswerCount: Number(r.no_answer_count) || 0,
+    lastContactedAt: s(r.last_contacted_at),
+    dormantReason: s(r.dormant_reason),
+    formerStudentId: s(r.former_student_id),
+    created_at: s(r.created_at),
+  });
   return ok({
-    rows: filtered.map((r) => ({
-      inquiry_id: s(r.id),
-      name: s(r.name),
-      phone: s(r.phone),
-      instrument: s(r.instrument),
-      branch: s(r.branch),
-      status: s(r.status),
-      next_contact_date: "",
-      created_at: d(r.created_at),
+    rows: filtered.slice(0, 200).map(view),
+    callToday: (await callTheseToday(scope, filtered)).map(view),
+  });
+}
+
+/** One inquiry's contact details plus its full follow-up history. */
+async function inquiryDetail(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const id = s(arg["inquiryId"]).trim();
+  if (!id) return { ok: false, code: "INQUIRY_ID_REQUIRED", error: "Pick the inquiry." };
+  const row = await queryOne<Record<string, unknown>>(
+    `select id, name, phone, instrument, branch, source, notes, status, created_at::text, next_contact_date::text,
+            trial_date::text, drop_reason, converted_student_id, no_answer_count, last_contacted_at::text,
+            dormant_reason, former_student_id
+     from inquiries where id = $1`,
+    [id],
+  );
+  if (!row) return { ok: false, code: "NOT_FOUND", error: `No inquiry ${id}` };
+  if (!inScope(scope, row.branch)) return branchForbidden(recordBranch(row.branch));
+  const followups = await query<Record<string, unknown>>(
+    `select id, action, description, resulting_status, next_contact_date::text, created_by, created_at::text
+     from inquiry_followups where inquiry_id = $1 order by created_at desc`,
+    [id],
+  );
+  return ok({
+    inquiryId: s(row.id),
+    name: s(row.name),
+    phone: s(row.phone),
+    course: s(row.instrument),
+    branch: s(row.branch),
+    source: s(row.source),
+    notes: s(row.notes),
+    status: s(row.status),
+    finalStatus: inquiryFinalStatus(s(row.status)),
+    createdAt: s(row.created_at),
+    nextContactDate: s(row.next_contact_date),
+    trialDate: s(row.trial_date),
+    dropReason: s(row.drop_reason),
+    convertedStudentId: s(row.converted_student_id),
+    noAnswerCount: Number(row.no_answer_count) || 0,
+    lastContactedAt: s(row.last_contacted_at),
+    dormantReason: s(row.dormant_reason),
+    formerStudentId: s(row.former_student_id),
+    followups: followups.map((f) => ({
+      id: s(f.id),
+      action: s(f.action),
+      description: s(f.description),
+      resultingStatus: s(f.resulting_status),
+      nextContactDate: s(f.next_contact_date),
+      createdBy: s(f.created_by),
+      createdAt: s(f.created_at),
     })),
   });
 }
 
-async function inquiryQuickAdd(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
-  const name = s(arg["name"]).trim();
-  if (!name) return { ok: false, code: "NO_NAME", error: "name required" };
-  const branch = defaultBranch(scope, arg["branch"]);
-  if (!inScope(scope, branch)) return branchForbidden(branch);
-  const id = newId("INQ");
-  await query(
-    `insert into inquiries (id, name, phone, instrument, branch, source, notes, status) values ($1,$2,$3,$4,$5,$6,$7,'NEW') on conflict (id) do nothing`,
-    [id, name, s(arg["phone"]), s(arg["instrument"] ?? arg["course"]), branch, s(arg["source"] ?? "Walk-in"), s(arg["notes"])],
+/**
+ * Brief P1.2 "Call these today": enquiries due today or earlier first, then up
+ * to ten dormant contacts, oldest-last-contacted first. Skips anyone contacted
+ * in the last 90 days, anyone whose phone now belongs to a current student,
+ * and anyone with no usable phone.
+ */
+async function callTheseToday(scope: BranchScope, rows: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
+  const today = todayIso();
+  const digits = (v: unknown) => s(v).replace(/\D/g, "").slice(-10);
+  const studentPhones = new Set(
+    (await query<{ phone: string }>(`select phone from students_acad where upper(coalesce(status,'')) in ('ACTIVE','PAUSED')`))
+      .map((r) => digits(r.phone))
+      .filter((p) => p.length === 10),
   );
-  await bumpRevisions(["inquiries", "tasks"]);
-  return ok({ inquiryId: id, idempotent: false, note: "inquiry captured" });
+  const usable = (r: Record<string, unknown>) => digits(r.phone).length === 10 && !studentPhones.has(digits(r.phone));
+  const due = rows.filter(
+    (r) => !TERMINAL_INQUIRY.has(s(r.status)) && s(r.next_contact_date) && s(r.next_contact_date) <= today && usable(r),
+  );
+  const recallBefore = addDays(today, -DORMANT_RECALL_DAYS);
+  const dormant = rows
+    .filter(
+      (r) =>
+        s(r.status) === "DORMANT" &&
+        s(r.dormant_reason) !== "TIMEOUT" && // a 30-day timeout never resurfaces automatically
+        usable(r) &&
+        (!s(r.last_contacted_at) || s(r.last_contacted_at) < recallBefore),
+    )
+    .sort((a, b) => (s(a.last_contacted_at) < s(b.last_contacted_at) ? -1 : 1))
+    .slice(0, DORMANT_RECALL_LIMIT);
+  return [...due, ...dormant].filter((r) => inScope(scope, r.branch));
 }
 
-async function inquiryTransition(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+async function inquiryQuickAdd(arg: Record<string, unknown>, scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
+  const name = s(arg["name"]).trim();
+  const phone = s(arg["phone"]).trim();
+  if (!name && !phone) return { ok: false, code: "NAME_OR_PHONE_REQUIRED", error: "Enter a name or a phone number." };
+  const branch = defaultBranch(scope, arg["branch"]);
+  if (!inScope(scope, branch)) return branchForbidden(branch);
+
+  // Brief P1: duplicates are checked on phone, against students and open inquiries.
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  let duplicate: Record<string, unknown> | null = null;
+  if (digits.length === 10) {
+    duplicate =
+      (await queryOne(`select 'STUDENT' as kind, id, name from students_acad where right(regexp_replace(coalesce(phone,''), '\\D', '', 'g'), 10) = $1 limit 1`, [digits])) ??
+      (await queryOne(`select 'INQUIRY' as kind, id, name from inquiries where right(regexp_replace(coalesce(phone,''), '\\D', '', 'g'), 10) = $1 and status not in ('CONVERTED','DROPPED') limit 1`, [digits]));
+  }
+  if (duplicate) {
+    return {
+      ok: false,
+      code: "DUPLICATE_PHONE",
+      error: `This phone already belongs to ${s(duplicate.kind) === "STUDENT" ? "student" : "an open inquiry for"} ${s(duplicate.name) || s(duplicate.id)}.`,
+    };
+  }
+
+  const id = newId("INQ");
+  await query(
+    `insert into inquiries (id, name, phone, instrument, branch, source, notes, status, created_at, next_contact_date, updated_at)
+     values ($1,$2,$3,$4,$5,$6,$7,'OPEN',current_date,current_date + 1,now())`,
+    [id, name, phone, s(arg["instrument"] ?? arg["course"]), branch, s(arg["source"]) || "Walk-in", s(arg["notes"]) || (session?.deviceLabel ? `added by ${session.deviceLabel}` : "")],
+  );
+  await bumpRevisions(["inquiries", "tasks"]);
+  return ok({ inquiryId: id, status: "OPEN", nextContactDate: "tomorrow", note: "inquiry captured" });
+}
+
+/**
+ * Brief P1 invariant: after ANY action an inquiry has either a FUTURE contact
+ * date or a terminal status (CONVERTED / DROPPED). Never neither.
+ */
+async function inquiryTransition(arg: Record<string, unknown>, scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
   const id = s(arg["inquiryId"]);
-  const action = s(arg["action"]);
-  const cur = await queryOne<{ branch: string }>("select branch from inquiries where id = $1", [id]);
+  const action = s(arg["action"]).toUpperCase();
+  const cur = await queryOne<{ branch: string; status: string }>("select branch, status from inquiries where id = $1", [id]);
   if (!cur) return { ok: false, code: "NOT_FOUND", error: `No inquiry ${id}` };
   if (!inScope(scope, cur.branch)) return branchForbidden(recordBranch(cur.branch));
-  await query("update inquiries set status = $1 where id = $2", [action === "LOG_CONTACT" ? "CONTACTED" : action === "SCHEDULE_TRIAL" ? "TRIAL_SCHEDULED" : action, id]);
+
+  const today = todayIso();
+  const future = (v: unknown) => {
+    const date = isoDate(v);
+    return date && (daysUntil(date, today) ?? 0) > 0 ? date : "";
+  };
+
+  let set: {
+    status: string;
+    next: string | null;
+    trial?: string | null;
+    dropReason?: string | null;
+    studentId?: string | null;
+    noAnswer?: number;
+    contacted?: boolean;
+    dormantReason?: string | null;
+  };
+  switch (action) {
+    case "LOG_CONTACT": {
+      const next = future(arg["nextContactDate"]);
+      if (!next) return { ok: false, code: "NEXT_CONTACT_REQUIRED", error: "Pick the next contact date (after today)." };
+      set = { status: "CONTACTED", next, noAnswer: 0, contacted: true };
+      break;
+    }
+    case "NO_ANSWER": {
+      const misses = await queryOne<{ no_answer_count: number }>(`select no_answer_count from inquiries where id = $1`, [id]);
+      const step = noAnswerStep(Number(misses?.no_answer_count) || 0, today);
+      set = {
+        status: step.status,
+        next: step.nextContactDate,
+        noAnswer: step.noAnswerCount,
+        contacted: true,
+        dormantReason: step.status === "DORMANT" ? "NO_ANSWER" : null,
+      };
+      break;
+    }
+    case "SCHEDULE_TRIAL": {
+      const trial = isoDate(arg["trialDate"]);
+      if (!trial || (daysUntil(trial, today) ?? -1) < 0) return { ok: false, code: "TRIAL_DATE_REQUIRED", error: "Pick the trial date (today or later)." };
+      set = { status: "TRIAL_SCHEDULED", next: trial === today ? null : trial, trial };
+      if (!set.next) set.next = future(arg["nextContactDate"]) || null;
+      if (!set.next) {
+        // A trial today still needs a follow-up date to satisfy the invariant.
+        const d2 = new Date(`${today}T12:00:00Z`);
+        d2.setUTCDate(d2.getUTCDate() + 1);
+        set.next = d2.toISOString().slice(0, 10);
+      }
+      break;
+    }
+    case "TRIAL_DONE": {
+      const next = future(arg["nextContactDate"]) || (() => {
+        const d2 = new Date(`${today}T12:00:00Z`);
+        d2.setUTCDate(d2.getUTCDate() + 2);
+        return d2.toISOString().slice(0, 10);
+      })();
+      set = { status: "TRIAL_DONE", next };
+      break;
+    }
+    case "DROP": {
+      const reason = s(arg["reason"]).trim();
+      if (!reason) return { ok: false, code: "REASON_REQUIRED", error: "Say why this inquiry is being dropped." };
+      set = { status: "DROPPED", next: null, dropReason: reason };
+      break;
+    }
+    case "REOPEN": {
+      if (cur.status !== "DROPPED" && cur.status !== "DORMANT") return { ok: false, code: "NOT_CLOSED", error: "Only a dropped or dormant inquiry can be reopened." };
+      const d2 = new Date(`${today}T12:00:00Z`);
+      d2.setUTCDate(d2.getUTCDate() + 1);
+      set = { status: "OPEN", next: d2.toISOString().slice(0, 10), dropReason: null, dormantReason: null };
+      break;
+    }
+    case "CONVERT": {
+      // Brief P1.3: "Joined" closes the enquiry and hands off. It creates nobody;
+      // the student is added next (as a draft for staff). A link is optional.
+      const studentRef = s(arg["studentRef"] ?? arg["studentId"]).trim();
+      let studentId: string | null = null;
+      if (studentRef) {
+        const student = await acadStudentById(studentRef);
+        if (!student) return { ok: false, code: "STUDENT_NOT_FOUND", error: `No student ${studentRef}` };
+        studentId = student.id;
+      }
+      set = { status: "CONVERTED", next: null, studentId };
+      break;
+    }
+    default:
+      return { ok: false, code: "BAD_ACTION", error: `Unknown action ${action}` };
+  }
+  if (TERMINAL_INQUIRY.has(cur.status) && action !== "REOPEN" && !(cur.status === "DORMANT" && ["LOG_CONTACT", "NO_ANSWER", "DROP", "CONVERT"].includes(action))) {
+    return { ok: false, code: "INQUIRY_CLOSED", error: `This inquiry is already ${cur.status}.` };
+  }
+
+  await query(
+    `update inquiries set status = $2, next_contact_date = $3::date,
+       trial_date = coalesce($4::date, trial_date),
+       drop_reason = case when $2 = 'DROPPED' then $5 when $2 = 'OPEN' then null else drop_reason end,
+       converted_student_id = coalesce($6, converted_student_id), updated_at = now(),
+       no_answer_count = coalesce($7, no_answer_count),
+       last_contacted_at = case when $8 then current_date else last_contacted_at end,
+       dormant_reason = case when $2 = 'DORMANT' then $9 when $2 = 'OPEN' then null else dormant_reason end
+     where id = $1`,
+    [id, set.status, set.next, set.trial ?? null, set.dropReason ?? null, set.studentId ?? null, set.noAnswer ?? null, set.contacted === true, set.dormantReason ?? null],
+  );
+  // One row per contact/transition — what was actually discussed, kept
+  // alongside the status change instead of only overwriting last_contacted_at.
+  const description = s(arg["note"]).trim() || set.dropReason || "";
+  await query(
+    `insert into inquiry_followups (id, inquiry_id, action, description, resulting_status, next_contact_date, created_by)
+     values ($1,$2,$3,$4,$5,$6::date,$7)`,
+    [newId("FOLLOWUP"), id, action, description || null, set.status, set.next, session?.deviceLabel || session?.email || ""],
+  );
   await bumpRevisions(["inquiries", "tasks"]);
-  return ok({ inquiryId: id, action, after: { status: action === "LOG_CONTACT" ? "CONTACTED" : action === "SCHEDULE_TRIAL" ? "TRIAL_SCHEDULED" : action }, readBack: { ok: true }, auditWritten: true, note: "inquiry moved" });
+  return ok({
+    inquiryId: id,
+    action,
+    after: { status: set.status, nextContactDate: set.next ?? "" },
+    changedBy: session?.deviceLabel ?? "",
+    handOff: action === "CONVERT" && !set.studentId ? { addStudent: true } : undefined,
+    note:
+      set.status === "DORMANT"
+        ? "Three missed calls: marked dormant. It comes back in \"Call these today\" after 90 days."
+        : set.status === "CONVERTED"
+          ? "Marked joined. Now add the student."
+          : set.next
+            ? `Next contact ${set.next}.`
+            : "",
+  });
 }
 
 // -------------------------------------------------------------- approvals
 async function founderApprovals(): Promise<Record<string, unknown>> {
   const drafts = await query<Record<string, unknown>>(
-    `select id, status, student_id, student_name, amount, payment_mode, branch, terms_status from payment_drafts where status <> 'FINALISED' order by submitted_at`,
+    `select id, status, student_id, student_name, amount, payment_mode, branch, terms_status, submitted_at::text,
+            payment_date::text, payment_reference, physical_receipt_no
+     from payment_drafts where status in ('SUBMITTED','APPROVED') order by submitted_at`,
   );
   const paymentItems = drafts.map((r) => ({
     type: "PAYMENT_DRAFT",
@@ -1190,10 +2000,14 @@ async function founderApprovals(): Promise<Record<string, unknown>> {
     feesPeriod: "",
     amount: s(r.amount),
     branch: s(r.branch),
-    date: d(s(r.submitted_at ?? "")),
-    reason: "payment approval",
-    flags: { backdated: false, incomplete: false, junk: false },
-    termsStatus: s(r.terms_status) || "TERMS ACCEPTED",
+    date: s(r.payment_date) || d(r.submitted_at),
+    reason: [s(r.payment_reference) && `UTR ${s(r.payment_reference)}`, s(r.physical_receipt_no) && `receipt book ${s(r.physical_receipt_no)}`].filter(Boolean).join(" · ") || "payment approval",
+    flags: {
+      backdated: isBackdated(s(r.payment_date), d(r.submitted_at) || todayIso()),
+      incomplete: !s(r.payment_reference) && !s(r.physical_receipt_no),
+      junk: false,
+    },
+    termsStatus: s(r.terms_status),
     actions: ["details", "approve", "reject"],
   }));
   const expenseRows = await query<Record<string, unknown>>(
@@ -1217,13 +2031,61 @@ async function founderApprovals(): Promise<Record<string, unknown>> {
     actions: ["details", "approve", "reject"],
   }));
 
-  const items = [...paymentItems, ...expenseItems];
+  const studentRows = await query<Record<string, unknown>>(
+    `select id, action, student_id, name, phone, course, branch, fee_plan, submitted_at::text, lifecycle_status, status_reason
+     from student_drafts where status = 'SUBMITTED' order by submitted_at`,
+  );
+  const studentItems = studentRows.map((r) => ({
+    type: "STUDENT_DRAFT",
+    itemId: s(r.id),
+    entity: s(r.name) || s(r.student_id),
+    studentId: s(r.student_id),
+    noStudentLinked: s(r.action) === "ADD",
+    paymentMode: "",
+    feesPeriod: s(r.fee_plan),
+    amount: "",
+    branch: s(r.branch),
+    date: d(r.submitted_at),
+    reason: s(r.lifecycle_status)
+      ? `status → ${s(r.lifecycle_status)}: ${s(r.status_reason)}`
+      : s(r.action) === "EDIT" ? "change to an existing student" : `new student · ${s(r.course) || "course not set"}`,
+    flags: { backdated: false, incomplete: !s(r.phone), junk: false },
+    termsStatus: "",
+    actions: ["details", "merge", "reject"],
+  }));
+
+  const gov = await governanceApprovalItems();
+  const items = [
+    ...paymentItems,
+    ...expenseItems,
+    ...studentItems,
+    ...gov.corrections,
+    ...gov.invoices,
+    ...gov.packageExtensions,
+    ...gov.paymentProfileChanges,
+    ...gov.closures,
+    ...gov.classCorrections,
+    ...gov.lateFeeWaivers,
+    ...gov.instalmentPlans,
+    ...gov.manualTermsAcceptances,
+    ...gov.teacherAddRequests,
+  ];
   const groups = [
-    { type: "PAYMENT_DRAFT", label: "Payment drafts", items: paymentItems },
-    { type: "EXPENSE_DRAFT", label: "Expense drafts", items: expenseItems },
+    { type: "PAYMENT_DRAFT", label: "Fee payments to approve", items: paymentItems },
+    { type: "EXPENSE_DRAFT", label: "Expenses to approve", items: expenseItems },
+    { type: "STUDENT_DRAFT", label: "Student changes to review", items: studentItems },
+    { type: "RECEIPT_CORRECTION", label: "Receipt corrections", items: gov.corrections },
+    { type: "SCHOOL_INVOICE_DRAFT", label: "School invoices needing you", items: gov.invoices },
+    { type: "PACKAGE_EXTENSION", label: "Package extensions to review", items: gov.packageExtensions },
+    { type: "PAYMENT_PROFILE_CHANGE", label: "Payment profile changes", items: gov.paymentProfileChanges },
+    { type: "CLOSURE", label: "Closures to authorise", items: gov.closures },
+    { type: "CLASS_CORRECTION", label: "Class corrections to review", items: gov.classCorrections },
+    { type: "LATE_FEE_WAIVER", label: "Late-fee waivers to review", items: gov.lateFeeWaivers },
+    { type: "INSTALMENT_PLAN", label: "Instalment plans to review", items: gov.instalmentPlans },
+    { type: "MANUAL_TERMS_ACCEPTANCE", label: "Manual terms acceptances", items: gov.manualTermsAcceptances },
+    { type: "TEACHER_ADD_REQUEST", label: "New teachers to review", items: gov.teacherAddRequests },
   ];
   return ok({
-    build: "RC3.85-standalone",
     branch: "CONSOLIDATED",
     count: items.length,
     counts: {
@@ -1231,15 +2093,23 @@ async function founderApprovals(): Promise<Record<string, unknown>> {
       WAITING_ON_TERMS: 0,
       PAYMENT_DRAFT: paymentItems.length,
       EXPENSE_DRAFT: expenseItems.length,
-      STUDENT_DRAFT: 0,
+      STUDENT_DRAFT: studentItems.length,
+      RECEIPT_CORRECTION: gov.corrections.length,
+      SCHOOL_INVOICE_DRAFT: gov.invoices.length,
+      PACKAGE_EXTENSION: gov.packageExtensions.length,
+      PAYMENT_PROFILE_CHANGE: gov.paymentProfileChanges.length,
+      CLOSURE: gov.closures.length,
+      CLASS_CORRECTION: gov.classCorrections.length,
+      LATE_FEE_WAIVER: gov.lateFeeWaivers.length,
+      INSTALMENT_PLAN: gov.instalmentPlans.length,
+      MANUAL_TERMS_ACCEPTANCE: gov.manualTermsAcceptances.length,
+      TEACHER_ADD_REQUEST: gov.teacherAddRequests.length,
       SCHOOL_MASTER: 0,
-      WAIVER: 0,
       UNKNOWN_STATUS: 0,
     },
     empty: items.length === 0,
     items,
     groups,
-    note: "standalone approvals",
   });
 }
 
@@ -1287,60 +2157,178 @@ async function auditLog(arg: Record<string, unknown>): Promise<Record<string, un
   });
 }
 
-async function staffMyRequests(scope: BranchScope): Promise<Record<string, unknown>> {
-  const rows = (
-    await query<Record<string, unknown>>(`select id, status, student_name, amount, branch, submitted_at::text from payment_drafts where status in ('SUBMITTED','APPROVED') order by submitted_at`)
-  ).filter((r) => inScope(scope, r.branch));
-  const expenseRows = (
-    await query<Record<string, unknown>>(
-      `select id, status, category, description, amount, branch, submitted_at::text
-       from expense_drafts where status in ('SUBMITTED','APPROVED','REJECTED') order by submitted_at desc limit 100`,
-    )
-  ).filter((r) => inScope(scope, r.branch));
+async function staffMyRequests(scope: BranchScope, session?: RpcSession): Promise<Record<string, unknown>> {
+  // A per-device token only sees its own submissions; the shared staff token
+  // cannot tell operators apart, so it sees the branch's.
+  const mine = session?.deviceLabel && !session.deviceLabel.startsWith("env:") ? session.deviceLabel : null;
+  const own = (r: Record<string, unknown>) => !mine || s(r.submitted_by) === mine;
 
+  const [payments, expenses, students, corrections, invoices, teacherRequests] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select id, status, student_name, amount, branch, submitted_by, submitted_at::text, payment_date::text, decision_note
+       from payment_drafts where submitted_at > now() - interval '60 days' order by submitted_at desc limit 100`,
+    ),
+    query<Record<string, unknown>>(
+      `select id, status, category, description, amount, branch, submitted_by, submitted_at::text, decision_note
+       from expense_drafts where submitted_at > now() - interval '60 days' order by submitted_at desc limit 100`,
+    ),
+    query<Record<string, unknown>>(
+      `select id, status, action, name, branch, submitted_by, submitted_at::text, decision_note
+       from student_drafts where submitted_at > now() - interval '60 days' order by submitted_at desc limit 100`,
+    ),
+    query<Record<string, unknown>>(
+      `select id, status, receipt_no, reason, branch, requested_by as submitted_by, requested_at::text as submitted_at, decision_note
+       from receipt_corrections where requested_at > now() - interval '60 days' order by requested_at desc limit 100`,
+    ),
+    query<Record<string, unknown>>(
+      `select id, status, class_name, amount, branch, submitted_by, submitted_at::text, decision_note, final_invoice_no
+       from school_invoice_drafts where submitted_at > now() - interval '60 days' order by submitted_at desc limit 100`,
+    ),
+    query<Record<string, unknown>>(
+      `select id, status, teacher_name, primary_role, branch, submitted_by, submitted_at::text, decision_note
+       from teacher_add_requests where submitted_at > now() - interval '60 days' order by submitted_at desc limit 100`,
+    ),
+  ]);
+  const visible = (r: Record<string, unknown>) => inScope(scope, r.branch) && own(r);
   const out = [
-    ...rows.map((r) => ({
-      type: "PAYMENT_DRAFT",
-      id: s(r.id),
-      status: s(r.status),
-      student: s(r.student_name),
-      category: "",
-      amount: s(r.amount),
-      when: d(r.submitted_at),
-      backdated: false,
+    ...payments.filter(visible).map((r) => ({
+      type: "PAYMENT_DRAFT", id: s(r.id), status: s(r.status), student: s(r.student_name), category: "",
+      amount: s(r.amount), when: d(r.submitted_at), decisionNote: s(r.decision_note),
+      backdated: !!s(r.payment_date) && (daysUntil(s(r.payment_date), d(r.submitted_at)) ?? 0) < -2,
     })),
-    ...expenseRows.map((r) => ({
-      type: "EXPENSE_DRAFT",
-      id: s(r.id),
-      status: s(r.status),
-      student: "",
-      category: s(r.category),
-      amount: s(r.amount),
-      when: d(r.submitted_at),
-      backdated: false,
+    ...expenses.filter(visible).map((r) => ({
+      type: "EXPENSE_DRAFT", id: s(r.id), status: s(r.status), student: "", category: s(r.category),
+      amount: s(r.amount), when: d(r.submitted_at), decisionNote: s(r.decision_note), backdated: false,
     })),
-  ];
-  return ok({ branch: "ALL", count: out.length, rows: out, canApprove: false, note: "standalone my requests" });
+    ...students.filter(visible).map((r) => ({
+      type: "STUDENT_DRAFT", id: s(r.id), status: s(r.status), student: s(r.name), category: s(r.action),
+      amount: "", when: d(r.submitted_at), decisionNote: s(r.decision_note), backdated: false,
+    })),
+    ...corrections.filter(visible).map((r) => ({
+      type: "RECEIPT_CORRECTION", id: s(r.id), status: s(r.status), student: s(r.receipt_no), category: s(r.reason),
+      amount: "", when: d(r.submitted_at), decisionNote: s(r.decision_note), backdated: false,
+    })),
+    ...invoices.filter(visible).map((r) => ({
+      type: "SCHOOL_INVOICE_DRAFT", id: s(r.id), status: s(r.status), student: s(r.class_name), category: s(r.final_invoice_no),
+      amount: s(r.amount), when: d(r.submitted_at), decisionNote: s(r.decision_note), backdated: false,
+    })),
+    ...teacherRequests.filter(visible).map((r) => ({
+      type: "TEACHER_ADD_REQUEST", id: s(r.id), status: s(r.status), student: s(r.teacher_name), category: s(r.primary_role),
+      amount: "", when: d(r.submitted_at), decisionNote: s(r.decision_note), backdated: false,
+    })),
+  ].sort((a, b) => (a.when < b.when ? 1 : -1));
+  return ok({ count: out.length, rows: out, canApprove: false });
 }
 
 // -------------------------------------------------------------- comm / sync
-async function commGenerate(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const type = s(arg["type"] ?? "FEE_REMINDER").toUpperCase();
-  const studentName = s(arg["studentName"] ?? "Student");
-  const amount = s(arg["amount"] ?? "");
+const MESSAGE_KINDS: Record<string, string> = {
+  FEE_REMINDER: "FEE_REMINDER",
+  DUE_SOON: "FEE_REMINDER",
+  DUE_TODAY: "FEE_REMINDER",
+  OVERDUE_ACCRUING: "FEE_REMINDER",
+  RENEWAL: "RENEWAL",
+  TERMS: "TERMS",
+  ABSENT_TODAY: "FOLLOW_UP",
+  TEACHER_FEE_DUE: "FEE_REMINDER",
+};
+
+const inr = (v: unknown) => {
+  const x = Number(v);
+  return Number.isFinite(x) && x > 0 ? `₹${x.toLocaleString("en-IN")}` : "";
+};
+const niceDate = (iso: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const [y, m, dd] = iso.split("-").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${dd} ${months[m - 1]} ${y}`;
+};
+
+/**
+ * Compose a message from the student's REAL record (brief P9.1). Nothing is
+ * sent here; the staff member reads it, edits if needed, and sends it with
+ * one tap (api_staff_sendWhatsApp) or copies it.
+ */
+async function commGenerate(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const requested = s(arg["type"] ?? "FEE_REMINDER").toUpperCase();
+  const studentId = s(arg["studentId"]);
+  if (!studentId) return { ok: false, code: "STUDENT_ID_REQUIRED", error: "Open the student first, then compose." };
+  const st = await acadStudentById(studentId);
+  if (!st) return { ok: false, code: "STUDENT_NOT_FOUND", error: `No student ${studentId}` };
+  if (!inScope(scope, st.branch)) return branchForbidden(recordBranch(st.branch));
+
+  const warnings: string[] = [];
+  const parent = s(st.guardian_name).trim();
+  const greeting = parent ? `Namaste ${parent},` : "Namaste,";
+  const first = s(st.name).trim();
+  const fee = inr(st.monthly_fee);
+  const due = niceDate(s(st.next_due_date));
+  const state = feeState(st.next_due_date, todayIso(), { status: st.status });
+  const sign = "— SwarMangal Music Academy";
+
+  let subject = "";
+  let body = "";
+  switch (requested) {
+    case "DUE_SOON":
+    case "DUE_TODAY":
+    case "OVERDUE_ACCRUING":
+    case "FEE_REMINDER":
+    case "TEACHER_FEE_DUE": {
+      if (!due) warnings.push("No due date is recorded for this student, so the message does not name one.");
+      if (!fee) warnings.push("No fee amount is recorded for this student, so the message does not name one.");
+      const amountPart = fee ? ` of ${fee}` : "";
+      if (state === "OVERDUE" || requested === "OVERDUE_ACCRUING") {
+        subject = "Fee overdue";
+        body = `${greeting}\n\n${first}'s fee${amountPart} ${due ? `was due on ${due}` : "is overdue"}. Please clear it at the earliest so classes continue without interruption.\n\nIf you have already paid, please share the UTR / receipt so we can update our records.\n\n${sign}`;
+      } else if (state === "DUE_TODAY" || requested === "DUE_TODAY") {
+        subject = "Fee due today";
+        body = `${greeting}\n\nA gentle reminder that ${first}'s fee${amountPart} is due today${due ? ` (${due})` : ""}.\n\nIf you have already paid, please ignore this message.\n\n${sign}`;
+      } else {
+        subject = "Fee reminder";
+        body = `${greeting}\n\nA gentle reminder that ${first}'s fee${amountPart} is due${due ? ` on ${due}` : " soon"}.\n\nIf you have already paid, please ignore this message.\n\n${sign}`;
+      }
+      if (state === "PAID" && requested !== "TEACHER_FEE_DUE") warnings.push(`${first} looks paid up (next due ${due || "not set"}). Check before sending.`);
+      if (state === "INACTIVE") warnings.push(`${first} is marked ${s(st.status).toUpperCase()}. Fee reminders normally are not sent.`);
+      break;
+    }
+    case "RENEWAL":
+      subject = "Package renewal";
+      body = `${greeting}\n\n${first}'s current fee package ${due ? `ends on ${due}` : "is ending soon"}. To continue classes without a break, please renew${fee ? ` (${fee})` : ""}.\n\n${sign}`;
+      if (!due) warnings.push("No package end date is recorded.");
+      break;
+    case "ABSENT_TODAY":
+      subject = "Missed class today";
+      body = `${greeting}\n\nWe missed ${first} in ${s(st.instrument) || "class"} today. We hope all is well — please let us know if ${first} will be joining the next class.\n\n${sign}`;
+      break;
+    case "TERMS":
+      subject = "Admission terms";
+      body = `${greeting}\n\nPlease read and accept SwarMangal's admission terms for ${first}.\n\n${sign}`;
+      warnings.push("There is no terms-acceptance link in this system yet; add the link by hand before sending.");
+      break;
+    default:
+      return { ok: false, code: "BAD_TYPE", error: `Unknown message type ${requested}` };
+  }
+
+  const phone = normalizeIndianMobile(st.phone);
+  if (!phone.ok) warnings.push(phone.code === "NO_PHONE" ? "No registered phone number — this cannot be sent on WhatsApp." : `The registered number (${phone.masked}) is not a valid Indian mobile.`);
+  const whatsappReady = !!gatewayConfigFromEnv() && process.env.WA_SEND_ENABLED === "true";
+
   return ok({
-    type,
-    subject: `Fees due — Swar Mangal`,
-    body: `Namaste, reminder that ${studentName}'s fees of ${amount} are due. Please pay at your convenience. — SwarMangal Music Academy`,
-    recipientName: `Parent of ${studentName}`,
+    type: requested,
+    kind: MESSAGE_KINDS[requested] ?? "CUSTOM",
+    subject,
+    body,
+    recipientName: parent || `Parent of ${first}`,
     recipientType: "parent",
-    typeRequested: s(arg["type"] ?? "FEE_REMINDER"),
-    typeResolved: type,
+    recipientPhone: phone.ok ? phone.masked : "",
+    feeState: state,
+    typeRequested: requested,
+    typeResolved: requested,
     typeCorrected: false,
     typeNote: "",
-    warnings: [],
-    mode: "COPY_ONLY",
-    providerSend: "DISABLED",
+    warnings,
+    // COPY_ONLY when the WhatsApp gateway is off; otherwise the screen offers one-tap send.
+    mode: whatsappReady && phone.ok ? "WHATSAPP" : "COPY_ONLY",
+    providerSend: whatsappReady ? "ENABLED" : "DISABLED",
     termsLink: "",
     termsTokenId: "",
     termsTokenMinted: false,

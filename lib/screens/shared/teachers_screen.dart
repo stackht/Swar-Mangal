@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
+import 'teacher_attendance_screen.dart';
 import 'teacher_profile_screen.dart';
 
 /// Teacher master. Founder: full list + add + status. Staff: read-only list
@@ -70,12 +71,18 @@ class _TeachersScreenState extends State<TeachersScreen> {
             Text('${_rows.length} teachers',
                 style: const TextStyle(fontWeight: FontWeight.w800)),
             const Spacer(),
-            if (!widget.staff)
-              TextButton.icon(
-                onPressed: () => _addTeacher(context),
-                icon: const Icon(Icons.person_add, size: 18),
-                label: const Text('Add'),
-              ),
+            IconButton(
+              tooltip: 'Attendance',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => Scaffold(appBar: AppBar(title: const Text('Teacher Attendance')), body: const TeacherAttendanceScreen()),
+              )),
+              icon: const Icon(Icons.fact_check_outlined, size: 20),
+            ),
+            TextButton.icon(
+              onPressed: () => _addTeacher(context),
+              icon: const Icon(Icons.person_add, size: 18),
+              label: Text(widget.staff ? 'Request' : 'Add'),
+            ),
           ]),
         ),
         Expanded(
@@ -102,9 +109,9 @@ class _TeachersScreenState extends State<TeachersScreen> {
         child: Row(children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: AppColors.primary.withValues(alpha: .08),
+            backgroundColor: AppColors.adaptive(context, AppColors.primary).withValues(alpha: .08),
             child: Text(t.teacherName.isNotEmpty ? t.teacherName[0].toUpperCase() : '?',
-                style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary)),
+                style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.adaptive(context, AppColors.primary))),
           ),
           const SizedBox(width: AppSpace.s3),
           Expanded(
@@ -117,20 +124,26 @@ class _TeachersScreenState extends State<TeachersScreen> {
                 ),
                 if (t.shareLabel.isNotEmpty) ...[
                   const SizedBox(width: AppSpace.s2),
-                  TagChip(t.shareLabel, color: AppColors.focus),
+                  TagChip(t.shareLabel, color: AppColors.adaptive(context, AppColors.focus)),
+                ],
+                if (t.profileIncomplete) ...[
+                  const SizedBox(width: AppSpace.s2),
+                  TagChip('Incomplete', color: AppColors.adaptive(context, AppColors.warnFg)),
                 ],
               ]),
               if (t.primaryRole.isNotEmpty)
-                Text(t.primaryRole, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                Text(t.primaryRole, style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
               Text(
                   [t.branchClassCode, t.phone].where((e) => e.isNotEmpty).join(' · '),
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                  style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
+              if (t.profileIncomplete)
+                Text('Missing: ${t.missingFields.join(', ')}', style: TextStyle(fontSize: 11, color: AppColors.adaptive(context, AppColors.warnFg))),
             ]),
           ),
           StatusBadge(t.status.isEmpty ? 'UNKNOWN' : t.status),
           if (!widget.staff)
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 20, color: AppColors.muted),
+              icon: Icon(Icons.more_vert, size: 20, color: AppColors.adaptive(context, AppColors.muted)),
               onSelected: (v) => _setStatus(t, v),
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'ACTIVE', child: Text('Set ACTIVE')),
@@ -193,22 +206,28 @@ class _TeachersScreenState extends State<TeachersScreen> {
     final role = TextEditingController();
     final err = ValueNotifier<String?>(null);
     final busy = ValueNotifier(false);
+    final staff = widget.staff;
+    final intentKey = 'TCHREQ-${DateTime.now().microsecondsSinceEpoch}';
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add teacher'),
+        title: Text(staff ? 'Request a new teacher' : 'Add teacher'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Teacher name *')),
           const SizedBox(height: AppSpace.s3),
           TextField(controller: phone, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
           const SizedBox(height: AppSpace.s3),
           TextField(controller: role, decoration: const InputDecoration(labelText: 'Primary instrument / role')),
+          if (staff) ...[
+            const SizedBox(height: AppSpace.s3),
+            Text('Sent to Sharvil for approval — not added until approved.', style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
+          ],
           const SizedBox(height: AppSpace.s3),
           ValueListenableBuilder<String?>(
             valueListenable: err,
             builder: (_, e, _) => e == null
                 ? const SizedBox.shrink()
-                : Text(e, style: const TextStyle(color: AppColors.blockFg, fontSize: 13)),
+                : Text(e, style: TextStyle(color: AppColors.adaptive(context, AppColors.blockFg), fontSize: 13)),
           ),
         ]),
         actions: [
@@ -226,17 +245,27 @@ class _TeachersScreenState extends State<TeachersScreen> {
                       busy.value = true;
                       final auth = context.read<AuthProvider>();
                       try {
-                        final r = await auth.service!.addTeacher({
-                          'teacherName': name.text.trim(),
-                          'phone': phone.text.trim(),
-                          'primaryRole': role.text.trim(),
-                        });
+                        final r = staff
+                            ? await auth.service!.requestAddTeacher({
+                                'teacherName': name.text.trim(),
+                                'phone': phone.text.trim(),
+                                'primaryRole': role.text.trim(),
+                                'clientIntentKey': intentKey,
+                              })
+                            : await auth.service!.addTeacher({
+                                'teacherName': name.text.trim(),
+                                'phone': phone.text.trim(),
+                                'primaryRole': role.text.trim(),
+                              });
                         final m = r as Map<String, dynamic>;
-                        if (m['ok'] != true && m.containsKey('teacherId') == false) {
+                        if (m['ok'] != true) {
                           err.value = (m['error'] ?? 'Could not add.').toString();
                         } else {
                           if (!ctx.mounted) return;
                           Navigator.pop(ctx);
+                          if (staff && ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text((m['note'] ?? 'Sent to Sharvil for approval.').toString())));
+                          }
                           _load();
                         }
                       } on ApiException catch (e) {
@@ -245,7 +274,7 @@ class _TeachersScreenState extends State<TeachersScreen> {
                         busy.value = false;
                       }
                     },
-              child: const Text('Add teacher'),
+              child: Text(staff ? 'Send request' : 'Add teacher'),
             ),
           ),
         ],

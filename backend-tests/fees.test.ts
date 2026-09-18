@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { feeState, daysUntil, addMonths, advanceCycle, todayIso, DEFAULT_ADVANCE_DAYS } from "../src/lib/rpc/fees.ts";
+import { feeState, daysUntil, addMonths, advanceCycle, todayIso, DEFAULT_ADVANCE_DAYS, splitInstalments } from "../src/lib/rpc/fees.ts";
 
 const TODAY = "2026-09-16";
 
@@ -87,4 +87,51 @@ test("today is measured in IST, not UTC", () => {
 test("duplicate and test records are not chased either", () => {
   assert.equal(feeState("2026-01-01", TODAY, { status: "DUPLICATE" }), "INACTIVE");
   assert.equal(feeState("2026-01-01", TODAY, { status: "TEST" }), "INACTIVE");
+});
+
+test("an instalment split always sums to exactly the total, never a paisa short or over", () => {
+  const amounts = splitInstalments(1000, 3);
+  assert.equal(amounts.length, 3);
+  assert.equal(amounts.reduce((a, b) => a + b, 0), 1000);
+  // 1000/3 = 333.33...; the last instalment absorbs the remainder.
+  assert.deepEqual(amounts, [333.33, 333.33, 333.34]);
+});
+
+test("an even split gives equal instalments", () => {
+  assert.deepEqual(splitInstalments(900, 3), [300, 300, 300]);
+});
+
+import { resolvePlan, amountRupees, branchFromClient, referenceRuleViolation, PLAN_CATALOG } from "../src/lib/rpc/fees.ts";
+
+test("plans resolve from the app's labels, never guessed", () => {
+  assert.deepEqual(resolvePlan("Plan 3"), PLAN_CATALOG[2]);
+  assert.deepEqual(resolvePlan("Plan 4 · 2 sessions/week · 8/month for 3 months · ₹9,500 / 3 mo"), PLAN_CATALOG[3]);
+  assert.equal(resolvePlan("3 Months")?.months, 3);
+  assert.equal(resolvePlan("Monthly")?.months, 1);
+  assert.equal(resolvePlan("Yearly")?.months, 12);
+  assert.equal(resolvePlan("flute sessions"), null);
+  assert.equal(resolvePlan(""), null);
+});
+
+test("amounts: integer paise from the app, rupees from older screens", () => {
+  // the staff fee screen sends amountPaise; reading `amount` saved ₹0 drafts
+  assert.equal(amountRupees({ amountPaise: 360000 }), 3600);
+  assert.equal(amountRupees({ amountPaise: "950000" }), 9500);
+  assert.equal(amountRupees({ amountPaise: 12.5 }), 0, "paise must be whole");
+  assert.equal(amountRupees({ amountPaise: -100 }), 0);
+  assert.equal(amountRupees({ amount: "2,500" }), 2500);
+  assert.equal(amountRupees({}), 0);
+});
+
+test("branch comes from class code or branch name", () => {
+  assert.equal(branchFromClient({ classCode: "GMC" }), "GOREGAON");
+  assert.equal(branchFromClient({ classCode: "kmc" }), "KANDIVALI");
+  assert.equal(branchFromClient({ branch: "Goregaon West" }), "GOREGAON");
+  assert.equal(branchFromClient({}), "");
+});
+
+test("a fee payment needs a UTR or a receipt-book number", () => {
+  assert.equal(referenceRuleViolation("UTR123", ""), null);
+  assert.equal(referenceRuleViolation("", "BK-0042"), null);
+  assert.match(referenceRuleViolation("", " ") ?? "", /never neither|cannot have neither/i);
 });

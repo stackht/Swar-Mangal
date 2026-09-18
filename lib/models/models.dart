@@ -86,6 +86,7 @@ class Student {
     required this.lastReceiptNo,
     this.lastReceiptAmount = '',
     required this.status,
+    this.admissionSource,
   });
   factory Student.fromApi(Map<String, dynamic> b) => Student(
         studentId: _s(b['studentId'] ?? b['id']),
@@ -106,6 +107,7 @@ class Student {
         lastReceiptNo: _s(b['lastReceiptNo']),
         lastReceiptAmount: _s(b['lastReceiptAmount']),
         status: _s(b['status']),
+        admissionSource: _s(b['admissionSource']).isEmpty ? null : _s(b['admissionSource']),
       );
 
   final String studentId;
@@ -126,12 +128,38 @@ class Student {
   final String lastReceiptNo;
   final String lastReceiptAmount;
   final String status;
+  final String? admissionSource;
 
   bool get operational => status.isEmpty || status.toUpperCase() == 'ACTIVE';
 }
 
+/// Brief-adjacent, founder-requested 2026-09-17: how a lead became an
+/// admission. Optional on every student — blank on older records.
+class AdmissionSource {
+  const AdmissionSource(this.value, this.label);
+  final String value;
+  final String label;
+}
+
+const admissionSources = [
+  AdmissionSource('WALK_IN', 'Walk-in'),
+  AdmissionSource('FOLLOW_UP', 'Follow-up'),
+  AdmissionSource('REFERRAL', 'Referral'),
+  AdmissionSource('ONLINE_SOCIAL', 'Online / Social'),
+  AdmissionSource('OTHER', 'Other'),
+];
+
+String admissionSourceLabel(String? value) {
+  if (value == null || value.isEmpty) return '';
+  for (final s in admissionSources) {
+    if (s.value == value) return s.label;
+  }
+  return value;
+}
+
 class DueReminderItem {
   DueReminderItem({
+    this.studentId = '',
     required this.studentName,
     required this.phone,
     required this.classCode,
@@ -141,6 +169,7 @@ class DueReminderItem {
     required this.lastReceiptNo,
   });
   factory DueReminderItem.fromApi(Map<String, dynamic> b) => DueReminderItem(
+        studentId: _s(b['studentId']),
         studentName: _s(b['studentName']),
         phone: _s(b['phone']),
         classCode: _s(b['classCode']),
@@ -149,6 +178,7 @@ class DueReminderItem {
         feeStatus: _s(b['feeStatus']),
         lastReceiptNo: _s(b['lastReceiptNo']),
       );
+  final String studentId;
   final String studentName;
   final String phone;
   final String classCode;
@@ -210,6 +240,9 @@ class DashboardMetrics {
     required this.dueTodayCount,
     required this.overdueCount,
     required this.termsPendingCount,
+    required this.approvalsCount,
+    required this.overview,
+    required this.cards,
   });
   factory DashboardMetrics.fromApi(Map<String, dynamic> b) {
     final m = (b['metrics'] is Map<String, dynamic>)
@@ -231,6 +264,9 @@ class DashboardMetrics {
       dueTodayCount: (m['dueTodayCount'] as num?)?.toInt() ?? 0,
       overdueCount: (m['overdueCount'] as num?)?.toInt() ?? 0,
       termsPendingCount: (m['termsPendingCount'] as num?)?.toInt() ?? 0,
+      approvalsCount: (b['approvalsCount'] as num?)?.toInt() ?? 0,
+      overview: DashboardOverview.fromApi(b),
+      cards: ((b['cards'] as List?) ?? const []).whereType<Map<String, dynamic>>().map(TaskCard.fromApi).toList(),
     );
   }
   final num todayCollection;
@@ -245,6 +281,9 @@ class DashboardMetrics {
   final int dueTodayCount;
   final int overdueCount;
   final int termsPendingCount;
+  final int approvalsCount;
+  final DashboardOverview overview;
+  final List<TaskCard> cards;
 }
 
 class ReceiptRow {
@@ -262,6 +301,8 @@ class ReceiptRow {
     this.feePeriodFrom = '',
     this.feePeriodTo = '',
     this.txnId = '',
+    this.studentId = '',
+    this.voidReason = '',
   });
   factory ReceiptRow.fromApi(Map<String, dynamic> b) => ReceiptRow(
         receiptNo: _s(b['receiptNo']),
@@ -277,6 +318,8 @@ class ReceiptRow {
         feePeriodFrom: _s(b['feePeriodFrom']),
         feePeriodTo: _s(b['feePeriodTo']),
         txnId: _s(b['txnId']),
+        studentId: _s(b['studentId']),
+        voidReason: _s(b['voidReason']),
       );
   final String receiptNo;
   final String date;
@@ -291,6 +334,59 @@ class ReceiptRow {
   final String feePeriodFrom;
   final String feePeriodTo;
   final String txnId;
+  /// Empty for older receipts that were never linked to a student.
+  final String studentId;
+  final String voidReason;
+}
+
+/// One WhatsApp message a person chose to send (api_staff_sendWhatsApp).
+class WaMessage {
+  WaMessage({
+    required this.messageId,
+    required this.kind,
+    required this.status,
+    required this.to,
+    required this.body,
+    required this.fileName,
+    required this.error,
+    required this.createdAt,
+    required this.sentAt,
+    required this.deliveredAt,
+    required this.readAt,
+  });
+  factory WaMessage.fromApi(Map<String, dynamic> b) => WaMessage(
+        messageId: _s(b['messageId']),
+        kind: _s(b['kind']),
+        status: _s(b['status']),
+        to: _s(b['to']),
+        body: _s(b['body']),
+        fileName: _s(b['fileName']),
+        error: _s(b['error']),
+        createdAt: _s(b['createdAt']),
+        sentAt: _s(b['sentAt']),
+        deliveredAt: _s(b['deliveredAt']),
+        readAt: _s(b['readAt']),
+      );
+  final String messageId;
+  final String kind;
+  /// SENDING, SENT, DELIVERED, READ or FAILED.
+  final String status;
+  /// Masked number, e.g. 98••••1223 — the app never holds the full number.
+  final String to;
+  final String body;
+  final String fileName;
+  final String error;
+  final String createdAt;
+  final String sentAt;
+  final String deliveredAt;
+  final String readAt;
+
+  bool get delivered => status == 'DELIVERED' || status == 'READ';
+
+  String get when {
+    final t = sentAt.isNotEmpty ? sentAt : createdAt;
+    return t.length >= 16 ? t.substring(0, 16).replaceFirst('T', ' ') : t;
+  }
 }
 
 class Teacher {
@@ -305,6 +401,7 @@ class Teacher {
     required this.phone,
     required this.email,
     this.academyShare = '',
+    this.missingFields = const [],
   });
   factory Teacher.fromApi(Map<String, dynamic> b) => Teacher(
         teacherId: _s(b['teacherId']),
@@ -317,6 +414,7 @@ class Teacher {
         phone: _s(b['phone']),
         email: _s(b['email']),
         academyShare: _s(b['academyShare']),
+        missingFields: ((b['missingFields'] as List?) ?? const []).map((e) => e.toString()).toList(),
       );
   final String teacherId;
   final String teacherName;
@@ -328,6 +426,9 @@ class Teacher {
   final String phone;
   final String email;
   final String academyShare;
+  /// e.g. ['phone', 'payout rule'] — flagged automatically, never auto-filled.
+  final List<String> missingFields;
+  bool get profileIncomplete => missingFields.isNotEmpty;
 
   String get shareLabel => academyShare.isEmpty ? '' : (academyShare.endsWith('%') ? academyShare : '$academyShare%');
 }
@@ -366,6 +467,16 @@ class ExpenseEntry {
   final String status;
 }
 
+/// Statuses the server can send (handlers2.ts inquiryTransition) — not the
+/// legacy NEW/FOLLOW_UP names, which the server never actually returns.
+/// Matches the server's own TERMINAL_INQUIRY_STATUSES (rules.ts) exactly —
+/// DORMANT belongs here too, or a dormant lead still shows as actionable.
+const _kInquiryTerminalStatuses = {'CONVERTED', 'DROPPED', 'DORMANT'};
+
+/// The `source` value stamped on a lead auto-created because a student's
+/// status became LEFT (handlers.ts createWinBackLeadIfNeeded).
+const kFormerStudentSource = 'Former Student';
+
 class Inquiry {
   Inquiry({
     required this.inquiryId,
@@ -373,7 +484,10 @@ class Inquiry {
     required this.phone,
     required this.course,
     required this.branch,
+    required this.source,
     required this.status,
+    required this.finalStatus,
+    required this.dormantReason,
     required this.followUpDate,
     required this.createdAt,
   });
@@ -383,7 +497,10 @@ class Inquiry {
         phone: _s(b['phone']),
         course: _s(b['course'] ?? b['instrument']),
         branch: _s(b['branch']),
+        source: _s(b['source']),
         status: _s(b['status']),
+        finalStatus: _s(b['finalStatus']).isNotEmpty ? _s(b['finalStatus']) : _deriveFinalStatus(_s(b['status'])),
+        dormantReason: _s(b['dormantReason']),
         followUpDate: _s(b['followUpDate'] ?? b['followUp'] ?? b['next_contact_date']),
         createdAt: _s(b['createdAt'] ?? b['created_at']),
       );
@@ -392,10 +509,128 @@ class Inquiry {
   final String phone;
   final String course;
   final String branch;
+  /// How this lead came in — e.g. Walk-in, Referral, or "Former Student"
+  /// for a win-back lead auto-created when a student's status became LEFT.
+  final String source;
+  /// The workflow state: OPEN, CONTACTED, DORMANT, TRIAL_SCHEDULED,
+  /// TRIAL_DONE, DROPPED or CONVERTED.
   final String status;
+  /// The parent's actual decision: APPROVED (wants to join), REJECTED
+  /// (doesn't), or PENDING (not decided yet) — derived server-side from
+  /// [status], never a second source of truth.
+  final String finalStatus;
+  /// NO_ANSWER (3 missed calls, recalled after 90 days) or TIMEOUT (30 days
+  /// without conversion, never recalled automatically) — only set when
+  /// [status] is DORMANT.
+  final String dormantReason;
   final String followUpDate;
   final String createdAt;
-  bool get actionable => status.toUpperCase() == 'NEW' || status.toUpperCase() == 'FOLLOW_UP';
+  bool get actionable => !_kInquiryTerminalStatuses.contains(status.toUpperCase());
+  bool get isFormerStudent => source == kFormerStudentSource;
+  bool get hasInstrumentPreference => course.trim().isNotEmpty;
+
+  static String _deriveFinalStatus(String status) {
+    final s = status.toUpperCase();
+    if (s == 'CONVERTED') return 'APPROVED';
+    if (s == 'DROPPED') return 'REJECTED';
+    return 'PENDING';
+  }
+}
+
+class InquiryFollowup {
+  InquiryFollowup({
+    required this.id,
+    required this.action,
+    required this.description,
+    required this.resultingStatus,
+    required this.nextContactDate,
+    required this.createdBy,
+    required this.createdAt,
+  });
+  factory InquiryFollowup.fromApi(Map<String, dynamic> b) => InquiryFollowup(
+        id: _s(b['id']),
+        action: _s(b['action']),
+        description: _s(b['description']),
+        resultingStatus: _s(b['resultingStatus']),
+        nextContactDate: _s(b['nextContactDate']),
+        createdBy: _s(b['createdBy']),
+        createdAt: _s(b['createdAt']),
+      );
+  final String id;
+  final String action;
+  final String description;
+  final String resultingStatus;
+  final String nextContactDate;
+  final String createdBy;
+  final String createdAt;
+}
+
+class InquiryDetail {
+  InquiryDetail({
+    required this.inquiryId,
+    required this.name,
+    required this.phone,
+    required this.course,
+    required this.branch,
+    required this.source,
+    required this.notes,
+    required this.status,
+    required this.finalStatus,
+    required this.createdAt,
+    required this.nextContactDate,
+    required this.trialDate,
+    required this.dropReason,
+    required this.convertedStudentId,
+    required this.noAnswerCount,
+    required this.lastContactedAt,
+    required this.dormantReason,
+    required this.formerStudentId,
+    required this.followups,
+  });
+  factory InquiryDetail.fromApi(Map<String, dynamic> b) => InquiryDetail(
+        inquiryId: _s(b['inquiryId']),
+        name: _s(b['name']),
+        phone: _s(b['phone']),
+        course: _s(b['course']),
+        branch: _s(b['branch']),
+        source: _s(b['source']),
+        notes: _s(b['notes']),
+        status: _s(b['status']),
+        finalStatus: _s(b['finalStatus']),
+        createdAt: _s(b['createdAt']),
+        nextContactDate: _s(b['nextContactDate']),
+        trialDate: _s(b['trialDate']),
+        dropReason: _s(b['dropReason']),
+        convertedStudentId: _s(b['convertedStudentId']),
+        noAnswerCount: (b['noAnswerCount'] as num?)?.toInt() ?? 0,
+        lastContactedAt: _s(b['lastContactedAt']),
+        dormantReason: _s(b['dormantReason']),
+        formerStudentId: _s(b['formerStudentId']),
+        followups: ((b['followups'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(InquiryFollowup.fromApi)
+            .toList(),
+      );
+  final String inquiryId;
+  final String name;
+  final String phone;
+  final String course;
+  final String branch;
+  final String source;
+  final String notes;
+  final String status;
+  final String finalStatus;
+  final String createdAt;
+  final String nextContactDate;
+  final String trialDate;
+  final String dropReason;
+  final String convertedStudentId;
+  final int noAnswerCount;
+  final String lastContactedAt;
+  final String dormantReason;
+  final String formerStudentId;
+  final List<InquiryFollowup> followups;
+  bool get isFormerStudent => source == kFormerStudentSource;
 }
 
 class TaskCard {
@@ -440,6 +675,7 @@ class TodaysClass {
     required this.classDate,
     required this.startTime,
     required this.teacherId,
+    this.teacherName = '',
     required this.branch,
     required this.course,
     required this.outcome,
@@ -461,6 +697,7 @@ class TodaysClass {
         classDate: _s(b['classDate']),
         startTime: _s(b['startTime']),
         teacherId: _s(b['teacherId']),
+        teacherName: _s(b['teacherName']),
         branch: _s(b['branch']),
         course: _s(b['course']),
         outcome: _s(b['outcome']),
@@ -481,6 +718,7 @@ class TodaysClass {
   final String classDate;
   final String startTime;
   final String teacherId;
+  final String teacherName;
   final String branch;
   final String course;
   final String outcome;
@@ -545,6 +783,7 @@ class ApprovalItem {
     required this.junk,
     required this.termsStatus,
     required this.actions,
+    this.receiptNo = '',
   });
   factory ApprovalItem.fromApi(Map<String, dynamic> b) {
     final f = b['flags'] is Map<String, dynamic>
@@ -567,6 +806,7 @@ class ApprovalItem {
       junk: f['junk'] == true,
       termsStatus: _s(b['termsStatus']),
       actions: ((b['actions'] as List?) ?? const []).map((e) => _s(e)).toList(),
+      receiptNo: _s(b['receiptNo']),
     );
   }
   final String type;
@@ -585,6 +825,7 @@ class ApprovalItem {
   final bool junk;
   final String termsStatus;
   final List<String> actions;
+  final String receiptNo;
 
   bool get isPayment => type == 'PAYMENT_DRAFT';
   bool get isStudent => type == 'STUDENT_DRAFT';
@@ -635,6 +876,8 @@ class CommMessage {
     required this.providerSend,
     required this.termsLink,
     required this.warnings,
+    this.kind = '',
+    this.recipientPhone = '',
   });
   factory CommMessage.fromApi(Map<String, dynamic> b) => CommMessage(
         type: _s(b['type']),
@@ -650,7 +893,15 @@ class CommMessage {
         providerSend: _s(b['providerSend']),
         termsLink: _s(b['termsLink']),
         warnings: ((b['warnings'] as List?) ?? const []).map((e) => _s(e)).toList(),
+        kind: _s(b['kind']),
+        recipientPhone: _s(b['recipientPhone']),
       );
+  /// Message kind for the send log (FEE_REMINDER, RENEWAL, ...).
+  final String kind;
+  /// Masked registered number the message would go to.
+  final String recipientPhone;
+  /// The server offers one-tap WhatsApp send for this message.
+  bool get canWhatsApp => mode == 'WHATSAPP';
   final String type;
   final String subject;
   final String body;
@@ -916,6 +1167,8 @@ class PayoutPreview {
     required this.awaitingAmount,
     required this.unattributedReceipts,
     required this.unattributedAmount,
+    this.earningBaseDefined = false,
+    this.note = '',
   });
   factory PayoutPreview.fromApi(Map<String, dynamic> b) {
     num n(dynamic v) {
@@ -934,6 +1187,8 @@ class PayoutPreview {
       awaitingAmount: n(b['awaitingDecisionAmount']),
       unattributedReceipts: (b['unattributedReceipts'] as num?)?.toInt() ?? 0,
       unattributedAmount: n(b['unattributedAmount']),
+      earningBaseDefined: b['earningBaseDefined'] == true,
+      note: _s(b['note']),
     );
   }
   final List<PayoutRow> rows;
@@ -941,6 +1196,10 @@ class PayoutPreview {
   final num awaitingAmount;
   final int unattributedReceipts;
   final num unattributedAmount;
+  /// False until Sharvil rules what a payout percentage is a percentage of
+  /// (brief §15.1). While false, every row above is a named refusal.
+  final bool earningBaseDefined;
+  final String note;
 }
 
 /// One payment actually made to a teacher (api_recordTeacherPayout /
@@ -992,17 +1251,23 @@ class PayoutRow {
     required this.totalCollection,
     required this.totalTeacherShare,
     required this.payable,
+    required this.priced,
     required this.alreadyPaid,
     required this.balance,
     required this.status,
     required this.preCutover,
     required this.note,
+    this.reasons = const [],
+    this.qualifications = const [],
   });
   factory PayoutRow.fromApi(Map<String, dynamic> b) {
     num n(dynamic v) {
       final s = v == null ? '' : v.toString().replaceAll(RegExp(r'[^\d.\-]'), '');
       return double.tryParse(s) ?? 0;
     }
+    // A refused line carries payable: null. Never coerced to 0 — the server
+    // says no amount exists, and the screen must say the same.
+    final priced = b['payable'] != null;
     return PayoutRow(
       teacherId: _s(b['teacherId']),
       teacherName: _s(b['teacherName']),
@@ -1011,12 +1276,23 @@ class PayoutRow {
       receiptCount: (b['receiptCount'] as num?)?.toInt() ?? 0,
       totalCollection: n(b['totalCollection']),
       totalTeacherShare: n(b['totalTeacherShare']),
-      payable: n(b['payable']),
+      payable: priced ? n(b['payable']) : 0,
+      priced: priced,
       alreadyPaid: n(b['alreadyPaid'] ?? b['paid']),
-      balance: n(b['balance']),
+      balance: priced ? n(b['balance']) : 0,
       status: _s(b['status']),
       preCutover: b['preCutover'] == true,
       note: _s(b['note']),
+      reasons: ((b['reasons'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((r) => _s(r['message']))
+          .where((m) => m.isNotEmpty)
+          .toList(),
+      qualifications: ((b['qualifications'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((r) => _s(r['message']))
+          .where((m) => m.isNotEmpty)
+          .toList(),
     );
   }
   final String teacherId;
@@ -1027,11 +1303,16 @@ class PayoutRow {
   final num totalCollection;
   final num totalTeacherShare;
   final num payable;
+  /// False when the server refused to compute an amount (e.g. the earning
+  /// base is undefined). The screen must show the refusal, never ₹0.
+  final bool priced;
   final num alreadyPaid;
   final num balance;
   final String status;
   final bool preCutover;
   final String note;
+  final List<String> reasons;
+  final List<String> qualifications;
 }
 
 /// Staff "My Requests" — persisted drafts awaiting (or resolved by) founder.
@@ -1462,4 +1743,198 @@ class SyncSnapshot {
   final bool ok;
   final Map<String, int> revisions;
   final List<Map<String, dynamic>> changes;
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard overview — the sections both the staff "Today" screen and the
+// founder "Home" screen render. Both api_staff_todaysTasks and api_dashboard
+// return these same top-level keys, so one parser serves both.
+// ---------------------------------------------------------------------------
+
+class FeesDueTodayRow {
+  FeesDueTodayRow({required this.studentId, required this.studentName, required this.classCode, required this.phone});
+  factory FeesDueTodayRow.fromApi(Map<String, dynamic> b) => FeesDueTodayRow(
+        studentId: _s(b['studentId']),
+        studentName: _s(b['studentName']),
+        classCode: _s(b['classCode']),
+        phone: _s(b['phone']),
+      );
+  final String studentId;
+  final String studentName;
+  final String classCode;
+  final String phone;
+}
+
+class FeesDueTodaySummary {
+  FeesDueTodaySummary({required this.count, required this.overdueCount, required this.dueSoonCount, required this.rows});
+  factory FeesDueTodaySummary.fromApi(Map<String, dynamic>? b) {
+    if (b == null) return FeesDueTodaySummary(count: 0, overdueCount: 0, dueSoonCount: 0, rows: const []);
+    return FeesDueTodaySummary(
+      count: (b['count'] as num?)?.toInt() ?? 0,
+      overdueCount: (b['overdueCount'] as num?)?.toInt() ?? 0,
+      dueSoonCount: (b['dueSoonCount'] as num?)?.toInt() ?? 0,
+      rows: ((b['rows'] as List?) ?? const []).whereType<Map<String, dynamic>>().map(FeesDueTodayRow.fromApi).toList(),
+    );
+  }
+  final int count;
+  final int overdueCount;
+  final int dueSoonCount;
+  final List<FeesDueTodayRow> rows;
+}
+
+class TodaysLecturesSummary {
+  TodaysLecturesSummary({required this.count, required this.unanswered, required this.rows});
+  factory TodaysLecturesSummary.fromApi(Map<String, dynamic>? b) {
+    if (b == null) return TodaysLecturesSummary(count: 0, unanswered: 0, rows: const []);
+    return TodaysLecturesSummary(
+      count: (b['count'] as num?)?.toInt() ?? 0,
+      unanswered: (b['unanswered'] as num?)?.toInt() ?? 0,
+      rows: ((b['rows'] as List?) ?? const []).whereType<Map<String, dynamic>>().map(TodaysClass.fromApi).toList(),
+    );
+  }
+  final int count;
+  final int unanswered;
+  final List<TodaysClass> rows;
+}
+
+class AttendanceTodaySummary {
+  AttendanceTodaySummary({
+    required this.date,
+    required this.totalActive,
+    required this.marked,
+    required this.notMarked,
+    required this.present,
+    required this.absent,
+    required this.excused,
+    required this.late,
+  });
+  factory AttendanceTodaySummary.fromApi(Map<String, dynamic>? b) {
+    if (b == null) {
+      return AttendanceTodaySummary(date: '', totalActive: 0, marked: 0, notMarked: 0, present: 0, absent: 0, excused: 0, late: 0);
+    }
+    return AttendanceTodaySummary(
+      date: _s(b['date']),
+      totalActive: (b['totalActive'] as num?)?.toInt() ?? 0,
+      marked: (b['marked'] as num?)?.toInt() ?? 0,
+      notMarked: (b['notMarked'] as num?)?.toInt() ?? 0,
+      present: (b['present'] as num?)?.toInt() ?? 0,
+      absent: (b['absent'] as num?)?.toInt() ?? 0,
+      excused: (b['excused'] as num?)?.toInt() ?? 0,
+      late: (b['late'] as num?)?.toInt() ?? 0,
+    );
+  }
+  final String date;
+  final int totalActive;
+  final int marked;
+  final int notMarked;
+  final int present;
+  final int absent;
+  final int excused;
+  final int late;
+}
+
+class EnquiryContact {
+  EnquiryContact({required this.inquiryId, required this.name, required this.phone});
+  factory EnquiryContact.fromApi(Map<String, dynamic> b) =>
+      EnquiryContact(inquiryId: _s(b['inquiryId']), name: _s(b['name']), phone: _s(b['phone']));
+  final String inquiryId;
+  final String name;
+  final String phone;
+}
+
+class EnquiriesSummary {
+  EnquiriesSummary({required this.openCount, required this.callTodayCount, required this.rows});
+  factory EnquiriesSummary.fromApi(Map<String, dynamic>? b) {
+    if (b == null) return EnquiriesSummary(openCount: 0, callTodayCount: 0, rows: const []);
+    return EnquiriesSummary(
+      openCount: (b['openCount'] as num?)?.toInt() ?? 0,
+      callTodayCount: (b['callTodayCount'] as num?)?.toInt() ?? 0,
+      rows: ((b['rows'] as List?) ?? const []).whereType<Map<String, dynamic>>().map(EnquiryContact.fromApi).toList(),
+    );
+  }
+  final int openCount;
+  final int callTodayCount;
+  final List<EnquiryContact> rows;
+}
+
+class TeacherAttendanceRow {
+  TeacherAttendanceRow({
+    required this.teacherId,
+    required this.teacherName,
+    required this.scheduled,
+    required this.held,
+    required this.cancelled,
+    required this.substituted,
+    required this.unanswered,
+  });
+  factory TeacherAttendanceRow.fromApi(Map<String, dynamic> b) => TeacherAttendanceRow(
+        teacherId: _s(b['teacherId']),
+        teacherName: _s(b['teacherName']),
+        scheduled: (b['scheduled'] as num?)?.toInt() ?? 0,
+        held: (b['held'] as num?)?.toInt() ?? 0,
+        cancelled: (b['cancelled'] as num?)?.toInt() ?? 0,
+        substituted: (b['substituted'] as num?)?.toInt() ?? 0,
+        unanswered: (b['unanswered'] as num?)?.toInt() ?? 0,
+      );
+  final String teacherId;
+  final String teacherName;
+  final int scheduled;
+  final int held;
+  final int cancelled;
+  final int substituted;
+  final int unanswered;
+
+  /// Every scheduled class today has an outcome recorded.
+  bool get fullyAnswered => unanswered == 0;
+}
+
+class TeacherAttendanceSummary {
+  TeacherAttendanceSummary({required this.scheduledToday, required this.unansweredToday, required this.teachers});
+  factory TeacherAttendanceSummary.fromApi(Map<String, dynamic>? b) {
+    if (b == null) return TeacherAttendanceSummary(scheduledToday: 0, unansweredToday: 0, teachers: const []);
+    return TeacherAttendanceSummary(
+      scheduledToday: (b['scheduledToday'] as num?)?.toInt() ?? 0,
+      unansweredToday: (b['unansweredToday'] as num?)?.toInt() ?? 0,
+      teachers: ((b['teachers'] as List?) ?? const []).whereType<Map<String, dynamic>>().map(TeacherAttendanceRow.fromApi).toList(),
+    );
+  }
+  final int scheduledToday;
+  final int unansweredToday;
+  final List<TeacherAttendanceRow> teachers;
+}
+
+/// The shared sections. Parsed from the same top-level object as
+/// api_staff_todaysTasks or api_dashboard — both carry these keys.
+class DashboardOverview {
+  DashboardOverview({
+    required this.feesDueToday,
+    required this.todaysLectures,
+    required this.attendance,
+    required this.enquiries,
+    required this.teacherAttendance,
+  });
+  factory DashboardOverview.fromApi(Map<String, dynamic> b) => DashboardOverview(
+        feesDueToday: FeesDueTodaySummary.fromApi(b['feesDueToday'] as Map<String, dynamic>?),
+        todaysLectures: TodaysLecturesSummary.fromApi(b['todaysLectures'] as Map<String, dynamic>?),
+        attendance: AttendanceTodaySummary.fromApi(b['attendanceSummary'] as Map<String, dynamic>?),
+        enquiries: EnquiriesSummary.fromApi(b['enquiries'] as Map<String, dynamic>?),
+        teacherAttendance: TeacherAttendanceSummary.fromApi(b['teacherAttendance'] as Map<String, dynamic>?),
+      );
+  final FeesDueTodaySummary feesDueToday;
+  final TodaysLecturesSummary todaysLectures;
+  final AttendanceTodaySummary attendance;
+  final EnquiriesSummary enquiries;
+  final TeacherAttendanceSummary teacherAttendance;
+}
+
+/// api_staff_todaysTasks now returns the task cards AND the shared overview
+/// sections in one round trip.
+class StaffToday {
+  StaffToday({required this.cards, required this.overview});
+  factory StaffToday.fromApi(Map<String, dynamic> b) => StaffToday(
+        cards: ((b['cards'] as List?) ?? const []).whereType<Map<String, dynamic>>().map(TaskCard.fromApi).toList(),
+        overview: DashboardOverview.fromApi(b),
+      );
+  final List<TaskCard> cards;
+  final DashboardOverview overview;
 }

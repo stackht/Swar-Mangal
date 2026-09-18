@@ -106,11 +106,12 @@ export interface AcadStudent {
   cycle_start: string | null;
   cycle_end: string | null;
   last_payment_date: string | null;
+  admission_source: string | null;
 }
 
 const STUDENT_COLUMNS = `id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes,
      fee_plan_name, monthly_fee, fee_cycle_months, fee_due_day,
-     next_due_date::text, cycle_start::text, cycle_end::text, last_payment_date::text`;
+     next_due_date::text, cycle_start::text, cycle_end::text, last_payment_date::text, admission_source`;
 
 export interface AcadTeacher {
   id: string;
@@ -171,6 +172,7 @@ export interface StudentRpc {
   teacherId?: string;
   monthlyFee?: string;
   lastPaymentDate?: string;
+  admissionSource?: string;
 }
 
 export function cycleLabel(months: number): string {
@@ -270,6 +272,7 @@ function composeStudentRpc(x: AcadStudent, side: StudentSideData, today = todayI
     lastReceiptNo: side.lastReceiptNo,
     lastReceiptAmount: side.lastReceiptAmount,
     status,
+    admissionSource: s(x.admission_source),
   };
 }
 
@@ -299,6 +302,14 @@ export async function teacherToRpc(x: AcadTeacher): Promise<Record<string, unkno
     [x.id],
   );
   const streams = rule?.payout_type === "OWNER_DIRECT" ? "SCHOOL" : rule?.payout_type === "SCHOOL_CONTRACT" ? "ACADEMY|SCHOOL" : "ACADEMY";
+  const academyShare = rule ? `${s(rule.percentage) || "50"}` : "";
+  // Flagged, never fixed automatically — filling these in is still a
+  // deliberate edit, this just saves someone from having to notice by eye.
+  const missingFields = [
+    !s(x.phone) ? "phone" : null,
+    !s(x.email) ? "email" : null,
+    !academyShare ? "payout rule" : null,
+  ].filter((v): v is string => v !== null);
   return {
     teacherId: x.id,
     teacherName: x.name,
@@ -309,7 +320,9 @@ export async function teacherToRpc(x: AcadTeacher): Promise<Record<string, unkno
     payoutModel: rule?.payout_type === "PERCENTAGE" ? "SHARE" : rule?.payout_type === "OWNER_DIRECT" ? "OWNER_DIRECT" : "SHARE",
     branchClassCode: "KMC",
     status: s(x.status),
-    academyShare: rule ? `${s(rule.percentage) || "50"}` : "",
+    academyShare,
+    profileIncomplete: missingFields.length > 0,
+    missingFields,
   };
 }
 

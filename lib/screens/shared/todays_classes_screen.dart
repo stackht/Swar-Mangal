@@ -97,7 +97,7 @@ class _TodaysClassesScreenState extends State<TodaysClassesScreen> {
                     }
                   },
                   child: Text('$_dateStr  ·  ${opts.unanswered} unanswered',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.ink)),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.ink))),
                 ),
               ),
               IconButton(
@@ -212,7 +212,17 @@ class _TodaysClassesScreenState extends State<TodaysClassesScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (e.code == 'ALREADY_ANSWERED') {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text(e.message),
+            action: SnackBarAction(label: 'Request correction', onPressed: () => _requestCorrection(c.eventId)),
+            duration: const Duration(seconds: 8),
+          ));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     } on ApiUnreachable catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -220,8 +230,51 @@ class _TodaysClassesScreenState extends State<TodaysClassesScreen> {
     }
   }
 
+  /// Brief §14.1: a class answered once cannot be re-answered directly.
+  /// Staff ask; the founder's approval re-opens it for a real second answer.
+  Future<void> _requestCorrection(String eventId) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Request a correction'),
+        content: TextField(controller: reasonCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'What is wrong? (required)')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => reasonCtrl.text.trim().isEmpty ? null : Navigator.pop(ctx, reasonCtrl.text.trim()),
+            child: const Text('Send to Sharvil'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || !mounted) return;
+    try {
+      final r = await auth.service!.raw('api_staff_requestClassCorrection', {
+        'eventId': eventId,
+        'reason': reason,
+        'clientIntentKey': 'CCORR-${DateTime.now().microsecondsSinceEpoch}',
+      });
+      final m = r as Map<String, dynamic>;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text((m['note'] ?? (m['ok'] == true ? 'Sent to Sharvil.' : 'Could not send.')).toString())));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   void _scheduleCustom() {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _ScheduleCustomScreen()));
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _ScheduleCustomScreen(recentResolved: _opts?.rows.where((c) => c.resolved).toList() ?? const []),
+    ));
   }
 
   String _time12(String t) {
@@ -312,8 +365,11 @@ class _OutcomeDialogState extends State<_OutcomeDialog> {
   }
 }
 
+/// Brief §10.2: three kinds that are NOT synonyms, never collapsed into one
+/// dropdown option. Payable defaults to NO on every one of them.
 class _ScheduleCustomScreen extends StatefulWidget {
-  const _ScheduleCustomScreen();
+  const _ScheduleCustomScreen({required this.recentResolved});
+  final List<TodaysClass> recentResolved;
   @override
   State<_ScheduleCustomScreen> createState() => _ScheduleCustomScreenState();
 }
@@ -323,11 +379,33 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
   final _teacher = TextEditingController();
   final _instrument = TextEditingController();
   final _time = TextEditingController();
-  final _credit = TextEditingController(text: '1');
+  final _reason = TextEditingController();
   String _dateStr = '';
+  String _kind = 'GOODWILL_RECOVERY';
+  TodaysClass? _original;
   bool _busy = false;
   String? _result;
   bool _ok = false;
+
+  static const _kinds = [
+    (
+      value: 'SUBSTITUTE',
+      label: 'Substitute',
+      help: 'Somebody else covered a scheduled obligation. Discharges the original.',
+    ),
+    (
+      value: 'REPLACEMENT',
+      label: 'Replacement',
+      help: 'A makeup for a class that did not happen. Discharges an owed obligation.',
+    ),
+    (
+      value: 'GOODWILL_RECOVERY',
+      label: 'Goodwill recovery',
+      help: 'An extra class to recover a relationship. Discharges NOTHING.',
+    ),
+  ];
+
+  bool get _needsOriginal => _kind != 'GOODWILL_RECOVERY';
 
   @override
   void initState() {
@@ -338,6 +416,10 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_needsOriginal && _original == null) {
+      setState(() => _result = 'Pick the class this stands in for.');
+      return;
+    }
     final auth = context.read<AuthProvider>();
     if (auth.service == null) return;
     setState(() {
@@ -351,8 +433,9 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
         'instrument': _instrument.text.trim(),
         'sessionDate': _dateStr,
         'startTime': _time.text.trim(),
-        'sessionCredit': num.tryParse(_credit.text.trim()) ?? 1,
-        'status': 'SCHEDULED',
+        'customKind': _kind,
+        'reason': _reason.text.trim(),
+        if (_original != null) 'originalEventId': _original!.eventId,
       });
       final m = r as Map<String, dynamic>;
       if (!mounted) return;
@@ -360,7 +443,7 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
         _busy = false;
         _ok = m['ok'] == true;
         _result = m['ok'] == true
-            ? 'Scheduled ${m['scheduledSessionId']} — a class on the calendar is a record, whether or not it is ever marked.'
+            ? (m['note'] ?? 'Scheduled ${m['scheduledSessionId']}.')
             : (m['error'] ?? m['message'] ?? 'Could not schedule.');
       });
     } on ApiException catch (e) {
@@ -383,7 +466,7 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Schedule make-up / recovery')),
+      appBar: AppBar(title: const Text('Schedule an extra class')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -392,7 +475,61 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpace.s4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('KIND', style: AppType.eyebrow),
+                  const SizedBox(height: AppSpace.s2),
+                  for (final k in _kinds)
+                    RadioListTile<String>(
+                      contentPadding: EdgeInsets.zero,
+                      value: k.value,
+                      groupValue: _kind,
+                      onChanged: (v) => setState(() {
+                        _kind = v!;
+                        if (!_needsOriginal) _original = null;
+                        _result = null;
+                      }),
+                      title: Text(k.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      subtitle: Text(k.help, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                    ),
+                ]),
+              ),
+            ),
+            if (_needsOriginal) ...[
+              const SizedBox(height: AppSpace.s3),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpace.s4),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('WHICH CLASS THIS STANDS IN FOR', style: AppType.eyebrow),
+                    const SizedBox(height: AppSpace.s2),
+                    if (widget.recentResolved.isEmpty)
+                      const Text('No answered classes on this screen yet. Open Today\'s Classes on the day it happened first.',
+                          style: TextStyle(fontSize: 12, color: AppColors.muted))
+                    else
+                      DropdownButtonFormField<TodaysClass>(
+                        initialValue: _original,
+                        decoration: const InputDecoration(labelText: 'Original class'),
+                        items: [
+                          for (final c in widget.recentResolved)
+                            DropdownMenuItem(value: c, child: Text('${c.classDate} ${c.startTime} · ${c.course} · ${c.outcome}')),
+                        ],
+                        onChanged: (v) => setState(() => _original = v),
+                      ),
+                  ]),
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpace.s3),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s4),
                 child: Column(children: [
+                  TextFormField(
+                    controller: _reason,
+                    decoration: const InputDecoration(labelText: 'Reason *', prefixIcon: Icon(Icons.notes_outlined)),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Say why this class is being held' : null,
+                  ),
+                  const SizedBox(height: AppSpace.s3),
                   TextFormField(
                     controller: _teacher,
                     decoration: const InputDecoration(labelText: 'Teacher ID *', prefixIcon: Icon(Icons.person_outline)),
@@ -408,12 +545,6 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
                     controller: _time,
                     decoration: const InputDecoration(labelText: 'Start time (HH:MM)', prefixIcon: Icon(Icons.schedule)),
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'Start time required' : null,
-                  ),
-                  const SizedBox(height: AppSpace.s3),
-                  TextFormField(
-                    controller: _credit,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Session credit (hours)', prefixIcon: Icon(Icons.timer_outlined)),
                   ),
                   const SizedBox(height: AppSpace.s3),
                   ListTile(
@@ -437,6 +568,15 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
                     ),
                   ),
                 ]),
+              ),
+            ),
+            const SizedBox(height: AppSpace.s3),
+            Container(
+              padding: const EdgeInsets.all(AppSpace.s3),
+              decoration: BoxDecoration(color: AppColors.warnBg, borderRadius: BorderRadius.circular(AppRadius.s)),
+              child: const Text(
+                'This is never payable by default. If the academy owes this teacher for it, Sharvil decides that separately.',
+                style: TextStyle(fontSize: 12, color: AppColors.warnFg),
               ),
             ),
             if (_result != null)

@@ -21,6 +21,8 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
   List<PayoutRow> _rows = [];
   List<SharedStudentDecision> _awaiting = const [];
   num _awaitingAmount = 0;
+  bool _earningBaseDefined = false;
+  String _note = '';
   String? _error;
   bool _busy = false;
 
@@ -55,6 +57,8 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
         _rows = preview.rows;
         _awaiting = preview.awaitingDecision;
         _awaitingAmount = preview.awaitingAmount;
+        _earningBaseDefined = preview.earningBaseDefined;
+        _note = preview.note;
         _busy = false;
       });
     } on ApiException catch (e) {
@@ -77,20 +81,17 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
     if (_busy && _rows.isEmpty) return const Center(child: CircularProgressIndicator());
     if (_error != null && _rows.isEmpty) return ErrorView(_error!, onRetry: _load);
 
-    final totalPayable = _rows.fold<num>(0, (s, r) => s + r.payable);
+    final totalPayable = _rows.where((r) => r.priced).fold<num>(0, (s, r) => s + r.payable);
     final totalPaid = _rows.fold<num>(0, (s, r) => s + r.alreadyPaid);
-    final totalBalance = _rows.fold<num>(0, (s, r) => s + r.balance);
+    final totalBalance = _rows.where((r) => r.priced).fold<num>(0, (s, r) => s + r.balance);
+    final unpricedCount = _rows.where((r) => !r.priced).length;
 
     return RefreshScaffold(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(AppSpace.s4),
         children: [
-          Row(children: [
-            const Icon(Icons.payments_outlined, color: AppColors.primary),
-            const SizedBox(width: AppSpace.s2),
-            const Text('Teacher payouts', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          ]),
+          PageHero(eyebrow: 'Payouts', headline: 'Teacher payouts', fontSize: 22),
           const SizedBox(height: AppSpace.s3),
           Row(children: [
             Expanded(
@@ -105,43 +106,70 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
           ]),
           const SizedBox(height: AppSpace.s2),
           Card(
-            color: AppColors.infoBg,
+            color: AppColors.adaptive(context, AppColors.infoBg),
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.s3),
               child: Text(
                   'Figures below are server-computed from actual receipt shares. '
                   'The app does not calculate payouts — it displays the backend\'s authoritative numbers only.',
-                  style: const TextStyle(fontSize: 12, color: AppColors.infoFg)),
+                  style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.infoFg))),
             ),
           ),
+          if (!_earningBaseDefined) ...[
+            const SizedBox(height: AppSpace.s3),
+            Card(
+              color: AppColors.adaptive(context, AppColors.warnBg),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s3),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(Icons.block_outlined, size: 18, color: AppColors.adaptive(context, AppColors.warnFg)),
+                  const SizedBox(width: AppSpace.s2),
+                  Expanded(
+                    child: Text(
+                      _note.isNotEmpty
+                          ? _note
+                          : 'No academy payout amount exists until the owner rules what a percentage is a percentage of.',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.adaptive(context, AppColors.warnFg), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpace.s4),
           Row(children: [
-            _metric('Payable', inr(totalPayable), AppColors.primary),
+            _metric('Payable', _earningBaseDefined ? inr(totalPayable) : '—', AppColors.adaptive(context, AppColors.primary)),
             const SizedBox(width: AppSpace.s2),
-            _metric('Paid', inr(totalPaid), AppColors.okFg),
+            _metric('Paid', inr(totalPaid), AppColors.adaptive(context, AppColors.okFg)),
             const SizedBox(width: AppSpace.s2),
-            _metric('Balance', inr(totalBalance), totalBalance > 0 ? AppColors.warnFg : AppColors.muted),
+            _metric('Balance', _earningBaseDefined ? inr(totalBalance) : '—',
+                AppColors.adaptive(context, totalBalance > 0 ? AppColors.warnFg : AppColors.muted)),
           ]),
+          if (unpricedCount > 0) ...[
+            const SizedBox(height: AppSpace.s2),
+            Text('$unpricedCount teacher${unpricedCount == 1 ? '' : 's'} not priced — see below.',
+                style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
+          ],
           const SizedBox(height: AppSpace.s4),
           if (_awaiting.isNotEmpty) ...[
             Card(
-              color: AppColors.warnBg,
+              color: AppColors.adaptive(context, AppColors.warnBg),
               child: Padding(
                 padding: const EdgeInsets.all(AppSpace.s4),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    const Icon(Icons.call_split_outlined, size: 18, color: AppColors.warnFg),
+                    Icon(Icons.call_split_outlined, size: 18, color: AppColors.adaptive(context, AppColors.warnFg)),
                     const SizedBox(width: AppSpace.s2),
                     Expanded(
                       child: Text('Waiting for your decision · ${inr(_awaitingAmount)}',
-                          style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.warnFg)),
+                          style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.warnFg))),
                     ),
                   ]),
                   const SizedBox(height: AppSpace.s2),
-                  const Text(
+                  Text(
                       'These students were taught by more than one teacher this month. '
                       'Their fees count for nobody until you split them, so no payout is overstated.',
-                      style: TextStyle(fontSize: 12, color: AppColors.warnFg)),
+                      style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.warnFg))),
                   for (final sharedStudent in _awaiting) ...[
                     const SizedBox(height: AppSpace.s3),
                     Row(children: [
@@ -152,7 +180,7 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
                           Text(
                               'paid ${inr(sharedStudent.collected)} · unassigned ${inr(sharedStudent.remaining)} · '
                               '${sharedStudent.teachers.map((t) => '${t.teacherName} (${t.classesThisMonth})').join(', ')}',
-                              style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                              style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                         ]),
                       ),
                       TextButton(
@@ -178,9 +206,9 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(r.teacherName.isNotEmpty ? r.teacherName : r.teacherId,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                        Text('${r.entityId} · ${r.month} · ${r.receiptCount} receipts',
-                            style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                        Text('${r.entityId} · ${r.month}${r.priced ? ' · ${r.receiptCount} receipts' : ''}',
+                            style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                       ]),
                     ),
                     StatusBadge(r.preCutover ? 'PRE-CUTOVER' : r.status.isEmpty ? 'NONE' : r.status),
@@ -188,24 +216,47 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
                   if (r.preCutover && r.note.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: AppSpace.s2),
-                      child: Text(r.note, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                      child: Text(r.note, style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                     ),
                   const SizedBox(height: AppSpace.s2),
-                  Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
-                    _tag('collected', inr(r.totalCollection)),
-                    _tag('share', inr(r.totalTeacherShare)),
-                    _tag('paid', inr(r.alreadyPaid)),
-                    _tag('balance', inr(r.balance)),
-                  ]),
-                  if (r.balance > 0)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _busy ? null : () => _recordPayment(r),
-                        icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
-                        label: const Text('Record payment'),
+                  if (!r.priced)
+                    // Named refusal — never a guessed ₹0 (brief §8, §15.1).
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpace.s3),
+                      decoration: BoxDecoration(
+                        color: AppColors.adaptive(context, AppColors.blockBg),
+                        borderRadius: BorderRadius.circular(AppRadius.s),
                       ),
-                    ),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        for (final reason in r.reasons.isEmpty ? ['Not priced.'] : r.reasons)
+                          Text(reason,
+                              style: TextStyle(
+                                  fontSize: 12.5, color: AppColors.adaptive(context, AppColors.blockFg), fontWeight: FontWeight.w600)),
+                      ]),
+                    )
+                  else ...[
+                    Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
+                      _tag('collected', inr(r.totalCollection)),
+                      _tag('share', inr(r.totalTeacherShare)),
+                      _tag('paid', inr(r.alreadyPaid)),
+                      _tag('balance', inr(r.balance)),
+                    ]),
+                    for (final q in r.qualifications)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpace.s2),
+                        child: Text('· $q', style: TextStyle(fontSize: 11.5, color: AppColors.adaptive(context, AppColors.muted))),
+                      ),
+                    if (r.balance > 0)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _busy ? null : () => _recordPayment(r),
+                          icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
+                          label: const Text('Record payment'),
+                        ),
+                      ),
+                  ],
                 ]),
               ),
             ),
@@ -237,7 +288,7 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
             title: Text('Split ${shared.studentName}'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               Text('Paid ${inr(shared.collected)} in $_month',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                  style: TextStyle(fontSize: 12, color: AppColors.adaptive(ctx, AppColors.muted))),
               const SizedBox(height: AppSpace.s3),
               for (final t in shared.teachers)
                 Padding(
@@ -259,7 +310,7 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: left < 0 ? AppColors.blockFg : AppColors.muted,
+                    color: AppColors.adaptive(ctx, left < 0 ? AppColors.blockFg : AppColors.muted),
                   ),
                 ),
               ),
@@ -316,7 +367,7 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
           title: Text('Pay ${r.teacherName.isNotEmpty ? r.teacherName : r.teacherId}'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             Text('Service month ${r.month} · balance ${inr(r.balance)}',
-                style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                style: TextStyle(fontSize: 12, color: AppColors.adaptive(ctx, AppColors.muted))),
             const SizedBox(height: AppSpace.s3),
             TextField(
               controller: amountCtl,
@@ -397,7 +448,7 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
         child: Padding(
           padding: const EdgeInsets.all(AppSpace.s3),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted)),
+            Text(label.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.adaptive(context, AppColors.muted))),
             Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
           ]),
         ),
@@ -409,10 +460,10 @@ class _PayoutPreviewScreenState extends State<PayoutPreviewScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.pageBg,
+        color: AppColors.adaptive(context, AppColors.pageBg),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text('$label $value', style: const TextStyle(fontSize: 12, color: AppColors.muted, fontWeight: FontWeight.w600)),
+      child: Text('$label $value', style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted), fontWeight: FontWeight.w600)),
     );
   }
 }

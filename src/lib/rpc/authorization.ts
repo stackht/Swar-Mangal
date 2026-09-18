@@ -40,7 +40,8 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   // api_searchStudent / api_studentProfile: founder surface; staff has
   // dedicated api_staff_* equivalents.
   api_searchStudent: FOUNDER,
-  api_studentProfile: FOUNDER,
+  // Read-only and branch-scoped in the handler; the staff profile screen calls it too.
+  api_studentProfile: STAFF,
   api_staff_searchStudents: STAFF,
   api_staff_getStudentProfile: STAFF,
   api_staff_studentHub: STAFF,
@@ -49,6 +50,7 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   api_addStudent: FOUNDER,
   api_founder_setStudentStatus: FOUNDER,
   api_founder_mergeStudentDraft: FOUNDER,
+  api_founder_studentDraftReject: FOUNDER,
 
   // -------------------------------------------------- receipts / money
   // Money creation/approval/finalisation = founder.
@@ -75,6 +77,10 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   api_teacherProfile: STAFF,
   // Teacher WRITES + payouts = founder only.
   api_addTeacher: FOUNDER,
+  api_staff_requestAddTeacher: STAFF,
+  api_founder_addTeacherRequestApprove: FOUNDER,
+  api_founder_addTeacherRequestReject: FOUNDER,
+  api_teacherAttendanceReport: STAFF,
   api_updateTeacherStatus: FOUNDER,
   api_updateTeacherCompensation: FOUNDER,
   api_teacherPayoutPreview: FOUNDER,
@@ -94,17 +100,82 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   api_founder_expenseDraftReject: FOUNDER,
 
   // ------------------------------------------------------- school invoices
-  // Shared across roles: staff can also generate/read school invoices.
-  api_generateSchoolInvoice: STAFF, // invoice = money document
+  // Brief P11: only the founder allocates an SMI- number. Staff send a draft.
+  api_generateSchoolInvoice: FOUNDER,
+  api_staff_submitSchoolInvoiceDraft: STAFF,
+  api_founder_finaliseSchoolInvoiceDraft: FOUNDER,
+  api_founder_schoolInvoiceDraftReject: FOUNDER,
   api_listSchoolInvoices: STAFF,
   api_getSchoolInvoice: STAFF,
 
+  // Brief §2.2: staff propose a package extension or a payment-profile
+  // change; only the founder decides.
+  api_staff_submitPackageExtensionRequest: STAFF,
+  api_founder_packageExtensionApprove: FOUNDER,
+  api_founder_packageExtensionReject: FOUNDER,
+  api_staff_submitPaymentProfileChangeRequest: STAFF,
+  api_founder_paymentProfileChangeApprove: FOUNDER,
+  api_founder_paymentProfileChangeReject: FOUNDER,
+
+  // Brief §P6.6/§6.8: staff record a closure as PROPOSED; only the founder
+  // authorises or revokes it.
+  api_staff_proposeClosure: STAFF,
+  api_founder_authoriseClosure: FOUNDER,
+  api_founder_closureReject: FOUNDER,
+  api_founder_revokeClosure: FOUNDER,
+  api_closureCalendarList: STAFF,
+
+  // Brief §14.1 (Ruling C.5): a class answered once cannot be re-answered
+  // directly; staff request a correction, only the founder approves it.
+  api_staff_requestClassCorrection: STAFF,
+  api_founder_approveClassCorrection: FOUNDER,
+  api_founder_rejectClassCorrection: FOUNDER,
+
+  // Brief §2.2: staff propose a late-fee waiver; only the founder decides.
+  api_staff_submitLateFeeWaiverRequest: STAFF,
+  api_founder_lateFeeWaiverApprove: FOUNDER,
+  api_founder_lateFeeWaiverReject: FOUNDER,
+
+  // Brief §6.1/§2.6: staff propose an instalment plan; only the founder
+  // creates the real schedule.
+  api_staff_submitInstalmentPlanDraft: STAFF,
+  api_founder_instalmentPlanDraftApprove: FOUNDER,
+  api_founder_instalmentPlanDraftReject: FOUNDER,
+  api_instalmentPlanForStudent: STAFF,
+
+  // Brief §P10: staff mint a one-time terms token, or request a manual
+  // acceptance the founder must decide.
+  api_staff_generateTermsToken: STAFF,
+  api_staff_requestManualTermsAcceptance: STAFF,
+  api_founder_manualTermsAcceptanceApprove: FOUNDER,
+  api_founder_manualTermsAcceptanceReject: FOUNDER,
+  api_termsStatusForStudent: STAFF,
+
+  // Self-service email+OTP token registration/reset (src/app/api/auth/otp/*
+  // handles the OTP round trip itself, outside this RPC gateway entirely —
+  // these are the founder-only management functions over the allow-list and
+  // the issued device_tokens rows).
+  api_founder_listAuthorizedEmails: FOUNDER,
+  api_founder_addAuthorizedEmail: FOUNDER,
+  api_founder_removeAuthorizedEmail: FOUNDER,
+  api_founder_listStaffTokens: FOUNDER,
+  api_founder_revokeDeviceToken: FOUNDER,
+
   // ------------------------------------------------------------ timetable
-  // Shared across roles: staff reads + edits (add/edit enables both shells).
+  // Brief P6.1: the timetable is the founder's; staff read it.
   api_timetableList: STAFF,
-  api_timetableCreate: STAFF,
-  api_timetableUpdate: STAFF,
-  api_timetableDelete: STAFF,
+  api_timetableCreate: FOUNDER,
+  api_timetableUpdate: FOUNDER,
+  api_timetableDelete: FOUNDER,
+
+  // ------------------------------------------------- periods / corrections
+  // Brief §11.7, P6.7: closing a service month is founder-only.
+  api_founder_periodLocks: FOUNDER,
+  api_founder_closeMonth: FOUNDER,
+  // Pattern C: staff ask for a correction; the founder voids.
+  api_staff_requestReceiptCorrection: STAFF,
+  api_founder_voidReceipt: FOUNDER,
+  api_founder_correctionReject: FOUNDER,
 
   // ------------------------------------------------------ attendance/today
   api_staff_attendanceRoster: STAFF,
@@ -121,6 +192,7 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
   api_staff_inquiryQueue: STAFF,
   api_staff_inquiryQuickAdd: STAFF,
   api_staff_inquiryTransition: STAFF,
+  api_staff_inquiryDetail: STAFF,
 
   // -------------------------------------------------------------- approvals
   api_founder_approvalsList: FOUNDER, // founder approval centre
@@ -130,10 +202,27 @@ export const RPC_POLICY: Record<string, RequiredRole> = {
 
   // -------------------------------------------------------------- comm
   api_staff_commGenerate: STAFF,
+  // WhatsApp via the WA-AKG gateway: one human click, one message, to the
+  // student's registered number. Opt-outs are founder-managed.
+  api_staff_sendWhatsApp: STAFF,
+  api_staff_sendWhatsAppDocument: STAFF,
+  api_staff_messageHistory: STAFF,
+  api_whatsappStatus: STAFF,
+  api_founder_whatsappOptOut: FOUNDER,
 
   // -------------------------------------------------------------- sync
   // Revision sync is used by both shells on their own entity sets.
   api_syncChanges: STAFF,
+
+  // ---------------------------------------------------------------- push
+  // Registering/unregistering a device's own push token is not a business
+  // action — both roles may call it for themselves.
+  api_registerPushToken: STAFF,
+  api_unregisterPushToken: STAFF,
+  api_pushStatus: STAFF,
+  // Founder-only: this is the endpoint an external cron calls once a day
+  // (with the founder token) to fire the fees due/overdue reminder.
+  api_founder_sendDailyDigest: FOUNDER,
 };
 
 export interface AuthzResult {
@@ -205,17 +294,29 @@ export function scopeForSession(session: RpcSession): BranchScope {
  * worth recording; reads are not logged.
  */
 export const WRITE_FUNCTIONS = new Set<string>([
-  "api_addStudent", "api_staff_saveStudentDraft", "api_founder_setStudentStatus", "api_founder_mergeStudentDraft",
+  "api_addStudent", "api_staff_saveStudentDraft", "api_founder_setStudentStatus", "api_founder_mergeStudentDraft", "api_founder_studentDraftReject",
   "api_addFeePayment", "api_staff_prepareReceiptDraft",
   "api_founder_paymentDraftApprove", "api_founder_paymentDraftReject",
   "api_founder_finalisePaymentDraft", "api_staff_finalisePaymentDraft",
-  "api_addTeacher", "api_updateTeacherStatus", "api_updateTeacherCompensation", "api_recordTeacherPayout", "api_assignSharedStudent",
+  "api_addTeacher", "api_staff_requestAddTeacher", "api_founder_addTeacherRequestApprove", "api_founder_addTeacherRequestReject",
+  "api_updateTeacherStatus", "api_updateTeacherCompensation", "api_recordTeacherPayout", "api_assignSharedStudent",
   "api_addExpenseEntry", "api_staff_submitExpenseDraft",
   "api_founder_expenseDraftApprove", "api_founder_expenseDraftReject",
-  "api_generateSchoolInvoice",
+  "api_generateSchoolInvoice", "api_staff_submitSchoolInvoiceDraft", "api_founder_finaliseSchoolInvoiceDraft", "api_founder_schoolInvoiceDraftReject",
+  "api_founder_closeMonth", "api_staff_requestReceiptCorrection", "api_founder_voidReceipt", "api_founder_correctionReject",
+  "api_staff_submitPackageExtensionRequest", "api_founder_packageExtensionApprove", "api_founder_packageExtensionReject",
+  "api_staff_submitPaymentProfileChangeRequest", "api_founder_paymentProfileChangeApprove", "api_founder_paymentProfileChangeReject",
+  "api_staff_proposeClosure", "api_founder_authoriseClosure", "api_founder_closureReject", "api_founder_revokeClosure",
+  "api_staff_requestClassCorrection", "api_founder_approveClassCorrection", "api_founder_rejectClassCorrection",
+  "api_staff_submitLateFeeWaiverRequest", "api_founder_lateFeeWaiverApprove", "api_founder_lateFeeWaiverReject",
+  "api_staff_submitInstalmentPlanDraft", "api_founder_instalmentPlanDraftApprove", "api_founder_instalmentPlanDraftReject",
+  "api_staff_generateTermsToken", "api_staff_requestManualTermsAcceptance",
+  "api_founder_manualTermsAcceptanceApprove", "api_founder_manualTermsAcceptanceReject",
+  "api_founder_addAuthorizedEmail", "api_founder_removeAuthorizedEmail", "api_founder_revokeDeviceToken",
   "api_timetableCreate", "api_timetableUpdate", "api_timetableDelete",
   "api_staff_markAttendance", "api_staff_resolveTodaysClass", "api_staff_scheduleSession",
   "api_staff_inquiryQuickAdd", "api_staff_inquiryTransition",
+  "api_staff_sendWhatsApp", "api_staff_sendWhatsAppDocument", "api_founder_whatsappOptOut",
 ]);
 
 /**

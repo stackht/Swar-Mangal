@@ -59,3 +59,12 @@ env/
 .env*.local
 
 tsconfig.tsbuildinfo
+
+# VPS deploy: real env, service-account key and database dumps never go in git
+deploy/.env
+deploy/secrets/
+deploy/backups/
+
+# Raw lead-import exports carry real names/phone numbers — imported into the
+# database directly, never committed to git history.
+swarmangal-leads-overdue-*.csv

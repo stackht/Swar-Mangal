@@ -9,6 +9,7 @@ import '../../state/auth_provider.dart';
 import '../../widgets/atmosphere.dart';
 import '../../widgets/atoms.dart';
 import '../../widgets/music_mark.dart';
+import 'email_otp_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -90,27 +91,18 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: AppSpace.s6),
               Center(
                 child: Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
+                  width: 80,
+                  height: 80,
+                  decoration: const BoxDecoration(
+                    gradient: AppGradients.primary,
                     shape: BoxShape.circle,
-                    border: Border.all(color: scheme.outlineVariant),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x1A000000),
-                        blurRadius: 24,
-                        offset: Offset(0, 10),
-                      ),
-                    ],
+                    boxShadow: [AppShadows.hover],
                   ),
-                  child: Icon(Icons.music_note, size: 34, color: AppColors.primary),
+                  child: const Icon(Icons.music_note, size: 34, color: AppColors.brass),
                 ),
               ),
               const SizedBox(height: AppSpace.s4),
-              Center(
-                child: WaveformMark(active: true, height: 24, color: scheme.primary),
-              ),
+              const Center(child: WaveformMark(active: true, height: 22)),
               const SizedBox(height: AppSpace.s3),
               Text('Welcome',
                   textAlign: TextAlign.center,
@@ -165,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpace.s3),
                           child: Text(auth.error!,
-                              style: const TextStyle(color: AppColors.blockFg, fontSize: 13)),
+                              style: TextStyle(color: AppColors.adaptive(context, AppColors.blockFg), fontSize: 13)),
                         ),
                       LoadingButton(
                         label: _endpoint == 'staff' ? 'Open Staff App' : 'Open Founder App',
@@ -179,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.primaryDark,
-                              side: const BorderSide(color: AppColors.line),
+                              side: BorderSide(color: AppColors.adaptive(context, AppColors.line)),
                               minimumSize: const Size(0, AppSpace.s6),
                             ),
                             onPressed: auth.busy
@@ -199,7 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.primaryDark,
-                              side: const BorderSide(color: AppColors.line),
+                              side: BorderSide(color: AppColors.adaptive(context, AppColors.line)),
                               minimumSize: const Size(0, AppSpace.s6),
                             ),
                             onPressed: auth.busy
@@ -221,14 +213,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: IconButton(
                           tooltip: 'API server settings',
                           onPressed: _showServerSheet,
-                          icon: const Icon(Icons.settings_outlined, size: 20, color: AppColors.muted),
+                          icon: Icon(Icons.settings_outlined, size: 20, color: AppColors.adaptive(context, AppColors.muted)),
                         ),
                       ),
                       Align(
                         child: Text(
                             'v${AppConfig.appVersion} · ${AppConfig.appBuild}'
                             '${auth.isDemo ? ' · demo mode' : ''}',
-                            style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                            style: TextStyle(fontSize: 11, color: AppColors.adaptive(context, AppColors.muted))),
                       ),
                     ],
                   ),
@@ -246,19 +238,57 @@ class _LoginScreenState extends State<LoginScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => Padding(
+      builder: (sheetContext) => Padding(
         padding: EdgeInsets.only(
           left: AppSpace.s4, right: AppSpace.s4, top: AppSpace.s4,
           bottom: MediaQuery.of(context).viewInsets.bottom + AppSpace.s4,
         ),
-        child: _ServerSheet(
-          initial: _customUrl,
-          onSave: (url) async {
-            await SessionStorage.saveApiUrl(url);
-            if (!mounted) return;
-            setState(() => _customUrl = url);
-            Navigator.pop(context);
-          },
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ServerSheet(
+                initial: _customUrl,
+                onSave: (url) async {
+                  await SessionStorage.saveApiUrl(url);
+                  if (!mounted) return;
+                  setState(() => _customUrl = url);
+                  Navigator.pop(context);
+                },
+              ),
+              const SizedBox(height: AppSpace.s5),
+              const SectionTitle('Account'),
+              const SizedBox(height: AppSpace.s2),
+              Text(
+                'Register your email once, verified by a one-time code, and the '
+                'app signs you in automatically — no token to remember.',
+                style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted)),
+              ),
+              const SizedBox(height: AppSpace.s3),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => EmailOtpScreen(endpoint: _endpoint, purpose: 'REGISTER', customUrl: _customUrl),
+                  ));
+                },
+                icon: const Icon(Icons.mark_email_read_outlined, size: 18),
+                label: const Text('Set up my token'),
+              ),
+              const SizedBox(height: AppSpace.s2),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => EmailOtpScreen(endpoint: _endpoint, purpose: 'RESET', customUrl: _customUrl),
+                  ));
+                },
+                icon: const Icon(Icons.lock_reset_outlined, size: 18),
+                label: const Text('Forgot / reset my token'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -300,10 +330,10 @@ class _ServerSheetState extends State<_ServerSheet> {
             ),
           ),
           const SizedBox(height: AppSpace.s3),
-          const Text(
+          Text(
             'Point the app at the Swar Mangal Railway gateway, then enter the '
             'device token that gateway issues.',
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
+            style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted)),
           ),
           const SizedBox(height: AppSpace.s4),
           LoadingButton(label: 'Save', icon: Icons.save, onPressed: () => widget.onSave(_c.text.trim())),

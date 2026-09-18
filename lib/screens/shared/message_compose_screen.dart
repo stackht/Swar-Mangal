@@ -8,8 +8,10 @@ import '../../models/models.dart';
 import '../../state/auth_provider.dart';
 import '../../widgets/atoms.dart';
 
-/// Message compose — generate a copy-ready message for a student (fee / renewal /
-/// terms / teacher reminder). COPY_ONLY on the server; this screen never sends.
+/// Message compose. The server writes the text from the student's real record;
+/// staff read it, may edit it, then send it with ONE tap to the student's
+/// registered WhatsApp number — or copy it when WhatsApp sending is off.
+/// Nothing is ever sent without that tap.
 class MessageComposeScreen extends StatefulWidget {
   const MessageComposeScreen({
     super.key,
@@ -19,6 +21,7 @@ class MessageComposeScreen extends StatefulWidget {
     this.parentName = '',
     this.instrument = '',
     this.branch = '',
+    this.initialType = 'FEE_REMINDER',
   });
   final bool staff;
   final String studentId;
@@ -26,16 +29,26 @@ class MessageComposeScreen extends StatefulWidget {
   final String parentName;
   final String instrument;
   final String branch;
+  final String initialType;
   @override
   State<MessageComposeScreen> createState() => _MessageComposeScreenState();
 }
 
 class _MessageComposeScreenState extends State<MessageComposeScreen> {
-  String _type = 'FEE_REMINDER';
+  late String _type = _types.contains(widget.initialType) ? widget.initialType : 'FEE_REMINDER';
   CommMessage? _msg;
+  final _body = TextEditingController();
   bool _busy = false;
+  bool _sending = false;
   String? _error;
+  String? _sendError;
+  WaMessage? _sent;
   bool _copied = false;
+  List<WaMessage> _history = const [];
+  // One key per composed message, reused on retry so a flaky network can
+  // never deliver it twice. A new message (new text) gets a new key.
+  String _intentKey = '';
+  String _keyForText = '';
 
   static const _types = [
     'FEE_REMINDER',
@@ -44,9 +57,33 @@ class _MessageComposeScreenState extends State<MessageComposeScreen> {
     'OVERDUE_ACCRUING',
     'RENEWAL',
     'TERMS',
-    'TEACHER_FEE_DUE',
     'ABSENT_TODAY',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  @override
+  void dispose() {
+    _body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadHistory() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    try {
+      final rows = await auth.service!.messageHistory(widget.studentId);
+      if (mounted) setState(() => _history = rows);
+    } on ApiException {
+      // history is supplementary; the compose flow works without it
+    } on ApiUnreachable {
+      // same
+    }
+  }
 
   Future<void> _generate() async {
     final auth = context.read<AuthProvider>();
@@ -54,21 +91,21 @@ class _MessageComposeScreenState extends State<MessageComposeScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _sendError = null;
       _msg = null;
+      _sent = null;
       _copied = false;
     });
     try {
       final m = await auth.service!.staffCommGenerate({
         'type': _type,
         'studentId': widget.studentId,
-        'studentName': widget.studentName,
-        'parentName': widget.parentName,
-        'instrument': widget.instrument,
         'branch': widget.branch,
       });
       if (!mounted) return;
       setState(() {
         _msg = m;
+        _body.text = m.body;
         _busy = false;
       });
     } on ApiException catch (e) {
@@ -87,8 +124,7 @@ class _MessageComposeScreenState extends State<MessageComposeScreen> {
   }
 
   Future<void> _copy() async {
-    final text = '${_msg?.subject ?? ''}\n\n${_msg?.body ?? ''}';
-    await Clipboard.setData(ClipboardData(text: text));
+    await Clipboard.setData(ClipboardData(text: _body.text));
     if (!mounted) return;
     setState(() => _copied = true);
     ScaffoldMessenger.of(context)
@@ -96,13 +132,75 @@ class _MessageComposeScreenState extends State<MessageComposeScreen> {
       ..showSnackBar(const SnackBar(content: Text('Message copied to clipboard.')));
   }
 
+  Future<void> _send() async {
+    final auth = context.read<AuthProvider>();
+    final msg = _msg;
+    if (auth.service == null || msg == null) return;
+    final text = _body.text.trim();
+    if (text.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Send on WhatsApp?'),
+        content: Text(
+          'To ${msg.recipientName}'
+          '${msg.recipientPhone.isNotEmpty ? ' (${msg.recipientPhone})' : ''}'
+          ', the number registered for ${widget.studentName}. A sent message cannot be recalled.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    if (_keyForText != text) {
+      _intentKey = 'WA-${DateTime.now().microsecondsSinceEpoch}';
+      _keyForText = text;
+    }
+    setState(() {
+      _sending = true;
+      _sendError = null;
+    });
+    try {
+      final sent = await auth.service!.sendWhatsApp(
+        studentId: widget.studentId,
+        kind: msg.kind,
+        body: text,
+        clientIntentKey: _intentKey,
+      );
+      if (!mounted) return;
+      setState(() {
+        _sent = sent;
+        _sending = false;
+      });
+      _loadHistory();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sendError = e.message;
+        _sending = false;
+      });
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() {
+        // Unknown whether it went out: the same key makes a retry safe.
+        _sendError = '${e.message} If you retry, it will not send twice.';
+        _sending = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final msg = _msg;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Compose message'),
         actions: [
-          if (_msg != null)
+          if (msg != null)
             IconButton(
               tooltip: _copied ? 'Copied' : 'Copy text',
               icon: Icon(_copied ? Icons.check_circle_outline : Icons.copy),
@@ -117,22 +215,22 @@ class _MessageComposeScreenState extends State<MessageComposeScreen> {
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.s4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('FOR: ${widget.studentName}',
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text('FOR: ${widget.studentName}', style: const TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: AppSpace.s3),
-                const Text('Message type', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.muted)),
+                Text('Message type',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.adaptive(context, AppColors.muted))),
                 const SizedBox(height: AppSpace.s2),
                 Wrap(
                   spacing: AppSpace.s2,
                   runSpacing: AppSpace.s2,
                   children: _types.map((t) {
-                    final sel = _type == t;
                     return ChoiceChip(
                       label: Text(t.replaceAll('_', ' '), style: const TextStyle(fontSize: 12)),
-                      selected: sel,
+                      selected: _type == t,
                       onSelected: (_) => setState(() {
                         _type = t;
                         _msg = null;
+                        _sent = null;
                       }),
                     );
                   }).toList(),
@@ -141,72 +239,128 @@ class _MessageComposeScreenState extends State<MessageComposeScreen> {
             ),
           ),
           const SizedBox(height: AppSpace.s3),
-          LoadingButton(
-            label: 'Generate message',
-            icon: Icons.auto_fix_high,
-            busy: _busy,
-            onPressed: _generate,
-          ),
+          LoadingButton(label: 'Generate message', icon: Icons.auto_fix_high, busy: _busy, onPressed: _generate),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: AppSpace.s3),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpace.s3),
-                  child: ErrorView(_error!, compact: true),
-                ),
-              ),
+              child: ErrorView(_error!, compact: true),
             ),
-          if (_msg != null) ...[
+          if (msg != null) ...[
             const SizedBox(height: AppSpace.s4),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpace.s4),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    const Text('TO: ', style: TextStyle(fontSize: 13, color: AppColors.muted)),
-                    Expanded(
-                      child: Text(_msg!.recipientName.isNotEmpty ? _msg!.recipientName : '(unknown)',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                    ),
-                  ]),
+                  Text(
+                    'TO: ${msg.recipientName.isNotEmpty ? msg.recipientName : '(unknown)'}'
+                    '${msg.recipientPhone.isNotEmpty ? ' · ${msg.recipientPhone}' : ''}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: AppSpace.s2),
-                  Text(_msg!.subject,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                  Text(msg.subject,
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.adaptive(context, AppColors.primary))),
                   const SizedBox(height: AppSpace.s2),
-                  SelectableText(_msg!.body,
-                      style: const TextStyle(fontSize: 14, height: 1.45, color: AppColors.ink)),
+                  TextField(
+                    controller: _body,
+                    maxLines: null,
+                    minLines: 5,
+                    enabled: _sent == null,
+                    decoration: const InputDecoration(helperText: 'You can edit the text before sending.'),
+                    style: const TextStyle(fontSize: 14, height: 1.45),
+                  ),
                 ]),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpace.s2),
-              child: Card(
-                color: AppColors.infoBg,
+            if (msg.warnings.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpace.s2),
+                child: Card(
+                  color: AppColors.adaptive(context, AppColors.warnBg),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpace.s3),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      for (final w in msg.warnings)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text('• $w', style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.warnFg))),
+                        ),
+                    ]),
+                  ),
+                ),
+              ),
+            const SizedBox(height: AppSpace.s4),
+            if (msg.canWhatsApp)
+              LoadingButton(
+                label: _sent == null ? 'Send on WhatsApp' : 'Sent ✓',
+                icon: Icons.send_outlined,
+                busy: _sending,
+                onPressed: _sent == null ? _send : null,
+              )
+            else
+              Text(
+                'WhatsApp sending is off (or this student has no valid registered number). Copy the message and send it by hand.',
+                style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted)),
+              ),
+            if (_sent != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpace.s3),
+                child: Card(
+                  color: _sent!.status == 'DEMO' ? AppColors.adaptive(context, AppColors.warnBg) : AppColors.adaptive(context, AppColors.okBg),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpace.s3),
+                    child: Text(
+                        _sent!.status == 'DEMO'
+                            ? 'Demo only — nothing was sent to WhatsApp.'
+                            : 'Sent to ${_sent!.to} · ${_sent!.status}.',
+                        style: TextStyle(
+                            fontSize: 12, color: _sent!.status == 'DEMO' ? AppColors.adaptive(context, AppColors.warnFg) : AppColors.adaptive(context, AppColors.okFg))),
+                  ),
+                ),
+              ),
+            if (_sendError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpace.s3),
+                child: ErrorView(_sendError!, compact: true),
+              ),
+            const SizedBox(height: AppSpace.s2),
+            OutlinedButton.icon(
+              onPressed: _copy,
+              icon: Icon(_copied ? Icons.check_circle_outline : Icons.copy),
+              label: Text(_copied ? 'Copied ✓' : 'Copy message'),
+            ),
+          ],
+          if (_history.isNotEmpty) ...[
+            const SectionTitle('Messages sent to this student'),
+            for (final h in _history)
+              Card(
+                margin: const EdgeInsets.only(bottom: AppSpace.s2),
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpace.s3),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Icon(Icons.info_outline, size: 16, color: AppColors.infoFg),
-                    const SizedBox(width: AppSpace.s2),
-                    Expanded(
-                      child: Text(
-                        '${_msg!.copyOnly ? 'COPY_ONLY — provider send is disabled.' : ''}'
-                        '${_msg!.typeCorrected ? ' Resolved to ${_msg!.typeResolved} (requested ${_msg!.typeRequested}).' : ''}'
-                        '${_msg!.warnings.isNotEmpty ? ' Note: ${_msg!.warnings.join('; ')}' : ''}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.infoFg),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Expanded(
+                        child: Text(
+                          h.fileName.isNotEmpty ? h.fileName : h.kind.replaceAll('_', ' '),
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
                       ),
-                    ),
+                      StatusBadge(h.status),
+                    ]),
+                    const SizedBox(height: 2),
+                    Text('${h.when} · ${h.to}', style: TextStyle(fontSize: 11, color: AppColors.adaptive(context, AppColors.muted))),
+                    if (h.status == 'FAILED' && h.error.isNotEmpty)
+                      Text(h.error, style: TextStyle(fontSize: 11, color: AppColors.adaptive(context, AppColors.blockFg))),
+                    if (h.body.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(h.body,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
+                      ),
                   ]),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpace.s4),
-            LoadingButton(
-              label: _copied ? 'Copied ✓' : 'Copy message',
-              icon: _copied ? Icons.check_circle_outline : Icons.copy,
-              busy: false,
-              onPressed: _copy,
-            ),
           ],
         ],
       ),

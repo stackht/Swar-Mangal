@@ -529,6 +529,7 @@ async function recentReceipts(studentId: string, name: string): Promise<Record<s
 async function searchReceipts(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   const q = s(arg["q"] ?? arg["studentName"] ?? arg["receiptNo"] ?? "");
   const status = s(arg["status"]);
+  const cc = s(arg["classCode"] ?? "ALL").toUpperCase();
   let sql = `select id, receipt_no, party_name, amount, payment_mode, linked_url, status, branch, created_at::text, student_id,
                     payment_date::text, txn_id, fee_period_from::text, fee_period_to::text, void_reason from receipts where 1=1`;
   const params: unknown[] = [];
@@ -536,7 +537,13 @@ async function searchReceipts(arg: Record<string, unknown>, scope: BranchScope):
     params.push(status);
     sql += ` and status ilike $${params.length}`;
   }
-  const rows = (await query<Record<string, unknown>>(sql, params)).filter((r) => moneyInScope(scope, r.branch));
+  const rows = (await query<Record<string, unknown>>(sql, params)).filter((r) => {
+    if (!moneyInScope(scope, r.branch)) return false;
+    if (cc === "ALL") return true;
+    const isGmc = cc === "GMC" && recordBranch(r.branch) === "GOREGAON";
+    const isKmc = cc === "KMC" && recordBranch(r.branch) !== "GOREGAON";
+    return isGmc || isKmc;
+  });
   let filtered = rows.map((r) => ({
     receiptNo: s(r.receipt_no),
     studentId: s(r.student_id),

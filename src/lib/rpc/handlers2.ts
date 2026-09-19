@@ -117,7 +117,7 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_staff_sessionRoster":
       return sessionRoster(arg, scope);
     case "api_staff_feeDueList":
-      return feeDueList(scope);
+      return feeDueList(arg, scope);
     case "api_staff_inquiryQueue":
       return inquiryQueue(arg, scope);
     case "api_staff_inquiryQuickAdd":
@@ -253,8 +253,10 @@ async function dashboard(arg: Record<string, unknown>, scope: BranchScope): Prom
  * so instead of calling them overdue, which is what this used to do to every
  * active student.
  */
-async function dueBuckets(scope: BranchScope) {
-  const students = (await acadStudents()).filter((x) => inScope(scope, x.branch));
+async function dueBuckets(scope: BranchScope, requestedBranch: string = "ALL") {
+  const students = (await acadStudents()).filter(
+    (x) => inScope(scope, x.branch) && matchesRequestedBranch(requestedBranch, x.branch),
+  );
   const today = todayIso();
   const by: Record<FeeState, typeof students> = {
     OVERDUE: [], DUE_TODAY: [], DUE_SOON: [], PAID: [], UNKNOWN: [], INACTIVE: [],
@@ -313,8 +315,10 @@ async function pendingApprovalsCount(scope: BranchScope): Promise<number> {
 }
 
 /** Today's attendance marks vs the active roster — honest counts, not a guess. */
-async function attendanceSummaryToday(scope: BranchScope, today: string): Promise<Record<string, unknown>> {
-  const active = (await acadStudents()).filter((x) => inScope(scope, x.branch) && s(x.status).toUpperCase() === "ACTIVE");
+async function attendanceSummaryToday(scope: BranchScope, today: string, requestedBranch: string = "ALL"): Promise<Record<string, unknown>> {
+  const active = (await acadStudents()).filter(
+    (x) => inScope(scope, x.branch) && matchesRequestedBranch(requestedBranch, x.branch) && s(x.status).toUpperCase() === "ACTIVE",
+  );
   const marks = (
     await query<{ student_id: string; status: string; branch: string }>(
       `select a.student_id, a.status, coalesce(s.branch, '') as branch
@@ -322,7 +326,7 @@ async function attendanceSummaryToday(scope: BranchScope, today: string): Promis
        where a.session_date = $1`,
       [today],
     )
-  ).filter((r) => inScope(scope, r.branch));
+  ).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch));
   const byStudent = new Map(marks.map((m) => [m.student_id, s(m.status).toUpperCase()]));
   const counts = { PRESENT: 0, ABSENT: 0, EXCUSED: 0, LATE: 0 } as Record<string, number>;
   let marked = 0;
@@ -383,17 +387,17 @@ async function teacherAttendanceReport(arg: Record<string, unknown>, scope: Bran
 }
 
 /** The full set of sections both dashboards render. Read-only; writes nothing. */
-async function dashboardOverviewSections(scope: BranchScope, today: string) {
+async function dashboardOverviewSections(scope: BranchScope, today: string, requestedBranch: string = "ALL") {
   const [classesToday, inquiryRows, { by }] = await Promise.all([
-    todaysClasses({ date: today }, scope),
+    todaysClasses({ date: today, branch: requestedBranch }, scope),
     query<Record<string, unknown>>(
       `select id, name, phone, branch, status, next_contact_date::text, last_contacted_at::text from inquiries`,
-    ).then((rows) => rows.filter((r) => inScope(scope, r.branch))),
-    dueBuckets(scope),
+    ).then((rows) => rows.filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch))),
+    dueBuckets(scope, requestedBranch),
   ]);
   const classRows = (classesToday.rows as Record<string, unknown>[]) ?? [];
   const [attendance, callToday, feesDueTodaySample] = await Promise.all([
-    attendanceSummaryToday(scope, today),
+    attendanceSummaryToday(scope, today, requestedBranch),
     callTheseToday(scope, inquiryRows),
     studentsToRpc(by.DUE_TODAY.slice(0, 5)),
   ]);
@@ -1367,16 +1371,17 @@ async function markAttendance(arg: Record<string, unknown>, scope: BranchScope, 
  * "Home" screen (the founder is asked for the same operational to-do list,
  * plus approvals and revenue the staff screen doesn't carry).
  */
-async function buildTodoCards(scope: BranchScope, today: string, by: Awaited<ReturnType<typeof dueBuckets>>["by"], forFounder: boolean) {
+async function buildTodoCards(scope: BranchScope, today: string, by: Awaited<ReturnType<typeof dueBuckets>>["by"], forFounder: boolean, requestedBranch: string = "ALL") {
   const drafts = (
     await query<{ branch: string }>(`select branch from payment_drafts where status = 'SUBMITTED'`)
-  ).filter((r) => inScope(scope, r.branch));
+  ).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch));
   const state = (n: number) => (n > 0 ? "ATTENTION" : "OPEN");
   // Classes from the last week that nobody has answered (the mark that pays teachers).
-  const unmarked = (await expectedClassesBetween(addDays(today, -6), addDays(today, 1), { scope })).filter((c) => !c.resolved && !c.notRequired);
+  const unmarked = (await expectedClassesBetween(addDays(today, -6), addDays(today, 1), { scope }))
+    .filter((c) => !c.resolved && !c.notRequired && matchesRequestedBranch(requestedBranch, c.branch));
   const inquiryRows = (await query<Record<string, unknown>>(
     `select id, name, phone, branch, status, next_contact_date::text, last_contacted_at::text from inquiries`,
-  )).filter((r) => inScope(scope, r.branch));
+  )).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch));
   const callToday = await callTheseToday(scope, inquiryRows);
   // Both computed lazily on this same read — no cron, same shape as the
   // dormancy sweep: nobody has to remember to check either of these.
@@ -1387,7 +1392,7 @@ async function buildTodoCards(scope: BranchScope, today: string, by: Awaited<Ret
          and not exists (select 1 from terms_acceptance_tokens t where t.student_id = s.id and t.status = 'ACCEPTED')
          and not exists (select 1 from manual_terms_acceptance_requests m where m.student_id = s.id and m.status = 'APPROVED')`,
     )
-  ).filter((r) => inScope(scope, r.branch));
+  ).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch));
   const pausedTooLong = (
     await query<{ branch: string }>(
       `select branch from students_acad
@@ -1395,7 +1400,7 @@ async function buildTodoCards(scope: BranchScope, today: string, by: Awaited<Ret
          and status_changed_at <= now() - ($1::int * interval '1 day')`,
       [PAUSED_REVIEW_AFTER_DAYS],
     )
-  ).filter((r) => inScope(scope, r.branch));
+  ).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch));
   const cards = [
     { key: "DELIVERY_NOT_MARKED", title: "Classes not answered", label: "Classes not answered", priority: "HIGH", count: unmarked.length, state: state(unmarked.length), targetView: "todayClasses", emptyText: "Every class this week is answered", actionable: true },
     { key: "FEES_OVERDUE", title: "Fees Overdue", label: "Fees Overdue", priority: "HIGH", count: by.OVERDUE.length, state: state(by.OVERDUE.length), targetView: "students", emptyText: "Nothing overdue", actionable: true, bucket: "OVERDUE" },
@@ -1416,13 +1421,19 @@ async function buildTodoCards(scope: BranchScope, today: string, by: Awaited<Ret
 
 async function todaysTasks(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
   // Every count below is real: no placeholder numbers.
-  const { by, today } = await dueBuckets(scope);
+  const requestedBranch = s(arg["branch"] ?? "ALL");
+  const { by, today } = await dueBuckets(scope, requestedBranch);
   const inquiries = (
     await query<{ branch: string; status: string }>(`select branch, status from inquiries`)
-  ).filter((r) => inScope(scope, r.branch) && !["CONVERTED", "LOST", "CLOSED"].includes(s(r.status).toUpperCase()));
+  ).filter(
+    (r) =>
+      inScope(scope, r.branch) &&
+      matchesRequestedBranch(requestedBranch, r.branch) &&
+      !["CONVERTED", "LOST", "CLOSED"].includes(s(r.status).toUpperCase()),
+  );
   const [cards, overview] = await Promise.all([
-    buildTodoCards(scope, today, by, false),
-    dashboardOverviewSections(scope, today),
+    buildTodoCards(scope, today, by, false, requestedBranch),
+    dashboardOverviewSections(scope, today, requestedBranch),
   ]);
   return ok({ cards, mode: "COPY_ONLY", today, openInquiries: inquiries.length, readAt: new Date().toISOString(), ...overview });
 }
@@ -1653,11 +1664,12 @@ async function sessionRoster(arg: Record<string, unknown>, scope: BranchScope): 
   return ok({ scheduledSessionId: s(arg["scheduledSessionId"]), status: "OPEN", closed: false, unanswered: true, sessionDate: s(session?.session_date) || todayIso(), sessionCredit: 1, total: rows.length, present: 0, absent: 0, excused: 0, notMarked: rows.length, rows });
 }
 
-async function feeDueList(scope: BranchScope): Promise<Record<string, unknown>> {
-  const { by } = await dueBuckets(scope);
+async function feeDueList(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const requestedBranch = s(arg["branch"] ?? "ALL");
+  const { by } = await dueBuckets(scope, requestedBranch);
   const pending = (
     await query<{ branch: string }>(`select branch from payment_drafts where status = 'SUBMITTED'`)
-  ).filter((r) => inScope(scope, r.branch));
+  ).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch));
   return ok({
     counts: {
       dueToday: by.DUE_TODAY.length,

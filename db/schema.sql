@@ -1353,3 +1353,11 @@ create table if not exists teacher_add_requests (
 );
 create unique index if not exists teacher_add_requests_intent_unique
   on teacher_add_requests (client_intent_key) where client_intent_key is not null;
+
+-- The teacher chosen when a student is added/edited. Distinct from the
+-- attendance-derived "teacher" shown on the profile once real classes have
+-- happened (that one stays authoritative for payroll — never overwritten by
+-- this) — this is only the fallback shown before any attendance exists, and
+-- the default staff pick when scheduling this student's first class.
+alter table students_acad add column if not exists assigned_teacher_id text;
+alter table student_drafts add column if not exists teacher_id text;

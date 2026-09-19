@@ -35,26 +35,44 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   void initState() {
     super.initState();
     _loadReceipts();
-    _loadDetail();
     if (widget.staff) _loadHub();
   }
 
-  /// Best-effort richer detail (backend profile endpoint). Live deployments
-  /// without the endpoint keep the simpler profile — never faked.
-  Future<void> _loadDetail() async {
+  /// The one and only receipts source: api_studentProfile's `receipts`,
+  /// computed server-side by student_id (recentReceipts) — never a fuzzy
+  /// name search, so it can never pick up another student's payments.
+  /// Voided/superseded receipts are dropped from the visible list; only the
+  /// receipt that actually stands today is shown.
+  Future<void> _loadReceipts() async {
     final auth = context.read<AuthProvider>();
     if (auth.service == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final d = await auth.service!.studentProfile(
         widget.student.studentId,
         branch: auth.branch ?? 'ALL',
       );
       if (!mounted) return;
-      setState(() => _detail = d);
-    } on ApiException {
-      // profile endpoint unavailable — fall back to passed-in Student
-    } on ApiUnreachable {
-      // same
+      setState(() {
+        _detail = d;
+        _receipts = d.receipts.where((r) => !r.excluded).toList();
+        _busy = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _busy = false;
+      });
+    } on ApiUnreachable catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _busy = false;
+      });
     }
   }
 
@@ -114,40 +132,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       if (!mounted) return;
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
-
-  Future<void> _loadReceipts() async {
-    final auth = context.read<AuthProvider>();
-    if (auth.service == null) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final rows = widget.staff
-          ? await auth.service!.searchReceipts(
-              q: widget.student.studentName,
-              classCode: _classFor(auth.branch ?? ''),
-            )
-          : await auth.service!.searchReceipts(studentName: widget.student.studentName);
-      if (!mounted) return;
-      setState(() {
-        _receipts = rows;
-        _busy = false;
-      });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _busy = false;
-      });
-    } on ApiUnreachable catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _busy = false;
-      });
     }
   }
 
@@ -211,11 +195,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     );
   }
 
-  String _classFor(String branch) {
-    if (branch == 'KANDIVALI') return 'KMC';
-    if (branch == 'GOREGAON') return 'GMC';
-    return 'ALL';
-  }
 
   @override
   Widget build(BuildContext context) {

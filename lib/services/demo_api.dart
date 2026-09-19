@@ -301,6 +301,17 @@ class DemoApiClient extends ApiClient {
         };
       case 'api_founder_approvalsList':
         return _approvalsList();
+      case 'api_founder_approvalItemDetail':
+        return {
+          'ok': true,
+          'type': a['type'],
+          'itemId': a['itemId'],
+          'fields': {
+            'id': a['itemId'],
+            'status': 'SUBMITTED',
+            'note': 'Demo mode shows a placeholder here — the real screen returns every column of the underlying record.',
+          },
+        };
       case 'api_founder_listPaymentDrafts':
         return _paymentDraftQueue();
       case 'api_founder_paymentDraftApprove':
@@ -1887,6 +1898,8 @@ class DemoApiClient extends ApiClient {
     final sid = _s(a['studentId'] ?? '');
     final all = _studentRows();
     final s = sid.isEmpty ? all.first : (all.where((r) => r['studentId'] == sid).isNotEmpty ? all.firstWhere((r) => r['studentId'] == sid) : all.first);
+    // Scoped to this exact student, same guarantee as _studentProfileDetail.
+    final myReceipts = _receiptRows().where((r) => r['studentId'] == s['studentId']).toList();
     return {
       'ok': true,
       'profile': {
@@ -1895,7 +1908,12 @@ class DemoApiClient extends ApiClient {
         'fee': '${s['lastReceiptAmount'] ?? 5000}',
         'dueDate': s['nextDueDate'],
       },
-      'fees': {'available': true, 'total': 15400, 'capped': false, 'rows': []},
+      'fees': {
+        'available': true,
+        'total': myReceipts.fold<num>(0, (a, r) => a + (r['amount'] as num? ?? 0)),
+        'capped': false,
+        'rows': myReceipts,
+      },
       'pending': {
         'available': true,
         'rows': [
@@ -1964,16 +1982,19 @@ class DemoApiClient extends ApiClient {
         : rows.where((r) => r['studentId'] == sid).isNotEmpty
             ? rows.firstWhere((r) => r['studentId'] == sid)
             : rows.first;
+    // Scoped to this exact student — matches the real backend's
+    // student_id-only lookup, never a fuzzy name search.
+    final myReceipts = _receiptRows().where((r) => r['studentId'] == s['studentId']).toList();
     return {
       'ok': true,
       'student': {
         ...s,
-        'teacherId': 'T-001',
+        'teacherId': s['teacherId'] ?? 'T-001',
         'teacherName': s['teacher'],
         'branch': s['location'],
       },
-      'teacher': {'teacherId': 'T-001', 'teacherName': s['teacher']},
-      'receipts': _receiptRows().take(3).toList(),
+      'teacher': {'teacherId': s['teacherId'] ?? 'T-001', 'teacherName': s['teacher']},
+      'receipts': myReceipts,
       'attendance': [],
     };
   }

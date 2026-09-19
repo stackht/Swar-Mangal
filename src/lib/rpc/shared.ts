@@ -107,11 +107,12 @@ export interface AcadStudent {
   cycle_end: string | null;
   last_payment_date: string | null;
   admission_source: string | null;
+  assigned_teacher_id: string | null;
 }
 
 const STUDENT_COLUMNS = `id, name, guardian_name, phone, email, instrument, branch, batch, fee_plan, status, notes,
      fee_plan_name, monthly_fee, fee_cycle_months, fee_due_day,
-     next_due_date::text, cycle_start::text, cycle_end::text, last_payment_date::text, admission_source`;
+     next_due_date::text, cycle_start::text, cycle_end::text, last_payment_date::text, admission_source, assigned_teacher_id`;
 
 export interface AcadTeacher {
   id: string;
@@ -242,6 +243,26 @@ async function sideDataFor(xs: AcadStudent[]): Promise<Map<string, StudentSideDa
     if (r) {
       row.lastReceiptNo = s(r.receipt_no);
       row.lastReceiptAmount = String(n(r.amount));
+    }
+  }
+
+  // Fallback only — a student with no attendance yet has no real
+  // "who taught them" to derive, so show the teacher picked at add-time
+  // instead of leaving the profile blank. Once real attendance exists,
+  // that stays authoritative for payroll and is never overwritten by this.
+  const needsAssigned = xs.filter((x) => !out.get(x.id)!.teacherId && s(x.assigned_teacher_id));
+  if (needsAssigned.length) {
+    const assignedIds = [...new Set(needsAssigned.map((x) => s(x.assigned_teacher_id)))];
+    const assignedTeachers = await query<{ id: string; name: string }>(
+      `select id, name from teachers_acad where id = any($1)`,
+      [assignedIds],
+    );
+    const teacherNameById = new Map(assignedTeachers.map((t) => [t.id, t.name]));
+    for (const x of needsAssigned) {
+      const row = out.get(x.id)!;
+      const id = s(x.assigned_teacher_id);
+      row.teacherId = id;
+      row.teacherName = teacherNameById.get(id) ?? "";
     }
   }
   return out;

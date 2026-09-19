@@ -128,6 +128,8 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
       return inquiryDetail(arg, scope);
     case "api_founder_approvalsList":
       return founderApprovals();
+    case "api_founder_approvalItemDetail":
+      return approvalItemDetail(arg);
     case "api_founder_auditLog":
       return auditLog(arg);
     case "api_staff_listMyApprovals":
@@ -1984,6 +1986,42 @@ async function inquiryTransition(arg: Record<string, unknown>, scope: BranchScop
 }
 
 // -------------------------------------------------------------- approvals
+
+/** Every approval item's full underlying record — the card in the list is
+ * a condensed summary; this is every column so the founder never has to
+ * decide on a guess. Read-only, changes nothing. */
+const APPROVAL_DETAIL_TABLE: Record<string, string> = {
+  PAYMENT_DRAFT: "payment_drafts",
+  EXPENSE_DRAFT: "expense_drafts",
+  STUDENT_DRAFT: "student_drafts",
+  RECEIPT_CORRECTION: "receipt_corrections",
+  SCHOOL_INVOICE_DRAFT: "school_invoice_drafts",
+  PACKAGE_EXTENSION: "package_extension_requests",
+  PAYMENT_PROFILE_CHANGE: "payment_profile_change_requests",
+  CLOSURE: "closure_calendar",
+  CLASS_CORRECTION: "class_outcome_corrections",
+  LATE_FEE_WAIVER: "late_fee_waiver_requests",
+  INSTALMENT_PLAN: "instalment_plan_drafts",
+  MANUAL_TERMS_ACCEPTANCE: "manual_terms_acceptance_requests",
+  TEACHER_ADD_REQUEST: "teacher_add_requests",
+};
+
+async function approvalItemDetail(arg: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const type = s(arg["type"]).trim().toUpperCase();
+  const itemId = s(arg["itemId"]).trim();
+  if (!type || !itemId) return { ok: false, code: "MISSING", error: "type + itemId required" };
+  const table = APPROVAL_DETAIL_TABLE[type];
+  if (!table) return { ok: false, code: "UNKNOWN_TYPE", error: `No detail view for ${type}` };
+  const row = await queryOne<Record<string, unknown>>(`select * from ${table} where id = $1`, [itemId]);
+  if (!row) return { ok: false, code: "NOT_FOUND", error: `No ${type} record ${itemId}` };
+  const fields: Record<string, string> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (v === null || v === undefined || v === "") continue;
+    fields[k] = v instanceof Date ? v.toISOString() : String(v);
+  }
+  return ok({ type, itemId, fields });
+}
+
 async function founderApprovals(): Promise<Record<string, unknown>> {
   const drafts = await query<Record<string, unknown>>(
     `select id, status, student_id, student_name, amount, payment_mode, branch, terms_status, submitted_at::text,

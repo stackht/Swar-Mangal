@@ -37,10 +37,14 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
   String _feeCycle = 'Monthly';
   String _plan = '';
   String _admissionSource = '';
+  String _teacherId = '';
   int _feeDueDay = 5;
   bool _busy = false;
   String? _result; // server message after a save
   bool _success = false;
+
+  List<Teacher> _teachers = [];
+  bool _teachersBusy = true;
 
   bool get _editing => widget.edit != null;
 
@@ -57,7 +61,26 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
       _classCode = e.classCode == 'KMC' ? 'KMC' : 'GMC';
       _plan = e.feePlan;
       _admissionSource = e.admissionSource ?? '';
+      _teacherId = e.teacherId;
       if (e.feeDueDay.isNotEmpty) _feeDueDay = int.tryParse(e.feeDueDay) ?? 5;
+    }
+    _loadTeachers();
+  }
+
+  Future<void> _loadTeachers() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    try {
+      final rows = await auth.service!.listTeachers();
+      if (!mounted) return;
+      setState(() {
+        _teachers = rows.where((t) => t.status.toUpperCase() != 'INACTIVE').toList();
+        _teachersBusy = false;
+      });
+    } on ApiException {
+      if (mounted) setState(() => _teachersBusy = false);
+    } on ApiUnreachable {
+      if (mounted) setState(() => _teachersBusy = false);
     }
   }
 
@@ -96,6 +119,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               'lenient': true,
               if (_plan.isNotEmpty) 'feeCycleType': _plan,
               if (_admissionSource.isNotEmpty) 'admissionSource': _admissionSource,
+              if (_teacherId.isNotEmpty) 'teacherId': _teacherId,
             }
           : {
               'studentName': _name.text.trim(),
@@ -110,6 +134,8 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
               'feeDueDay': _feeDueDay,
               'instrument': _instrument.text.trim(),
               if (_admissionSource.isNotEmpty) 'admissionSource': _admissionSource,
+              if (_teacherId.isNotEmpty) 'teacherId': _teacherId,
+              if (_editing) 'studentId': widget.edit!.studentId,
             };
       final r = _editing
           ? await auth.service!.saveStudentDraft(payload) // EDIT draft → founder merge
@@ -254,6 +280,35 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                       child: Text(planSummary(_plan),
                           style: TextStyle(fontSize: 12, color: AppColors.adaptive(context, AppColors.muted))),
                     ),
+                ]),
+              ),
+            ),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.s4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('ASSIGN TEACHER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.adaptive(context, AppColors.muted))),
+                  const SizedBox(height: AppSpace.s2),
+                  _teachersBusy
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: AppSpace.s2),
+                          child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : DropdownButtonFormField<String>(
+                          initialValue: _teacherId.isEmpty ? null : _teacherId,
+                          decoration: const InputDecoration(labelText: 'Teacher (optional)'),
+                          hint: const Text('No teacher assigned yet'),
+                          items: [
+                            for (final t in _teachers)
+                              DropdownMenuItem(value: t.teacherId, child: Text('${t.teacherName}${t.primaryRole.isNotEmpty ? ' · ${t.primaryRole}' : ''}')),
+                          ],
+                          onChanged: (v) => setState(() => _teacherId = v ?? ''),
+                        ),
+                  const SizedBox(height: AppSpace.s1),
+                  Text(
+                    'The teacher who actually takes attendance is always what counts for payroll — this is just who the student starts with.',
+                    style: TextStyle(fontSize: 11, color: AppColors.adaptive(context, AppColors.muted)),
+                  ),
                 ]),
               ),
             ),

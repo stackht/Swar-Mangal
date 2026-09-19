@@ -251,6 +251,67 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
     }
   }
 
+  /// Every column behind this card — read-only, changes nothing. Field names
+  /// come straight from the database, so they're shown as-is (readable
+  /// enough on their own) rather than re-labelled per type.
+  Future<void> _showDetails(ApprovalItem item) async {
+    final auth = context.read<AuthProvider>();
+    if (auth.service == null) return;
+    Map<String, String>? fields;
+    String? error;
+    try {
+      fields = await auth.service!.founderApprovalItemDetail(item.type, item.itemId);
+    } on ApiException catch (e) {
+      error = e.message;
+    } on ApiUnreachable catch (e) {
+      error = e.message;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (sheetContext, scrollController) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.s4),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text('${item.entity} — full record', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(sheetContext)),
+              ]),
+              Text(item.itemId, style: TextStyle(fontSize: 12, color: AppColors.adaptive(sheetContext, AppColors.muted))),
+              const SizedBox(height: AppSpace.s3),
+              Expanded(
+                child: error != null
+                    ? ErrorView(error)
+                    : (fields == null || fields.isEmpty)
+                        ? const EmptyState('No further detail stored for this record.')
+                        : ListView(
+                            controller: scrollController,
+                            children: [
+                              for (final e in fields.entries)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: AppSpace.s1),
+                                  child: InfoRow(_prettyFieldName(e.key), e.value),
+                                ),
+                            ],
+                          ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _prettyFieldName(String column) => column
+      .split('_')
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
+
   Future<String?> _ask(String title, String label) {
     final c = TextEditingController();
     return showDialog<String>(
@@ -419,6 +480,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> with SyncAware {
             ),
           const SizedBox(height: AppSpace.s3),
           Wrap(spacing: AppSpace.s2, runSpacing: AppSpace.s2, children: [
+            if (item.actions.contains('details'))
+              OutlinedButton.icon(
+                onPressed: () => _showDetails(item),
+                icon: const Icon(Icons.info_outline, size: 16),
+                label: const Text('Details'),
+              ),
             if (item.actions.contains('approve'))
               _actionBtn('Approve', AppColors.adaptive(context, AppColors.okFg), busy, () => _act(item, 'approve')),
             if (item.actions.contains('merge'))

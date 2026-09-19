@@ -324,6 +324,14 @@ class ApiService {
     return ApprovalsData.fromApi(b as Map<String, dynamic>);
   }
 
+  /// Every column of the record behind one approval card — read-only.
+  Future<Map<String, String>> founderApprovalItemDetail(String type, String itemId) async {
+    final b = await _api.call('api_founder_approvalItemDetail', {'type': type, 'itemId': itemId});
+    final m = b as Map<String, dynamic>;
+    if (m['ok'] != true) throw ApiException((m['error'] ?? 'Could not load details.').toString(), code: (m['code'] ?? '').toString());
+    return ((m['fields'] as Map?) ?? const {}).map((k, v) => MapEntry(k.toString(), v.toString()));
+  }
+
   /// Full payment-draft queue incl. APPROVED rows (the ones needing finalise).
   Future<List<PaymentDraftRow>> founderListPaymentDrafts({String branch = ''}) async {
     final b = await _api.call('api_founder_listPaymentDrafts', {'branch': branch});

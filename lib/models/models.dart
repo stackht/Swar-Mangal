@@ -87,6 +87,7 @@ class Student {
     this.lastReceiptAmount = '',
     required this.status,
     this.admissionSource,
+    this.teacherId = '',
   });
   factory Student.fromApi(Map<String, dynamic> b) => Student(
         studentId: _s(b['studentId'] ?? b['id']),
@@ -108,6 +109,7 @@ class Student {
         lastReceiptAmount: _s(b['lastReceiptAmount']),
         status: _s(b['status']),
         admissionSource: _s(b['admissionSource']).isEmpty ? null : _s(b['admissionSource']),
+        teacherId: _s(b['teacherId']),
       );
 
   final String studentId;
@@ -129,6 +131,7 @@ class Student {
   final String lastReceiptAmount;
   final String status;
   final String? admissionSource;
+  final String teacherId;
 
   bool get operational => status.isEmpty || status.toUpperCase() == 'ACTIVE';
 }
@@ -1359,6 +1362,7 @@ class StaffHub {
     required this.feeStatus,
     required this.dueDate,
     required this.canonicalFee,
+    this.receipts = const [],
   });
   factory StaffHub.fromApi(Map<String, dynamic> b) {
     final p = b['profile'] is Map<String, dynamic>
@@ -1381,6 +1385,12 @@ class StaffHub {
       feeStatus: _s(p['feeStatus']),
       dueDate: _s(p['dueDate']),
       canonicalFee: _s(p['fee']),
+      // Scoped server-side to this exact studentId (recentReceipts), same
+      // guarantee as StudentProfileDetail.receipts.
+      receipts: ((fees['rows'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ReceiptRow.fromApi)
+          .toList(),
     );
   }
   final Student profile;
@@ -1389,6 +1399,7 @@ class StaffHub {
   final String feeStatus;
   final String dueDate;
   final String canonicalFee;
+  final List<ReceiptRow> receipts;
 }
 
 /// Authoritative teacher profile (+ assigned students) from the profile
@@ -1440,6 +1451,7 @@ class StudentProfileDetail {
     required this.teacher,
     required this.teacherId,
     required this.branch,
+    this.receipts = const [],
   });
   factory StudentProfileDetail.fromApi(Map<String, dynamic> b) {
     final s = b['student'] is Map<String, dynamic>
@@ -1458,6 +1470,12 @@ class StudentProfileDetail {
           : null,
       teacherId: _s(s['teacherId'] ?? t['teacherId']),
       branch: _s(s['branch'] ?? s['location']),
+      // Scoped server-side to this exact studentId — never a fuzzy name
+      // search, so no other student's receipts can leak in here.
+      receipts: ((b['receipts'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ReceiptRow.fromApi)
+          .toList(),
     );
   }
   final Student student;
@@ -1466,6 +1484,7 @@ class StudentProfileDetail {
   final Map<String, dynamic>? teacher;
   final String teacherId;
   final String branch;
+  final List<ReceiptRow> receipts;
 
   bool get hasTeacherId => teacherId.isNotEmpty && teacherId != '0' && teacherId != 'null';
   bool get hasTeacherName => student.teacher.isNotEmpty;

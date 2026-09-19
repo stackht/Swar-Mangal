@@ -103,12 +103,12 @@ class ApiService {
 
   // ------------------------------------------------------------ dashboard
   Future<DashboardMetrics> dashboard(String scope) async {
-    final b = await _api.call('api_dashboard', scope == 'ALL' ? '' : scope);
+    final b = await _api.call('api_dashboard', {'scope': scope});
     return DashboardMetrics.fromApi(b as Map<String, dynamic>);
   }
 
   Future<DueReminders> dueReminders(String branch) async {
-    final b = await _api.call('api_dueReminders', branch);
+    final b = await _api.call('api_dueReminders', {'branch': branch});
     return DueReminders.tryFrom(b as Map<String, dynamic>) ??
         DueReminders(branch: branch, advanceDays: 0, dueSoon: [], dueToday: [],
             overdue: [], gmcActive: 0, kmcActive: 0);

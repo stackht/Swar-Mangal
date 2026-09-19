@@ -478,19 +478,23 @@ class _ScheduleCustomScreenState extends State<_ScheduleCustomScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const Text('KIND', style: AppType.eyebrow),
                   const SizedBox(height: AppSpace.s2),
-                  for (final k in _kinds)
-                    RadioListTile<String>(
-                      contentPadding: EdgeInsets.zero,
-                      value: k.value,
-                      groupValue: _kind,
-                      onChanged: (v) => setState(() {
-                        _kind = v!;
-                        if (!_needsOriginal) _original = null;
-                        _result = null;
-                      }),
-                      title: Text(k.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                      subtitle: Text(k.help, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-                    ),
+                  RadioGroup<String>(
+                    groupValue: _kind,
+                    onChanged: (v) => setState(() {
+                      _kind = v!;
+                      if (!_needsOriginal) _original = null;
+                      _result = null;
+                    }),
+                    child: Column(children: [
+                      for (final k in _kinds)
+                        RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          value: k.value,
+                          title: Text(k.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                          subtitle: Text(k.help, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+                        ),
+                    ]),
+                  ),
                 ]),
               ),
             ),

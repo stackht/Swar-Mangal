@@ -90,7 +90,7 @@ export async function dispatch2(role: RpcRole, fn: string, arg: Record<string, u
     case "api_generateSchoolInvoice":
       return generateSchoolInvoice(arg, scope);
     case "api_listSchoolInvoices":
-      return listSchoolInvoices(scope);
+      return listSchoolInvoices(arg, scope);
     case "api_getSchoolInvoice":
       return getSchoolInvoice(arg, scope);
     case "api_timetableList":
@@ -1166,10 +1166,11 @@ async function generateSchoolInvoice(arg: Record<string, unknown>, scope: Branch
   });
 }
 
-async function listSchoolInvoices(scope: BranchScope): Promise<Record<string, unknown>> {
+async function listSchoolInvoices(arg: Record<string, unknown>, scope: BranchScope): Promise<Record<string, unknown>> {
+  const requestedBranch = s(arg["branch"] ?? "ALL");
   const rows = (
     await query<Record<string, unknown>>(`select id, invoice_no, invoice_date, branch, class_name, amount, tenure, status from school_invoices_rpc order by id desc`)
-  ).filter((r) => inScope(scope, r.branch));
+  ).filter((r) => inScope(scope, r.branch) && matchesRequestedBranch(requestedBranch, r.branch));
   return ok({
     invoices: rows.map((r) => ({
       invoiceId: s(r.id),

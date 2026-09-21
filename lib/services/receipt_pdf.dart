@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart' as pdf;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -11,7 +12,9 @@ import '../models/models.dart';
 /// computes any of them.
 Future<Uint8List> buildReceiptPdf(ReceiptRow r, {bool demo = false}) async {
   final doc = pw.Document();
-  final theme = pw.ThemeData.withFont(base: pw.Font.helvetica(), bold: pw.Font.helveticaBold());
+  final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/Inter-400.ttf'));
+  final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/Inter-700.ttf'));
+  final theme = pw.ThemeData.withFont(base: regular, bold: bold);
 
   pw.Widget row(String label, String value) => pw.Padding(
         padding: const pw.EdgeInsets.symmetric(vertical: 3),

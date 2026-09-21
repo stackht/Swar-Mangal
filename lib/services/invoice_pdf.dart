@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart' as pdf;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -7,11 +8,13 @@ import 'package:printing/printing.dart';
 import '../models/models.dart';
 
 /// Real A4 PDF invoice rendered from the authoritative snapshot.
-/// Text is selectable (native Helvetica), layout is single-page, and long
+/// Text is selectable, layout is single-page, and long
 /// names wrap gracefully. Never uses widget screenshots.
 Future<Uint8List> buildInvoicePdf(SchoolInvoice inv, {bool demo = false}) async {
   final doc = pw.Document();
-  final theme = pw.ThemeData.withFont(base: pw.Font.helvetica());
+  final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/Inter-400.ttf'));
+  final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/Inter-700.ttf'));
+  final theme = pw.ThemeData.withFont(base: regular, bold: bold);
   final amountText = 'Rs ${_amount(inv.amount)}';
   final date = inv.invoiceDate.isNotEmpty ? inv.invoiceDate : '—';
 

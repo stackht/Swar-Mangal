@@ -8,6 +8,7 @@ import 'package:swar_mangal/services/invoice_pdf.dart';
 Map<String, dynamic> _map(dynamic v) => v as Map<String, dynamic>;
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('SchoolInvoice — school-level model (NO student dependency)', () {
     test('does not expose student fields', () {
       final inv = SchoolInvoice.fromApi({

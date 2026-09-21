@@ -251,6 +251,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5, color: AppColors.adaptive(context, AppColors.muted))),
                   const SizedBox(height: AppSpace.s2),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: _plan.isEmpty ? null : _plan,
                     decoration: const InputDecoration(labelText: 'Fee plan'),
                     hint: const Text('Select plan…'),
@@ -295,6 +296,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                           child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                         )
                       : DropdownButtonFormField<String>(
+                          isExpanded: true,
                           initialValue: _teacherId.isEmpty ? null : _teacherId,
                           decoration: const InputDecoration(labelText: 'Teacher (optional)'),
                           hint: const Text('No teacher assigned yet'),
@@ -329,6 +331,7 @@ class _AddStudentScreenState extends State<AddStudentScreen> {
                     ),
                     const SizedBox(height: AppSpace.s3),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: _feeCycle,
                       decoration: const InputDecoration(labelText: 'Fee cycle'),
                       items: const [

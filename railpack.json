@@ -10,9 +10,10 @@
     ".dart_tool",
     ".next",
     "integration_test",
-    "maestro-android",
-    "maestro_app",
     "node_modules",
-    "website"
+    "deploy",
+    "test",
+    "test_driver",
+    "backend-tests"
   ]
 }

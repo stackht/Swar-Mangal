@@ -223,3 +223,27 @@
 .ambient-pulse {
   animation: ambient-pulse 4s ease-in-out infinite;
 }
+
+/* ---------- Landing hero atmosphere ---------- */
+@keyframes orb-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6vw, -4vh, 0) scale(1.08); }
+}
+@keyframes orb-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-5vw, 5vh, 0) scale(0.92); }
+}
+@keyframes note-rise {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.7; }
+  100% { transform: translateY(-72vh) rotate(10deg); opacity: 0; }
+}
+.orb-drift-a {
+  animation: orb-drift-a 16s ease-in-out infinite;
+}
+.orb-drift-b {
+  animation: orb-drift-b 20s ease-in-out infinite;
+}
+.hero-note {
+  animation: note-rise 12s linear infinite;
+}
